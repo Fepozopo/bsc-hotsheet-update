@@ -31,12 +31,12 @@ func main() {
 				log.Fatal(err)
 			}
 
-			// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO/BO
-			smdStock := UpdateStock{fileSMDHotsheet, "EVERYDAY", fileSMDStockReport, 5, 6, 9, 11}
-			smdStockHoliday := UpdateStock{fileSMDHotsheet, "HOLIDAY", fileSMDStockReport, 3, 4, 6, 8}
+			// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO | ON BO
+			smdStock := UpdateStock{fileSMDHotsheet, "EVERYDAY", fileSMDStockReport, "E", "F", "I", "K", "L"}
+			smdStockHoliday := UpdateStock{fileSMDHotsheet, "HOLIDAY", fileSMDStockReport, "C", "D", "F", "H", "I"}
 			// HOTSHEET | SECTION | REPORT | SKU | YTD
-			smdSales := UpdateSales{fileSMDHotsheet, "EVERYDAY", fileSMDSalesReport, 5, 16}
-			smdSalesHoliday := UpdateSales{fileSMDHotsheet, "HOLIDAY", fileSMDSalesReport, 3, 14}
+			smdSales := UpdateSales{fileSMDHotsheet, "EVERYDAY", fileSMDSalesReport, "E", "Q"}
+			smdSalesHoliday := UpdateSales{fileSMDHotsheet, "HOLIDAY", fileSMDSalesReport, "C", "O"}
 
 			// Get user input for which sections to update
 			for {

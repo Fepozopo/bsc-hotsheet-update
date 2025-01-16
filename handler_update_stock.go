@@ -2,109 +2,145 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
 
 type UpdateStock struct {
-	hotsheet string
-	section  string
-	report   string
-	sku      int
-	onHand   int
-	onPO     int
-	onSOBO   int
+	hotsheet  string
+	section   string
+	report    string
+	skuCol    string
+	onHandCol string
+	onPOCol   string
+	onSOCol   string
+	onBOCol   string
 }
 
-func (us *UpdateStock) handlerUpdateStock() {
+func (us *UpdateStock) handlerUpdateStock() error {
 	fmt.Println("ROW | SKU | ON HAND | ON PO | ON SO/BO")
 
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(us.report)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer wbReport.Close()
 
 	// Open the hotsheet workbook
 	wbHotsheet, err := excelize.OpenFile(us.hotsheet)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer wbHotsheet.Close()
 
 	// Get the sheets
-	wsReport, err := wbReport.GetRows("Sheet1")
+	wsReport := "Sheet1"
+	wsHotsheet := us.section
+
+	// Get the rows
+	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	wsHotsheet, err := wbHotsheet.GetRows(us.section)
+	rowsReport, err := wbReport.GetRows(wsReport)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	skuCol := 1          // 'A' column index in wsReport
-	onHandCol := 11      // 'K' column index in wsReport
-	onPOCol := 13        // 'M' column index in wsReport
-	onSOCol := 16        // 'P' column index in wsReport
-	onBOCol := 20        // 'T' column index in wsReport
+	skuCol := "A"        // 'A' column index in wsReport
+	onHandCol := "K"     // 'K' column index in wsReport
+	onPOCol := "M"       // 'M' column index in wsReport
+	onSOCol := "P"       // 'P' column index in wsReport
+	onBOCol := "T"       // 'T' column index in wsReport
 	wsReportPointer := 1 // Start pointer for wsReport
 
-	for rowWsHotsheet := 2; rowWsHotsheet < len(wsHotsheet); rowWsHotsheet++ {
-		skuWsHotsheet := wsHotsheet[rowWsHotsheet][us.sku] // SKU column in wsHotsheet
+	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet); rowWsHotsheet++ {
+		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.skuCol, rowWsHotsheet)) // SKU column in wsHotsheet
+		if err != nil {
+			return err
+		}
 
 		if skuWsHotsheet == "" {
 			continue // Skip rows with no SKU in wsHotsheet
 		}
 
-		for rowWsReport := wsReportPointer; rowWsReport < len(wsReport); rowWsReport++ {
-			skuWsReport := wsReport[rowWsReport][skuCol] // SKU in column 'A' in wsReport
+		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport); rowWsReport++ {
+			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", skuCol, rowWsReport)) // SKU in column 'A' in wsReport
+			if err != nil {
+				return err
+			}
 
 			if skuWsReport == "" {
 				continue
 			}
 
 			if strings.Contains(skuWsReport, skuWsHotsheet) {
+				var onHand, onPO, onSO, onBO string
+				testReportValue, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, rowWsReport+2))
+				if err != nil {
+					return err
+				}
+
 				// Skip the first sku that contains "MPN48"
 				if skuWsReport == "MPN48 BOX  HUMMINGBIRD BOX OF 10 NOTECARD" {
 					continue
-				}
-
-				var onHand, onPO, onSOBO interface{}
-				if wsReport[rowWsReport+2][onHandCol] == "" {
-					// Update (on_hand), (on_po), and (on_so, on_bo) in wsHotsheet
-					onHand = wsReport[rowWsReport+1][onHandCol]
-					onPO = wsReport[rowWsReport+1][onPOCol]
-					onSOBO = wsReport[rowWsReport+1][onSOCol] + wsReport[rowWsReport+1][onBOCol]
+				} else if testReportValue == "" {
+					// Get the values (on_hand), (on_po), and (on_so, on_bo) in wsReport
+					onHand, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, rowWsReport+1))
+					if err != nil {
+						return err
+					}
+					onPO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, rowWsReport+1))
+					if err != nil {
+						return err
+					}
+					onSO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, rowWsReport+1))
+					if err != nil {
+						return err
+					}
+					onBO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, rowWsReport+1))
+					if err != nil {
+						return err
+					}
 				} else {
-					// Update (on_hand), (on_po), and (on_so, on_bo) in wsHotsheet
-					onHand = wsReport[rowWsReport+2][onHandCol]
-					onPO = wsReport[rowWsReport+2][onPOCol]
-					onSOBO = wsReport[rowWsReport+2][onSOCol] + wsReport[rowWsReport+2][onBOCol]
+					// Get the values (on_hand), (on_po), and (on_so, on_bo) in wsReport
+					onHand, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, rowWsReport+2))
+					if err != nil {
+						return err
+					}
+					onPO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, rowWsReport+2))
+					if err != nil {
+						return err
+					}
+					onSO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, rowWsReport+2))
+					if err != nil {
+						return err
+					}
+					onBO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, rowWsReport+2))
+					if err != nil {
+						return err
+					}
 				}
 
-				// Type assertions
-				onHandValue, _ := onHand.(string)
-				onPOValue, _ := onPO.(string)
-				onSOBOValue, _ := onSOBO.(string)
-
-				// Set values in wsHotsheet
-				wsHotsheet[rowWsHotsheet][us.onHand] = onHandValue
-				wsHotsheet[rowWsHotsheet][us.onPO] = onPOValue
-				wsHotsheet[rowWsHotsheet][us.onSOBO] = onSOBOValue
-
-				fmt.Printf("%d | %s | %v | %v | %v\n", rowWsHotsheet, skuWsHotsheet, onHand, onPO, onSOBO)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onHandCol, rowWsHotsheet), onHand)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onPOCol, rowWsHotsheet), onPO)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onSOCol, rowWsHotsheet), onSO)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onBOCol, rowWsHotsheet), onBO)
+				fmt.Printf("%v | %v | %v | %v | %v | %v\n", rowWsHotsheet, skuWsHotsheet, onHand, onPO, onSO, onBO)
 
 				wsReportPointer = rowWsReport + 1
 				break // Move to the next row in wsHotsheet once a match is found
+
 			}
 		}
 	}
 
 	fmt.Println("Saving file...")
-	if err := wbHotsheet.SaveAs(us.hotsheet); err != nil {
-		log.Fatal(err)
+	if err := wbHotsheet.Save(); err != nil {
+		return err
 	}
+
+	return nil
 }

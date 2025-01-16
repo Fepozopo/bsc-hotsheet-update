@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"strconv"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -13,81 +11,102 @@ type UpdateSales struct {
 	hotsheet string
 	section  string
 	report   string
-	sku      int
-	ytd      int
+	skuCol   string
+	ytdCol   string
 }
 
-func (us *UpdateSales) handlerUpdateSales() {
+func (us *UpdateSales) handlerUpdateSales() error {
 	fmt.Println("ROW | SKU | YTD")
 
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(us.report)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer wbReport.Close()
 
 	// Open the hotsheet workbook
 	wbHotsheet, err := excelize.OpenFile(us.hotsheet)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer wbHotsheet.Close()
 
 	// Get the sheets
-	wsReport, err := wbReport.GetRows("Sheet1")
+	wsReport := "Sheet1"
+	wsHotsheet := us.section
+
+	// Get the rows
+	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	rowsReport, err := wbReport.GetRows(wsReport)
+	if err != nil {
+		return err
 	}
 
-	wsHotsheet, err := wbHotsheet.GetRows(us.section)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	skuCol := 1          // 'A' column index in wsReport
-	ytdCol := 19         // 'S' column index in wsReport
-	kitCol := 10         // 'J' column index in wsReport
+	skuCol := "A"        // 'A' column index in wsReport
+	ytdCol := "S"        // 'S' column index in wsReport
+	kitCol := "J"        // 'J' column index in wsReport
 	wsReportPointer := 1 // Start pointer for wsReport
 
-	for rowWsHotsheet := 2; rowWsHotsheet < len(wsHotsheet); rowWsHotsheet++ {
-		skuWsHotsheet := wsHotsheet[rowWsHotsheet][us.sku]
+	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet); rowWsHotsheet++ {
+		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.skuCol, rowWsHotsheet))
+		if err != nil {
+			return err
+		}
 
 		if skuWsHotsheet == "" {
 			continue // Skip rows with no SKU in wsHotsheet
 		}
 
-		for rowWsReport := wsReportPointer; rowWsReport < len(wsReport); rowWsReport++ {
-			skuWsReport := wsReport[rowWsReport][skuCol]
+		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport); rowWsReport++ {
+			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", skuCol, rowWsReport)) // SKU in column 'A' in wsReport
+			if err != nil {
+				return err
+			}
 
 			if skuWsReport == "" {
 				continue
 			}
 
 			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
-				if wsReport[rowWsReport+1][kitCol] == "Kit" {
-					ytdValue := wsReport[rowWsReport+2][ytdCol]
+				var ytdValue string
+				isKit, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", kitCol, rowWsReport+1))
+				if err != nil {
+					return err
+				}
+				if isKit == "Kit" {
+					ytdValue, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
+					if err != nil {
+						return err
+					}
 					if strings.Contains(skuWsReport, "20-") || strings.Contains(skuWsReport, "21-") ||
 						strings.Contains(skuWsReport, "22-") || strings.Contains(skuWsReport, "24-") ||
 						strings.Contains(skuWsReport, "20F-") || strings.Contains(skuWsReport, "22F-") ||
 						strings.Contains(skuWsReport, "24F-") {
 						// Update (ytd) in wsHotsheet
-						wsHotsheet[rowWsHotsheet][us.ytd] = ytdValue
-						fmt.Println(rowWsHotsheet+1, "|", skuWsHotsheet, "|", ytdValue)
+						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet+2), ytdValue)
+						fmt.Println(rowWsHotsheet, "|", skuWsHotsheet, "|", ytdValue)
 					} else {
 						// Update (ytd) in wsHotsheet * 10
-						ytdValueInt, err := strconv.Atoi(ytdValue)
+						// TODO Convert to int in order to multiply by 10
+						ytdValue, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
 						if err != nil {
-							log.Fatal(err)
+							return err
 						}
-						ytdValueString := strconv.Itoa(ytdValueInt * 10)
-						wsHotsheet[rowWsHotsheet][us.ytd] = ytdValueString
-						fmt.Println(rowWsHotsheet+1, "|", skuWsHotsheet, "|", ytdValue)
+						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue)
+						fmt.Println(rowWsHotsheet, "|", skuWsHotsheet, "|", ytdValue)
 					}
 				} else {
 					// Update (ytd) in wsHotsheet
-					wsHotsheet[rowWsHotsheet][us.ytd] = wsReport[rowWsReport+2][ytdCol]
-					fmt.Println(rowWsHotsheet+1, "|", skuWsHotsheet, "|", wsReport[rowWsReport+2][ytdCol])
+					ytdValue, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
+					if err != nil {
+						return err
+					}
+					wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet+2), ytdValue)
+					fmt.Println(rowWsHotsheet, "|", skuWsHotsheet, "|", ytdValue)
 				}
 
 				wsReportPointer = rowWsReport + 1
@@ -97,7 +116,9 @@ func (us *UpdateSales) handlerUpdateSales() {
 	}
 
 	fmt.Println("Saving file...")
-	if err := wbHotsheet.SaveAs(us.hotsheet); err != nil {
-		log.Fatal(err)
+	if err := wbHotsheet.Save(); err != nil {
+		return err
 	}
+
+	return nil
 }
