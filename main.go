@@ -30,13 +30,17 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
+			fileSMDHotsheetNew, err := handlerCopyHotsheet("SMD", fileSMDHotsheet)
+			if err != nil {
+				log.Fatal(err)
+			}
 
 			// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO | ON BO
-			smdStock := UpdateStock{fileSMDHotsheet, "EVERYDAY", fileSMDStockReport, "E", "F", "I", "K", "L"}
-			smdStockHoliday := UpdateStock{fileSMDHotsheet, "HOLIDAY", fileSMDStockReport, "C", "D", "F", "H", "I"}
+			smdStock := UpdateStock{fileSMDHotsheetNew, "EVERYDAY", fileSMDStockReport, "E", "F", "I", "K"}
+			smdStockHoliday := UpdateStock{fileSMDHotsheetNew, "HOLIDAY", fileSMDStockReport, "C", "D", "F", "H"}
 			// HOTSHEET | SECTION | REPORT | SKU | YTD
-			smdSales := UpdateSales{fileSMDHotsheet, "EVERYDAY", fileSMDSalesReport, "E", "Q"}
-			smdSalesHoliday := UpdateSales{fileSMDHotsheet, "HOLIDAY", fileSMDSalesReport, "C", "O"}
+			smdSales := UpdateSales{fileSMDHotsheetNew, "EVERYDAY", fileSMDSalesReport, "E", "Q"}
+			smdSalesHoliday := UpdateSales{fileSMDHotsheetNew, "HOLIDAY", fileSMDSalesReport, "C", "O"}
 
 			// Get user input for which sections to update
 			for {
@@ -57,6 +61,7 @@ func main() {
 					smdSales.handlerUpdateSales()
 					smdSalesHoliday.handlerUpdateSales()
 				case "exit":
+					return
 				default:
 					fmt.Println("Invalid input. Please enter 'everyday', 'holiday', 'all', or 'exit'.")
 				}
@@ -77,6 +82,6 @@ func main() {
 		}
 
 		timeElapsed := time.Since(startTime)
-		fmt.Printf("Done!\nElapsed time: %s\n", timeElapsed)
+		fmt.Printf("Done!\nElapsed time: %v\n", timeElapsed)
 	}
 }

@@ -14,8 +14,7 @@ type UpdateStock struct {
 	skuCol    string
 	onHandCol string
 	onPOCol   string
-	onSOCol   string
-	onBOCol   string
+	onSOBOCol string
 }
 
 func (us *UpdateStock) handlerUpdateStock() error {
@@ -124,11 +123,22 @@ func (us *UpdateStock) handlerUpdateStock() error {
 					}
 				}
 
+				// Add onSO and onBO together after converting them to ints
+				var onSOInt int
+				var onBOInt int
+				_, err = fmt.Sscan(onSO, &onSOInt)
+				if err != nil {
+					return err
+				}
+				_, err = fmt.Sscan(onBO, &onBOInt)
+				if err != nil {
+					return err
+				}
+				onSOBO := onSOInt + onBOInt
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onHandCol, rowWsHotsheet), onHand)
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onPOCol, rowWsHotsheet), onPO)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onSOCol, rowWsHotsheet), onSO)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onBOCol, rowWsHotsheet), onBO)
-				fmt.Printf("%v | %v | %v | %v | %v | %v\n", rowWsHotsheet, skuWsHotsheet, onHand, onPO, onSO, onBO)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onSOBOCol, rowWsHotsheet), onSOBO)
+				fmt.Printf("%v | %v | %v | %v | %v\n", rowWsHotsheet, skuWsHotsheet, onHand, onPO, onSOBO)
 
 				wsReportPointer = rowWsReport + 1
 				break // Move to the next row in wsHotsheet once a match is found

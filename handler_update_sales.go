@@ -72,16 +72,15 @@ func (us *UpdateSales) handlerUpdateSales() error {
 			}
 
 			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
-				var ytdValue string
 				isKit, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", kitCol, rowWsReport+1))
 				if err != nil {
 					return err
 				}
+				ytdValue, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
+				if err != nil {
+					return err
+				}
 				if isKit == "Kit" {
-					ytdValue, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
-					if err != nil {
-						return err
-					}
 					if strings.Contains(skuWsReport, "20-") || strings.Contains(skuWsReport, "21-") ||
 						strings.Contains(skuWsReport, "22-") || strings.Contains(skuWsReport, "24-") ||
 						strings.Contains(skuWsReport, "20F-") || strings.Contains(skuWsReport, "22F-") ||
@@ -90,21 +89,18 @@ func (us *UpdateSales) handlerUpdateSales() error {
 						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet+2), ytdValue)
 						fmt.Println(rowWsHotsheet, "|", skuWsHotsheet, "|", ytdValue)
 					} else {
-						// Update (ytd) in wsHotsheet * 10
-						// TODO Convert to int in order to multiply by 10
-						ytdValue, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
+						// Convert to int in order to multiply by 10
+						var ytdValueInt int
+						_, err := fmt.Sscan(ytdValue, &ytdValueInt)
 						if err != nil {
 							return err
 						}
-						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue)
+						ytdValue10x := ytdValueInt * 10
+						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue10x)
 						fmt.Println(rowWsHotsheet, "|", skuWsHotsheet, "|", ytdValue)
 					}
 				} else {
 					// Update (ytd) in wsHotsheet
-					ytdValue, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdCol, rowWsReport+2))
-					if err != nil {
-						return err
-					}
 					wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet+2), ytdValue)
 					fmt.Println(rowWsHotsheet, "|", skuWsHotsheet, "|", ytdValue)
 				}
