@@ -1,11 +1,11 @@
-package main
+package helpers
 
 import (
 	"fmt"
 )
 
-func handlerCaseBSC() error {
-	fileHotsheetNew, fileStockReport, fileSalesReport, err := handlerGetFiles("BSC")
+func CaseBSC() error {
+	fileHotsheetNew, fileStockReport, fileSalesReport, err := GetFiles("BSC")
 	if err != nil {
 		return fmt.Errorf("failed to get files: %w", err)
 	}
@@ -23,55 +23,55 @@ func handlerCaseBSC() error {
 	salesA2Notecards := UpdateSales{fileHotsheetNew, "A2 Notecards", fileSalesReport, "D", "L"}
 
 	// Update the hotsheet
-	err = stock.handlerUpdateStock()
+	err = stock.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}
 	fmt.Println("Stock updated successfully")
 
-	err = stockHoliday.handlerUpdateStock()
+	err = stockHoliday.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update holiday stock: %w", err)
 	}
 	fmt.Println("Holiday stock updated successfully")
 
-	err = stockSpring.handlerUpdateStock()
+	err = stockSpring.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update spring stock: %w", err)
 	}
 	fmt.Println("Spring stock updated successfully")
 
-	err = stockA2Notecards.handlerUpdateStock()
+	err = stockA2Notecards.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update A2 Notecards stock: %w", err)
 	}
 	fmt.Println("A2 Notecards stock updated successfully")
 
-	err = sales.handlerUpdateSales()
+	err = sales.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update sales: %w", err)
 	}
 	fmt.Println("Sales updated successfully")
 
-	err = salesHoliday.handlerUpdateSales()
+	err = salesHoliday.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update holiday sales: %w", err)
 	}
 	fmt.Println("Holiday sales updated successfully")
 
-	err = salesHolidayKit.handlerUpdateSales()
+	err = salesHolidayKit.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update holiday kit sales: %w", err)
 	}
 	fmt.Println("Holiday kit sales updated successfully")
 
-	err = salesSpring.handlerUpdateSales()
+	err = salesSpring.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update spring sales: %w", err)
 	}
 	fmt.Println("Spring sales updated successfully")
 
-	err = salesA2Notecards.handlerUpdateSales()
+	err = salesA2Notecards.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update A2 Notecards sales: %w", err)
 	}

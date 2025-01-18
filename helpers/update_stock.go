@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ type UpdateStock struct {
 	onSOBOCol string
 }
 
-func (us *UpdateStock) handlerUpdateStock() error {
+func (us *UpdateStock) UpdateStock() error {
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(us.report)
 	if err != nil {

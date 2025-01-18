@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"time"
+
+	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
 )
 
 func main() {
 	startTime := time.Now()
 
-	logger, err := handlerCreateLogger()
+	logger, err := helpers.CreateLogger()
 	if err != nil {
 		logger.Printf("ERROR: failed to create log file: %v", err)
 		return
@@ -18,11 +20,15 @@ func main() {
 	for {
 		var hotsheet string
 		fmt.Print("Which hotsheet do you want to update? (smd, bsc, 21c, exit): ")
-		fmt.Scanln(&hotsheet)
+		_, err := fmt.Scanln(&hotsheet)
+		if err != nil {
+			logger.Printf("ERROR: failed to read input: %v", err)
+			return
+		}
 
 		switch hotsheet {
 		case "smd":
-			err = handlerCaseSMD()
+			err = helpers.CaseSMD()
 			if err != nil {
 				logger.Printf("ERROR: failed to update SMD hotsheet: %v", err)
 				return
@@ -31,7 +37,7 @@ func main() {
 			return
 
 		case "bsc":
-			err = handlerCaseBSC()
+			err = helpers.CaseBSC()
 			if err != nil {
 				logger.Printf("ERROR: failed to update BSC hotsheet: %v", err)
 				return
@@ -40,7 +46,7 @@ func main() {
 			return
 
 		case "21c":
-			err = handlerCase21C()
+			err = helpers.Case21C()
 			if err != nil {
 				logger.Printf("ERROR: failed to update 2021co hotsheet: %v", err)
 				return

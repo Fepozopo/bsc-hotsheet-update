@@ -1,11 +1,11 @@
-package main
+package helpers
 
 import (
 	"fmt"
 )
 
-func handlerCase21C() error {
-	fileHotsheetNew, fileStockReport, fileSalesReport, err := handlerGetFiles("2021co")
+func Case21C() error {
+	fileHotsheetNew, fileStockReport, fileSalesReport, err := GetFiles("2021co")
 	if err != nil {
 		return fmt.Errorf("failed to get files: %w", err)
 	}
@@ -17,19 +17,19 @@ func handlerCase21C() error {
 	salesKits := UpdateSales{fileHotsheetNew, "boxed card unit sales", fileSalesReport, "C", "H"}
 
 	// Update the hotsheet
-	err = stock.handlerUpdateStock()
+	err = stock.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}
 	fmt.Println("Stock updated successfully")
 
-	err = sales.handlerUpdateSales()
+	err = sales.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update sales: %w", err)
 	}
 	fmt.Println("Sales updated successfully")
 
-	err = salesKits.handlerUpdateSales()
+	err = salesKits.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update kit sales: %w", err)
 	}

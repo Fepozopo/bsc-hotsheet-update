@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func handlerCreateLogger() (*log.Logger, error) {
+func CreateLogger() (*log.Logger, error) {
 	// Get the current date
 	currentDate := time.Now().Format("2006-01-02 15:04:05.000000000")
 

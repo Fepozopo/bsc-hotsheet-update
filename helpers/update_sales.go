@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ type UpdateSales struct {
 	ytdCol   string
 }
 
-func (us *UpdateSales) handlerUpdateSales() error {
+func (us *UpdateSales) UpdateSales() error {
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(us.report)
 	if err != nil {

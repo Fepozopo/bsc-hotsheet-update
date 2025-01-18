@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func handlerCopyHotsheet(product, hotsheet string) (string, error) {
+func CopyHotsheet(product, hotsheet string) (string, error) {
 	// Get the current date for hotsheet name
 	currentDateHotsheet := time.Now().Format("2006-01-02")
 

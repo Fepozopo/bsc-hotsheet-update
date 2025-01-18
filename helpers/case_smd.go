@@ -1,11 +1,11 @@
-package main
+package helpers
 
 import (
 	"fmt"
 )
 
-func handlerCaseSMD() error {
-	fileHotsheetNew, fileStockReport, fileSalesReport, err := handlerGetFiles("SMD")
+func CaseSMD() error {
+	fileHotsheetNew, fileStockReport, fileSalesReport, err := GetFiles("SMD")
 	if err != nil {
 		return fmt.Errorf("failed to get files: %w", err)
 	}
@@ -18,25 +18,25 @@ func handlerCaseSMD() error {
 	salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "O"}
 
 	// Update the hotsheet
-	err = stock.handlerUpdateStock()
+	err = stock.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}
 	fmt.Println("Stock updated successfully")
 
-	err = stockHoliday.handlerUpdateStock()
+	err = stockHoliday.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update holiday stock: %w", err)
 	}
 	fmt.Println("Holiday stock updated successfully")
 
-	err = sales.handlerUpdateSales()
+	err = sales.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update sales: %w", err)
 	}
 	fmt.Println("Sales updated successfully")
 
-	err = salesHoliday.handlerUpdateSales()
+	err = salesHoliday.UpdateSales()
 	if err != nil {
 		return fmt.Errorf("failed to update holiday sales: %w", err)
 	}

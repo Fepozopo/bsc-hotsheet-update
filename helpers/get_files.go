@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/sqweek/dialog"
 )
 
-func handlerGetFiles(product string) (string, string, string, error) {
+func GetFiles(product string) (string, string, string, error) {
 	fileHotsheet, err := dialog.File().Title("Select the HOTSHEET...").Filter("Excel Files", "*.xlsx").Load()
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to open hotsheet file: %w", err)
@@ -19,7 +19,7 @@ func handlerGetFiles(product string) (string, string, string, error) {
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to open sales report file: %w", err)
 	}
-	fileHotsheetNew, err := handlerCopyHotsheet(product, fileHotsheet)
+	fileHotsheetNew, err := CopyHotsheet(product, fileHotsheet)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to copy hotsheet file: %w", err)
 	}
