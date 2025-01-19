@@ -14,6 +14,11 @@ func CreateLogger(name, flag string) (*log.Logger, *os.File, error) {
 	// Create a new file path
 	logFilePath := fmt.Sprintf("./logs/%v_%s.log", currentDate, name)
 
+	// Create the logs directory if it does not exist
+	if err := os.MkdirAll("./logs", os.ModePerm); err != nil {
+		return nil, nil, fmt.Errorf("error creating logs directory: %w", err)
+	}
+
 	// Create or open the log file
 	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
