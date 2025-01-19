@@ -18,6 +18,12 @@ type UpdateStock struct {
 }
 
 func (us *UpdateStock) UpdateStock() error {
+	logger, logFile, err := CreateLogger("UpdateStock", "INFO")
+	if err != nil {
+		return fmt.Errorf("failed to create log file: %w", err)
+	}
+	defer logFile.Close()
+
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(us.report)
 	if err != nil {
@@ -78,6 +84,7 @@ func (us *UpdateStock) UpdateStock() error {
 				continue
 			}
 
+			logger.Printf("Comparing Hotsheet SKU: '%s' with Report SKU: '%s'\n", skuWsHotsheet, skuWsReport)
 			if strings.Contains(skuWsReport, skuWsHotsheet) {
 				testValueLocation, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, rowWsReport+2))
 				if err != nil {
@@ -127,6 +134,7 @@ func (us *UpdateStock) UpdateStock() error {
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onPOCol, rowWsHotsheet), onPO)
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onSOBOCol, rowWsHotsheet), onSOBO)
 
+				logger.Printf("Match found for SKU: %s | on_hand: %s | on_po: %s | on_so_bo: %d\n", skuWsHotsheet, onHand, onPO, onSOBO)
 				wsReportPointer = rowWsReport + 1
 				break // Move to the next row in wsHotsheet once a match is found
 

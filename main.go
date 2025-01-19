@@ -10,11 +10,12 @@ import (
 func main() {
 	startTime := time.Now()
 
-	logger, err := helpers.CreateLogger()
+	logger, logFile, err := helpers.CreateLogger("main", "ERROR")
 	if err != nil {
-		logger.Printf("ERROR: failed to create log file: %v", err)
+		logger.Printf("failed to create log file: %v", err)
 		return
 	}
+	defer logFile.Close()
 
 	// Start the main loop
 	for {
@@ -22,7 +23,7 @@ func main() {
 		fmt.Print("Which hotsheet do you want to update? (smd, bsc, 21c, exit): ")
 		_, err := fmt.Scanln(&hotsheet)
 		if err != nil {
-			logger.Printf("ERROR: failed to read input: %v", err)
+			logger.Printf("failed to read input: %v", err)
 			return
 		}
 
@@ -30,7 +31,7 @@ func main() {
 		case "smd":
 			err = helpers.CaseSMD()
 			if err != nil {
-				logger.Printf("ERROR: failed to update SMD hotsheet: %v", err)
+				logger.Printf("failed to update SMD hotsheet: %v", err)
 				return
 			}
 			fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
@@ -39,7 +40,7 @@ func main() {
 		case "bsc":
 			err = helpers.CaseBSC()
 			if err != nil {
-				logger.Printf("ERROR: failed to update BSC hotsheet: %v", err)
+				logger.Printf("failed to update BSC hotsheet: %v", err)
 				return
 			}
 			fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
@@ -48,7 +49,7 @@ func main() {
 		case "21c":
 			err = helpers.Case21C()
 			if err != nil {
-				logger.Printf("ERROR: failed to update 2021co hotsheet: %v", err)
+				logger.Printf("failed to update 2021co hotsheet: %v", err)
 				return
 			}
 			fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))

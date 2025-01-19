@@ -14,8 +14,8 @@ func CaseSMD() error {
 	stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "E", "F", "I", "K"}
 	stockHoliday := UpdateStock{fileHotsheetNew, "HOLIDAY", fileStockReport, "C", "D", "F", "H"}
 	// HOTSHEET | SECTION | REPORT | SKU | YTD
-	sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "E", "Q"}
-	salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "O"}
+	sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "E", "P"}
+	salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "N"}
 
 	// Update the hotsheet
 	err = stock.UpdateStock()

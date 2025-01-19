@@ -16,6 +16,12 @@ type UpdateSales struct {
 }
 
 func (us *UpdateSales) UpdateSales() error {
+	logger, logFile, err := CreateLogger("UpdateSales", "INFO")
+	if err != nil {
+		return fmt.Errorf("failed to create log file: %w", err)
+	}
+	defer logFile.Close()
+
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(us.report)
 	if err != nil {
@@ -49,7 +55,7 @@ func (us *UpdateSales) UpdateSales() error {
 	kitCol := "J"        // 'J' column index in wsReport
 	wsReportPointer := 1 // Start pointer for wsReport
 
-	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet); rowWsHotsheet++ {
+	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
 		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.skuCol, rowWsHotsheet))
 		if err != nil {
 			return fmt.Errorf("failed to get SKU from hotsheet file %s: %w", us.hotsheet, err)
@@ -69,6 +75,7 @@ func (us *UpdateSales) UpdateSales() error {
 				continue
 			}
 
+			logger.Printf("Comparing Hotsheet SKU: '%s' with Report SKU: '%s'\n", skuWsHotsheet, skuWsReport)
 			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
 				isKit, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", kitCol, rowWsReport+1))
 				if err != nil {
@@ -78,13 +85,14 @@ func (us *UpdateSales) UpdateSales() error {
 				if err != nil {
 					return fmt.Errorf("failed to get ytdValue from report file %s: %w", us.report, err)
 				}
+
 				if isKit == "Kit" {
 					if strings.Contains(skuWsReport, "20-") || strings.Contains(skuWsReport, "21-") ||
 						strings.Contains(skuWsReport, "22-") || strings.Contains(skuWsReport, "24-") ||
 						strings.Contains(skuWsReport, "20F-") || strings.Contains(skuWsReport, "22F-") ||
 						strings.Contains(skuWsReport, "24F-") {
 						// Update (ytd) in wsHotsheet
-						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet+2), ytdValue)
+						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue)
 					} else {
 						// Convert to int in order to multiply by 10
 						var ytdValueInt int
@@ -97,9 +105,10 @@ func (us *UpdateSales) UpdateSales() error {
 					}
 				} else {
 					// Update (ytd) in wsHotsheet
-					wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet+2), ytdValue)
+					wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue)
 				}
 
+				logger.Printf("Match found for SKU: %s | YTD: %s\n", skuWsHotsheet, ytdValue)
 				wsReportPointer = rowWsReport + 1
 				break // Move to the next row in wsHotsheet once a match is found
 			}
