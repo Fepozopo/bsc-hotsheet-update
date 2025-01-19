@@ -20,7 +20,7 @@ func CopyHotsheet(product, hotsheet string) (string, error) {
 	defer wbHotsheet.Close()
 
 	// Create a new file path
-	fileName := fmt.Sprintf("%s_Hotsheet_%v.xlsx", product, currentDateHotsheet)
+	fileName := fmt.Sprintf("%s_hotsheet_%v.xlsx", product, currentDateHotsheet)
 	baseDir := filepath.Dir(hotsheet)
 	filePath := filepath.Join(baseDir, fileName)
 

@@ -4,12 +4,7 @@ import (
 	"fmt"
 )
 
-func Case21C() error {
-	fileHotsheetNew, fileStockReport, fileSalesReport, err := GetFiles("2021co")
-	if err != nil {
-		return fmt.Errorf("failed to get files: %w", err)
-	}
-
+func Case21C(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
 	// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "C", "D", "E", "G"}
 	// HOTSHEET | SECTION | REPORT | SKU | YTD
@@ -17,7 +12,7 @@ func Case21C() error {
 	salesKits := UpdateSales{fileHotsheetNew, "boxed card unit sales", fileSalesReport, "C", "H"}
 
 	// Update the hotsheet
-	err = stock.UpdateStock()
+	err := stock.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}

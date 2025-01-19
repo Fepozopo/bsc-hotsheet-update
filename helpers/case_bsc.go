@@ -4,12 +4,7 @@ import (
 	"fmt"
 )
 
-func CaseBSC() error {
-	fileHotsheetNew, fileStockReport, fileSalesReport, err := GetFiles("BSC")
-	if err != nil {
-		return fmt.Errorf("failed to get files: %w", err)
-	}
-
+func CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
 	// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stock := UpdateStock{fileHotsheetNew, "Everyday", fileStockReport, "D", "E", "F", "H"}
 	stockHoliday := UpdateStock{fileHotsheetNew, "Winter Holiday", fileStockReport, "E", "F", "I", "G"}
@@ -23,7 +18,7 @@ func CaseBSC() error {
 	salesA2Notecards := UpdateSales{fileHotsheetNew, "A2 Notecards", fileSalesReport, "D", "L"}
 
 	// Update the hotsheet
-	err = stock.UpdateStock()
+	err := stock.UpdateStock()
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}
