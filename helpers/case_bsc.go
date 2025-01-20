@@ -5,12 +5,12 @@ import (
 )
 
 func CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
-	// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO/BO
+	// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stock := UpdateStock{fileHotsheetNew, "Everyday", fileStockReport, "D", "E", "F", "H"}
 	stockHoliday := UpdateStock{fileHotsheetNew, "Winter Holiday", fileStockReport, "E", "F", "I", "G"}
 	stockSpring := UpdateStock{fileHotsheetNew, "Spring holiday", fileStockReport, "D", "E", "H", "J"}
 	stockA2Notecards := UpdateStock{fileHotsheetNew, "A2 Notecards", fileStockReport, "D", "F", "G", "I"}
-	// HOTSHEET | SECTION | REPORT | SKU | YTD
+	// HOTSHEET | SHEET | REPORT | SKU | YTD
 	sales := UpdateSales{fileHotsheetNew, "Everyday", fileSalesReport, "D", "K"}
 	salesHoliday := UpdateSales{fileHotsheetNew, "Winter Holiday", fileSalesReport, "E", "L"}
 	salesHolidayKit := UpdateSales{fileHotsheetNew, "Winter Holiday Kits", fileSalesReport, "E", "L"}

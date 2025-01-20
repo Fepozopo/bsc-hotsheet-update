@@ -5,10 +5,10 @@ import (
 )
 
 func CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
-	// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO/BO
+	// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "E", "F", "I", "K"}
 	stockHoliday := UpdateStock{fileHotsheetNew, "HOLIDAY", fileStockReport, "C", "D", "F", "H"}
-	// HOTSHEET | SECTION | REPORT | SKU | YTD
+	// HOTSHEET | SHEET | REPORT | SKU | YTD
 	sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "E", "P"}
 	salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "N"}
 

@@ -9,7 +9,7 @@ import (
 
 type UpdateSales struct {
 	hotsheet string
-	section  string
+	sheet    string
 	report   string
 	skuCol   string
 	ytdCol   string
@@ -38,7 +38,7 @@ func (us *UpdateSales) UpdateSales() error {
 
 	// Get the sheets
 	wsReport := "Sheet1"
-	wsHotsheet := us.section
+	wsHotsheet := us.sheet
 
 	// Get the rows
 	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)

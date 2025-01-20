@@ -9,7 +9,7 @@ import (
 
 type UpdateStock struct {
 	hotsheet  string
-	section   string
+	sheet     string
 	report    string
 	skuCol    string
 	onHandCol string
@@ -40,7 +40,7 @@ func (us *UpdateStock) UpdateStock() error {
 
 	// Get the sheets
 	wsReport := "Sheet1"
-	wsHotsheet := us.section
+	wsHotsheet := us.sheet
 
 	// Get the rows
 	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)

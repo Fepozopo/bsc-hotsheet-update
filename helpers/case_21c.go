@@ -5,9 +5,9 @@ import (
 )
 
 func Case21C(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
-	// HOTSHEET | SECTION | REPORT | SKU | ON HAND | ON PO | ON SO/BO
+	// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "C", "D", "E", "G"}
-	// HOTSHEET | SECTION | REPORT | SKU | YTD
+	// HOTSHEET | SHEET | REPORT | SKU | YTD
 	sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "C", "M"}
 	salesKits := UpdateSales{fileHotsheetNew, "boxed card unit sales", fileSalesReport, "C", "H"}
 
