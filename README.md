@@ -8,12 +8,12 @@ This is a small Go program that updates an Excel document with data from a stock
 2. Run `go get` to install all the required packages.
 3. You can modify the values in each case to adjust which sheets and columns contain each value. It looks like this:
 ``` go
-    // HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
-	stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "E", "F", "I", "K"}
-	stockHoliday := UpdateStock{fileHotsheetNew, "HOLIDAY", fileStockReport, "C", "D", "F", "H"}
-	// HOTSHEET | SHEET | REPORT | SKU | YTD
-	sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "E", "P"}
-	salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "N"}
+// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
+stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "E", "F", "I", "K"}
+stockHoliday := UpdateStock{fileHotsheetNew, "HOLIDAY", fileStockReport, "C", "D", "F", "H"}
+// HOTSHEET | SHEET | REPORT | SKU | YTD
+sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "E", "P"}
+salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "N"}
 ```
 
 ## Usage
