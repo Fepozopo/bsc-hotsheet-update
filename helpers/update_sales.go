@@ -55,6 +55,10 @@ func (us *UpdateSales) UpdateSales() error {
 	kitCol := "J"        // 'J' column index in wsReport
 	wsReportPointer := 1 // Start pointer for wsReport
 
+	// Progress bar
+	var bar Bar
+	bar.NewOption(int64(2), int64(len(rowsHotsheet)))
+
 	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
 		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.skuCol, rowWsHotsheet))
 		if err != nil {
@@ -110,6 +114,7 @@ func (us *UpdateSales) UpdateSales() error {
 
 				logger.Printf("Match found for SKU: %s | YTD: %s\n", skuWsHotsheet, ytdValue)
 				wsReportPointer = rowWsReport + 1
+				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
 			}
 		}
@@ -119,5 +124,6 @@ func (us *UpdateSales) UpdateSales() error {
 		return fmt.Errorf("failed to save hotsheet file %s: %w", us.hotsheet, err)
 	}
 
+	bar.Finish()
 	return nil
 }

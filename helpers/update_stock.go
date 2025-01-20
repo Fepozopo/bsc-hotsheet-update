@@ -59,7 +59,12 @@ func (us *UpdateStock) UpdateStock() error {
 	onBOCol := "T"       // 'T' column index in wsReport
 	wsReportPointer := 1 // Start pointer for wsReport
 
+	// Progress bar
+	var bar Bar
+	bar.NewOption(int64(2), int64(len(rowsHotsheet)))
+
 	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
+
 		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.skuCol, rowWsHotsheet)) // SKU column in wsHotsheet
 		if err != nil {
 			return fmt.Errorf("failed to get SKU from hotsheet file %s: %w", us.hotsheet, err)
@@ -84,7 +89,7 @@ func (us *UpdateStock) UpdateStock() error {
 				continue
 			}
 
-			logger.Printf("Comparing Hotsheet SKU: '%s' with Report SKU: '%s'\n", skuWsHotsheet, skuWsReport)
+			logger.Printf("Comparing Hotsheet SKU: [%d] - '%s' with Report SKU: [%d] - '%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReport, skuWsReport)
 			if strings.Contains(skuWsReport, skuWsHotsheet) {
 				testValueLocation, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, rowWsReport+2))
 				if err != nil {
@@ -136,6 +141,7 @@ func (us *UpdateStock) UpdateStock() error {
 
 				logger.Printf("Match found for SKU: %s | on_hand: %s | on_po: %s | on_so_bo: %d\n", skuWsHotsheet, onHand, onPO, onSOBO)
 				wsReportPointer = rowWsReport + 1
+				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
 
 			}
@@ -146,5 +152,6 @@ func (us *UpdateStock) UpdateStock() error {
 		return fmt.Errorf("failed to save hotsheet file: %w", err)
 	}
 
+	bar.Finish()
 	return nil
 }
