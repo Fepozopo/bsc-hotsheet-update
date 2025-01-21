@@ -25,6 +25,12 @@ func main() {
 	for {
 		product, fileHotsheet, fileStockReport, fileSalesReport := selectFiles(myApp)
 
+		// If no files are selected, exit the loop
+		if product == "" || fileHotsheet == "" || fileStockReport == "" || fileSalesReport == "" {
+			logger.Printf("not all files were selected")
+			return
+		}
+
 		// Copy the hotsheet
 		fileHotsheetNew, err := helpers.CopyHotsheet(product, fileHotsheet)
 		if err != nil {
@@ -32,38 +38,24 @@ func main() {
 			return
 		}
 
+		// Update the hotsheet
+		var updateErr error
 		switch product {
 		case "smd":
-			err = helpers.CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport)
-			if err != nil {
-				logger.Printf("failed to update SMD hotsheet: %v", err)
-				return
-			}
-			fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
-			return
-
+			updateErr = helpers.CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport)
 		case "bsc":
-			err = helpers.CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport)
-			if err != nil {
-				logger.Printf("failed to update BSC hotsheet: %v", err)
-				return
-			}
-			fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
-			return
-
+			updateErr = helpers.CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport)
 		case "21c":
-			err = helpers.Case21C(fileHotsheetNew, fileStockReport, fileSalesReport)
-			if err != nil {
-				logger.Printf("failed to update 2021co hotsheet: %v", err)
-				return
-			}
-			fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
-			return
-
-		case "exit":
-			return
+			updateErr = helpers.Case21C(fileHotsheetNew, fileStockReport, fileSalesReport)
 		default:
-			fmt.Println("Invalid input. Please enter 'smd', 'bsc', '21c', or 'exit' (case sensitive).")
+			logger.Printf("unknown product: %s", product)
+			return
 		}
+		if updateErr != nil {
+			logger.Printf("failed to update %s hotsheet: %v", product, updateErr)
+			break
+		}
+
+		fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
 	}
 }

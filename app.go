@@ -73,5 +73,9 @@ func selectFiles(a fyne.App) (string, string, string, string) {
 
 	window.ShowAndRun()
 
+	window.SetCloseIntercept(func() {
+		window.Close()
+	})
+
 	return selection, filePaths[0], filePaths[1], filePaths[2]
 }
