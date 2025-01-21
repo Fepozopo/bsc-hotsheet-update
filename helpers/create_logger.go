@@ -4,18 +4,24 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 )
 
+// CreateLogger creates a logger that writes to a log file.
+// It takes the logger name and a log flag as parameters.
 func CreateLogger(name, flag string) (*log.Logger, *os.File, error) {
 	// Get the current date
-	currentDate := time.Now().Format("2006-01-02 15:04:05.000000000")
+	currentDate := time.Now().Format("2006-01-02_15-04-05")
+
+	// Log directory
+	logDir := "logs"
 
 	// Create a new file path
-	logFilePath := fmt.Sprintf("./logs/%v_%s.log", currentDate, name)
+	logFilePath := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", currentDate, name))
 
 	// Create the logs directory if it does not exist
-	if err := os.MkdirAll("./logs", os.ModePerm); err != nil {
+	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
 		return nil, nil, fmt.Errorf("error creating logs directory: %w", err)
 	}
 
