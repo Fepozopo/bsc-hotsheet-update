@@ -21,41 +21,39 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	// Start the main loop
-	for {
-		product, fileHotsheet, fileStockReport, fileSalesReport := selectFiles(myApp)
+	product, fileHotsheet, fileStockReport, fileSalesReport := selectFiles(myApp)
 
-		// If no files are selected, exit the loop
-		if product == "" || fileHotsheet == "" || fileStockReport == "" || fileSalesReport == "" {
-			logger.Printf("not all files were selected")
-			return
-		}
-
-		// Copy the hotsheet
-		fileHotsheetNew, err := helpers.CopyHotsheet(product, fileHotsheet)
-		if err != nil {
-			logger.Printf("failed to copy hotsheet file: %v", err)
-			return
-		}
-
-		// Update the hotsheet
-		var updateErr error
-		switch product {
-		case "smd":
-			updateErr = helpers.CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport)
-		case "bsc":
-			updateErr = helpers.CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport)
-		case "21c":
-			updateErr = helpers.Case21C(fileHotsheetNew, fileStockReport, fileSalesReport)
-		default:
-			logger.Printf("unknown product: %s", product)
-			return
-		}
-		if updateErr != nil {
-			logger.Printf("failed to update %s hotsheet: %v", product, updateErr)
-			break
-		}
-
-		fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
+	// If no files are selected, exit
+	if product == "" || fileHotsheet == "" || fileStockReport == "" || fileSalesReport == "" {
+		logger.Printf("not all files were selected")
+		return
 	}
+
+	// Copy the hotsheet
+	fileHotsheetNew, err := helpers.CopyHotsheet(product, fileHotsheet)
+	if err != nil {
+		logger.Printf("failed to copy hotsheet file: %v", err)
+		return
+	}
+
+	// Update the hotsheet
+	var updateErr error
+	switch product {
+	case "smd":
+		updateErr = helpers.CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport)
+	case "bsc":
+		updateErr = helpers.CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport)
+	case "21c":
+		updateErr = helpers.Case21C(fileHotsheetNew, fileStockReport, fileSalesReport)
+	default:
+		logger.Printf("unknown product: %s", product)
+		return
+	}
+	if updateErr != nil {
+		logger.Printf("failed to update %s hotsheet: %v", product, updateErr)
+		return
+	}
+
+	fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
+
 }
