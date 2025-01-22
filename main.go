@@ -11,7 +11,7 @@ import (
 func main() {
 	startTime := time.Now()
 
-	logger, logFile, err := helpers.CreateLogger("main", "ERROR")
+	logger, logFile, err := helpers.CreateLogger("main", "", "", "ERROR")
 	if err != nil {
 		logger.Printf("failed to create log file: %v", err)
 		return

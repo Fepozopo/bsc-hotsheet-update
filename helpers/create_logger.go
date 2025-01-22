@@ -10,15 +10,20 @@ import (
 
 // CreateLogger creates a logger that writes to a log file.
 // It takes the logger name and a log flag as parameters.
-func CreateLogger(name, flag string) (*log.Logger, *os.File, error) {
+func CreateLogger(name, product, occasion, flag string) (*log.Logger, *os.File, error) {
 	// Get the current date
-	currentDate := time.Now().Format("2006-01-02_15-04-05")
+	currentDate := time.Now().Format("2006-01-02_150405.000000000")
 
 	// Log directory
 	logDir := "logs"
 
 	// Create a new file path
-	logFilePath := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", currentDate, name))
+	var logFilePath string
+	if product == "" && occasion == "" {
+		logFilePath = filepath.Join(logDir, fmt.Sprintf("%s_%s.log", currentDate, name))
+	} else {
+		logFilePath = filepath.Join(logDir, fmt.Sprintf("%s_%s-%s-%s.log", currentDate, name, product, occasion))
+	}
 
 	// Create the logs directory if it does not exist
 	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {

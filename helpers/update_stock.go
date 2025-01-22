@@ -17,8 +17,8 @@ type UpdateStock struct {
 	onSOBOCol string
 }
 
-func (us *UpdateStock) UpdateStock() error {
-	logger, logFile, err := CreateLogger("UpdateStock", "INFO")
+func (us *UpdateStock) UpdateStock(product, occasion string) error {
+	logger, logFile, err := CreateLogger("UpdateStock", product, occasion, "INFO")
 	if err != nil {
 		return fmt.Errorf("failed to create log file: %w", err)
 	}

@@ -15,8 +15,8 @@ type UpdateSales struct {
 	ytdCol   string
 }
 
-func (us *UpdateSales) UpdateSales() error {
-	logger, logFile, err := CreateLogger("UpdateSales", "INFO")
+func (us *UpdateSales) UpdateSales(product, occasion string) error {
+	logger, logFile, err := CreateLogger("UpdateSales", product, occasion, "INFO")
 	if err != nil {
 		return fmt.Errorf("failed to create log file: %w", err)
 	}
