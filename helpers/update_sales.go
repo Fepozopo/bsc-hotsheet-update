@@ -90,6 +90,9 @@ func (us *UpdateSales) UpdateSales(product, occasion string) error {
 					return fmt.Errorf("failed to get ytdValue from report file %s: %w", us.report, err)
 				}
 
+				// Remove commas from ytdValue
+				ytdValue = strings.ReplaceAll(ytdValue, ",", "") // Remove commas
+
 				// Convert ytdValue to int
 				var ytdValueInt int
 				_, err = fmt.Sscan(ytdValue, &ytdValueInt)

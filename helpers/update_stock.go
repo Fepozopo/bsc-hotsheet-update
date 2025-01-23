@@ -121,7 +121,13 @@ func (us *UpdateStock) UpdateStock(product, occasion string) error {
 					return fmt.Errorf("failed to get on_bo value from report file %s: %w", us.report, err)
 				}
 
-				// Convert onHand and onPO to ints
+				// Replace commas with empty strings
+				onHand = strings.ReplaceAll(onHand, ",", "")
+				onPO = strings.ReplaceAll(onPO, ",", "")
+				onSO = strings.ReplaceAll(onSO, ",", "")
+				onBO = strings.ReplaceAll(onBO, ",", "")
+
+				// Convert the values to integers
 				var onHandInt, onPOInt int
 				_, err = fmt.Sscan(onHand, &onHandInt)
 				if err != nil {
@@ -131,8 +137,6 @@ func (us *UpdateStock) UpdateStock(product, occasion string) error {
 				if err != nil {
 					return fmt.Errorf("failed to convert on_po value to int: %w", err)
 				}
-
-				// Add onSO and onBO together after converting them to ints
 				var onSOInt, onBOInt int
 				_, err = fmt.Sscan(onSO, &onSOInt)
 				if err != nil {
@@ -142,6 +146,8 @@ func (us *UpdateStock) UpdateStock(product, occasion string) error {
 				if err != nil {
 					return fmt.Errorf("failed to convert on_bo value to int: %w", err)
 				}
+
+				// Calculate on_so_bo
 				onSOBOInt := onSOInt + onBOInt
 
 				// Update the hotsheet
