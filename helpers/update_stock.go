@@ -121,9 +121,19 @@ func (us *UpdateStock) UpdateStock(product, occasion string) error {
 					return fmt.Errorf("failed to get on_bo value from report file %s: %w", us.report, err)
 				}
 
+				// Convert onHand and onPO to ints
+				var onHandInt, onPOInt int
+				_, err = fmt.Sscan(onHand, &onHandInt)
+				if err != nil {
+					return fmt.Errorf("failed to convert on_hand value to int: %w", err)
+				}
+				_, err = fmt.Sscan(onPO, &onPOInt)
+				if err != nil {
+					return fmt.Errorf("failed to convert on_po value to int: %w", err)
+				}
+
 				// Add onSO and onBO together after converting them to ints
-				var onSOInt int
-				var onBOInt int
+				var onSOInt, onBOInt int
 				_, err = fmt.Sscan(onSO, &onSOInt)
 				if err != nil {
 					return fmt.Errorf("failed to convert on_so value to int: %w", err)
@@ -132,14 +142,14 @@ func (us *UpdateStock) UpdateStock(product, occasion string) error {
 				if err != nil {
 					return fmt.Errorf("failed to convert on_bo value to int: %w", err)
 				}
-				onSOBO := onSOInt + onBOInt
+				onSOBOInt := onSOInt + onBOInt
 
 				// Update the hotsheet
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onHandCol, rowWsHotsheet), onHand)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onPOCol, rowWsHotsheet), onPO)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onSOBOCol, rowWsHotsheet), onSOBO)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onHandCol, rowWsHotsheet), onHandInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onPOCol, rowWsHotsheet), onPOInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.onSOBOCol, rowWsHotsheet), onSOBOInt)
 
-				logger.Printf("Match found for SKU: %s | on_hand: %s | on_po: %s | on_so_bo: %d\n", skuWsHotsheet, onHand, onPO, onSOBO)
+				logger.Printf("Match found for SKU: %s | on_hand: %d | on_po: %d | on_so_bo: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOBOInt)
 				wsReportPointer = rowWsReport + 1
 				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found

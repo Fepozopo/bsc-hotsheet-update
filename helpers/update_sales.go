@@ -90,29 +90,30 @@ func (us *UpdateSales) UpdateSales(product, occasion string) error {
 					return fmt.Errorf("failed to get ytdValue from report file %s: %w", us.report, err)
 				}
 
+				// Convert ytdValue to int
+				var ytdValueInt int
+				_, err = fmt.Sscan(ytdValue, &ytdValueInt)
+				if err != nil {
+					return fmt.Errorf("failed to convert ytdValue to int: %w", err)
+				}
+
 				if isKit == "Kit" {
 					if strings.Contains(skuWsReport, "20-") || strings.Contains(skuWsReport, "21-") ||
 						strings.Contains(skuWsReport, "22-") || strings.Contains(skuWsReport, "24-") ||
 						strings.Contains(skuWsReport, "20F-") || strings.Contains(skuWsReport, "22F-") ||
 						strings.Contains(skuWsReport, "24F-") {
 						// Update (ytd) in wsHotsheet
-						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue)
+						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValueInt)
 					} else {
-						// Convert to int in order to multiply by 10
-						var ytdValueInt int
-						_, err := fmt.Sscan(ytdValue, &ytdValueInt)
-						if err != nil {
-							return fmt.Errorf("failed to convert ytdValue to int: %w", err)
-						}
 						ytdValue10x := ytdValueInt * 10
 						wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue10x)
 					}
 				} else {
 					// Update (ytd) in wsHotsheet
-					wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValue)
+					wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.ytdCol, rowWsHotsheet), ytdValueInt)
 				}
 
-				logger.Printf("Match found for SKU: %s | YTD: %s\n", skuWsHotsheet, ytdValue)
+				logger.Printf("Match found for SKU: %s | YTD: %d\n", skuWsHotsheet, ytdValueInt)
 				wsReportPointer = rowWsReport + 1
 				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
