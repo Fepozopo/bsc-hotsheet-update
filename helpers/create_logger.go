@@ -14,8 +14,11 @@ func CreateLogger(name, product, occasion, flag string) (*log.Logger, *os.File, 
 	// Get the current date
 	currentDate := time.Now().Format("2006-01-02_150405.000000000")
 
-	// Log directory
-	logDir := "logs"
+	// Get the temporary directory
+	tempDir := os.TempDir()
+
+	// Define the logs directory path
+	logDir := filepath.Join(tempDir, "logs_bsc-hotsheet-update")
 
 	// Create a new file path
 	var logFilePath string
