@@ -2,6 +2,13 @@
 
 This is a small Go program that updates an Excel document with data from a stock report and a sales report that's pulled from Sage 100. It is designed to be run on a schedule to keep the Excel document up to date.
 
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your system:
+
+- Go programming language (version 1.16 or later)
+- A C compiler for your target platform (e.g., GCC for Linux, Clang for macOS, or MinGW for Windows) because this program uses the Fyne GUI toolkit, which requires C bindings.
+
 ## Setup
 
 1. Clone the repository and navigate to the project root in a terminal.
@@ -21,7 +28,7 @@ salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "N
 1. Run `go run .` to start the program.
 2. The program will prompt you to select the files to update. Select the Excel document you want to update, the stock report file, and the sales report file.
 3. The program will create a new updated Excel document with the data from the two reports.
-4. There will be a 'logs' folder created in the current directory to store all the logs after each update.
+4. There will be a 'logs_bsc-hotsheet-update' folder created in the temp directory to store all the logs after each update.
 
 ## Development
 
