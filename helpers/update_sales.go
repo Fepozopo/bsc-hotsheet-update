@@ -79,7 +79,7 @@ func (us *UpdateSales) UpdateSales(product, occasion string) error {
 				continue
 			}
 
-			logger.Printf("Comparing Hotsheet SKU: '%s' with Report SKU: '%s'\n", skuWsHotsheet, skuWsReport)
+			logger.Printf("Comparing Hotsheet SKU: [%d] - '%s' with Report SKU: [%d] - '%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReport, skuWsReport)
 			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
 				isKit, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", kitCol, rowWsReport+1))
 				if err != nil {
