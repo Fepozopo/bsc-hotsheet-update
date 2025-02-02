@@ -4,6 +4,11 @@ import (
 	"fmt"
 )
 
+// Case21C is a helper function for updating the 21C hotsheet. It creates UpdateStock and UpdateSales structs
+// and calls their respective UpdateStock and UpdateSales methods.
+//
+// This function is called by the main function when the user selects '21C' as the product
+// line.
 func Case21C(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
 	// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stockEveryday := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "C", "D", "E", "G"}

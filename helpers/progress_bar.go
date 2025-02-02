@@ -4,7 +4,6 @@ import (
 	"fmt"
 )
 
-// Bar ...
 type Bar struct {
 	percent int64  // progress percentage
 	cur     int64  // current progress
@@ -13,6 +12,9 @@ type Bar struct {
 	graph   string // the fill value for progress bar
 }
 
+// NewOption sets the start and total values for the progress bar,
+// and initializes the progress bar with the given start value.
+// If the graph character is empty, it defaults to '#'.
 func (bar *Bar) NewOption(start, total int64) {
 	bar.cur = start
 	bar.total = total
@@ -25,10 +27,18 @@ func (bar *Bar) NewOption(start, total int64) {
 	}
 }
 
+// getPercent calculates the current progress percentage based on the current
+// progress (cur) and the total value (total) of the progress bar. It returns
+// the percentage as an int64 value.
 func (bar *Bar) getPercent() int64 {
 	return int64((float32(bar.cur) / float32(bar.total)) * 100)
 }
 
+// Play updates the progress bar with the current progress value (cur). It
+// compares the new progress percentage with the previous one and adds a new
+// graph character to the progress bar if the percentage has increased by 2% or
+// more. It then prints the progress bar and the current progress value and
+// total value.
 func (bar *Bar) Play(cur int64) {
 	bar.cur = cur
 	last := bar.percent
@@ -39,6 +49,7 @@ func (bar *Bar) Play(cur int64) {
 	fmt.Printf("\r[%-50s]%3d%% %8d/%d", bar.rate, bar.percent, bar.cur, bar.total)
 }
 
+// Finish prints a newline to the console to finish the progress bar.
 func (bar *Bar) Finish() {
 	fmt.Println()
 }

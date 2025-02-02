@@ -4,6 +4,11 @@ import (
 	"fmt"
 )
 
+// CaseSMD is a helper function for updating the SMD hotsheet. It creates UpdateStock and UpdateSales structs
+// and calls their respective UpdateStock and UpdateSales methods.
+//
+// This function is called by the main function when the user selects 'SMD' as the product
+// line.
 func CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
 	// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stockEveryday := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "E", "F", "I", "K"}

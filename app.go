@@ -8,12 +8,16 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// openFileWindow creates a file open dialog and calls the given callback function with the selected file.
+// If the user cancels the dialog, the error argument will be set to an error with message "cancelled".
 func openFileWindow(parent fyne.Window, callback func(r fyne.URIReadCloser, e error)) {
 	dialog.NewFileOpen(func(r fyne.URIReadCloser, e error) {
 		callback(r, e)
 	}, parent).Show()
 }
 
+// selectFiles creates a GUI window to select the product line to update and the paths to the hotsheet, stock report, and sales report files.
+// It then returns the selection and the paths as strings.
 func selectFiles(a fyne.App) (string, string, string, string) {
 	window := a.NewWindow("Hotsheet Updater")
 	window.SetContent(widget.NewLabel("Please select the files to update:"))

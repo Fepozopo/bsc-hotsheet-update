@@ -8,8 +8,11 @@ import (
 	"time"
 )
 
-// CreateLogger creates a logger that writes to a log file.
-// It takes the logger name and a log flag as parameters.
+// CreateLogger returns a logger that writes to a log file in the temporary directory.
+// The log file name is in the format "YYYY-MM-DD_HHMMSS.ssssss_NAME.log" if product and occasion are empty,
+// and "YYYY-MM-DD_HHMMSS.ssssss_NAME-PRODUCT-OCCASION.log" otherwise.
+// The function also creates the "logs_bsc-hotsheet-update" directory if it does not exist.
+// The flag is used to specify the log level.
 func CreateLogger(name, product, occasion, flag string) (*log.Logger, *os.File, error) {
 	// Get the current date
 	currentDate := time.Now().Format("2006-01-02_150405.000000000")

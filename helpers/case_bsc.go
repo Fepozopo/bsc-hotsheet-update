@@ -4,6 +4,11 @@ import (
 	"fmt"
 )
 
+// CaseBSC is a helper function for updating the BSC hotsheet. It creates UpdateStock and UpdateSales structs
+// and calls their respective UpdateStock and UpdateSales methods.
+//
+// This function is called by the main function when the user selects 'BSC' as the product
+// line.
 func CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport string) error {
 	// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
 	stockEveryday := UpdateStock{fileHotsheetNew, "Everyday", fileStockReport, "D", "E", "F", "H"}

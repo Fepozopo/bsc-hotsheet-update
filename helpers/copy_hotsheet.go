@@ -8,6 +8,20 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// CopyHotsheet creates a copy of the specified hotsheet Excel file,
+// saving it with a new name that includes the product name and the
+// current date. The function returns the path to the newly created
+// file or an error if the operation fails.
+//
+// Parameters:
+//   - product: A string representing the product name to be included
+//     in the new file name.
+//   - hotsheet: A string representing the path to the existing hotsheet
+//     Excel file to be copied.
+//
+// Returns:
+//   - A string representing the path to the newly created hotsheet file.
+//   - An error if the file cannot be opened or saved.
 func CopyHotsheet(product, hotsheet string) (string, error) {
 	// Get the current date for hotsheet name
 	currentDateHotsheet := time.Now().Format("2006-01-02")

@@ -17,6 +17,18 @@ type UpdateStock struct {
 	onSOBOCol string
 }
 
+// UpdateStock updates the hotsheet with stock data from the report.
+// It matches SKUs from the hotsheet with those in the report, retrieves
+// relevant stock information (on hand, on PO, on SO/BO), and updates
+// the corresponding cells in the hotsheet.
+//
+// Parameters:
+//   - product: A string representing the product name for logging purposes.
+//   - occasion: A string representing the occasion for logging purposes.
+//
+// Returns:
+//   - error: An error if any operation (e.g., file opening, reading, or writing)
+//     fails during the update process.
 func (us *UpdateStock) UpdateStock(product, occasion string) error {
 	logger, logFile, err := CreateLogger("UpdateStock", product, occasion, "INFO")
 	if err != nil {

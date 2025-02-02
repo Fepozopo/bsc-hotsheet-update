@@ -15,6 +15,14 @@ type UpdateSales struct {
 	ytdCol   string
 }
 
+// UpdateSales updates the specified hotsheet Excel file with sales data from the report file.
+//
+// Parameters:
+//   - product: A string representing the product name to be included in the log file name.
+//   - occasion: A string representing the occasion type (e.g. "everyday", "holiday") to be included in the log file name.
+//
+// Returns:
+//   - An error if the operation fails.
 func (us *UpdateSales) UpdateSales(product, occasion string) error {
 	logger, logFile, err := CreateLogger("UpdateSales", product, occasion, "INFO")
 	if err != nil {
