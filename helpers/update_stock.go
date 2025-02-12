@@ -176,6 +176,9 @@ func (us *UpdateStock) UpdateStock(product, occasion string) error {
 		}
 	}
 
+	if err := wbHotsheet.UpdateLinkedValue(); err != nil {
+		return fmt.Errorf("failed to update linked value in hotsheet file %s: %w", us.hotsheet, err)
+	}
 	if err := wbHotsheet.Save(); err != nil {
 		return fmt.Errorf("failed to save hotsheet file: %w", err)
 	}
