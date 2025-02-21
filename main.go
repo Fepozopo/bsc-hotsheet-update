@@ -61,4 +61,9 @@ func main() {
 
 	fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
 
+	for i := 0; i < 5; i++ {
+		fmt.Printf("Quitting in %d seconds...\n", 5-i)
+		time.Sleep(1 * time.Second)
+	}
+
 }
