@@ -32,7 +32,7 @@ type Update struct {
 // Returns:
 //   - error: An error if any operation (e.g., file opening, reading, or writing)
 //     fails during the update process.
-func (us *Update) Update(product, occasion string) error {
+func (u *Update) Update(product, occasion string) error {
 	logger, logFile, err := helpers.CreateLogger("Update", product, occasion, "INFO")
 	if err != nil {
 		return fmt.Errorf("failed to create log file: %w", err)
@@ -40,31 +40,31 @@ func (us *Update) Update(product, occasion string) error {
 	defer logFile.Close()
 
 	// Open the report workbook
-	wbReport, err := excelize.OpenFile(us.Report)
+	wbReport, err := excelize.OpenFile(u.Report)
 	if err != nil {
-		return fmt.Errorf("failed to open report file %s: %w", us.Report, err)
+		return fmt.Errorf("failed to open report file %s: %w", u.Report, err)
 	}
 	defer wbReport.Close()
 
 	// Open the hotsheet workbook
-	wbHotsheet, err := excelize.OpenFile(us.Hotsheet)
+	wbHotsheet, err := excelize.OpenFile(u.Hotsheet)
 	if err != nil {
-		return fmt.Errorf("failed to open hotsheet file %s: %w", us.Hotsheet, err)
+		return fmt.Errorf("failed to open hotsheet file %s: %w", u.Hotsheet, err)
 	}
 	defer wbHotsheet.Close()
 
 	// Get the sheets
 	wsReport := "Sheet1"
-	wsHotsheet := us.Sheet
+	wsHotsheet := u.Sheet
 
 	// Get the rows
 	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
 	if err != nil {
-		return fmt.Errorf("failed to get rows from hotsheet file %s: %w", us.Hotsheet, err)
+		return fmt.Errorf("failed to get rows from hotsheet file %s: %w", u.Hotsheet, err)
 	}
 	rowsReport, err := wbReport.GetRows(wsReport)
 	if err != nil {
-		return fmt.Errorf("failed to get rows from report file %s: %w", us.Report, err)
+		return fmt.Errorf("failed to get rows from report file %s: %w", u.Report, err)
 	}
 
 	skuCol := "B"        // 'B' column index in wsReport
@@ -82,9 +82,9 @@ func (us *Update) Update(product, occasion string) error {
 
 	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
 
-		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.SkuCol, rowWsHotsheet)) // SKU column in wsHotsheet
+		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.SkuCol, rowWsHotsheet)) // SKU column in wsHotsheet
 		if err != nil {
-			return fmt.Errorf("failed to get SKU from hotsheet file %s: %w", us.Hotsheet, err)
+			return fmt.Errorf("failed to get SKU from hotsheet file %s: %w", u.Hotsheet, err)
 		}
 
 		if skuWsHotsheet == "" {
@@ -94,7 +94,7 @@ func (us *Update) Update(product, occasion string) error {
 		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport)+1; rowWsReport++ {
 			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", skuCol, rowWsReport)) // SKU in column 'B' in wsReport
 			if err != nil {
-				return fmt.Errorf("failed to get SKU from report file %s: %w", us.Report, err)
+				return fmt.Errorf("failed to get SKU from report file %s: %w", u.Report, err)
 			}
 
 			if skuWsReport == "" {
@@ -108,27 +108,27 @@ func (us *Update) Update(product, occasion string) error {
 				// Get the values for the current SKU in wsReport
 				onHand, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_hand value from report file %s: %w", us.Report, err)
+					return fmt.Errorf("failed to get on_hand value from report file %s: %w", u.Report, err)
 				}
 				onPO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_po value from report file %s: %w", us.Report, err)
+					return fmt.Errorf("failed to get on_po value from report file %s: %w", u.Report, err)
 				}
 				onSO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_so value from report file %s: %w", us.Report, err)
+					return fmt.Errorf("failed to get on_so value from report file %s: %w", u.Report, err)
 				}
 				onBO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_bo value from report file %s: %w", us.Report, err)
+					return fmt.Errorf("failed to get on_bo value from report file %s: %w", u.Report, err)
 				}
 				ytdSold, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdSoldCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get ytd_sold value from report file %s: %w", us.Report, err)
+					return fmt.Errorf("failed to get ytd_sold value from report file %s: %w", u.Report, err)
 				}
 				ytdIssued, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdIssuedCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get ytd_issued value from report file %s: %w", us.Report, err)
+					return fmt.Errorf("failed to get ytd_issued value from report file %s: %w", u.Report, err)
 				}
 
 				// Replace commas with empty strings
@@ -170,11 +170,11 @@ func (us *Update) Update(product, occasion string) error {
 				onSOBOInt := onSOInt + onBOInt
 
 				// Update the hotsheet
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.OnHandCol, rowWsHotsheet), onHandInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.OnPOCol, rowWsHotsheet), onPOInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.OnSOBOCol, rowWsHotsheet), onSOBOInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.YtdSoldCol, rowWsHotsheet), ytdSoldInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", us.YtdIssuedCol, rowWsHotsheet), ytdIssuedInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet), onPOInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldCol, rowWsHotsheet), ytdSoldInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdIssuedCol, rowWsHotsheet), ytdIssuedInt)
 
 				logger.Printf("Match found for SKU: %s | on_hand: %d | on_po: %d | on_so_bo: %d | ytd_sold: %d | ytd_issued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOBOInt, ytdSoldInt, ytdIssuedInt)
 				wsReportPointer = rowWsReport + 1
@@ -186,7 +186,7 @@ func (us *Update) Update(product, occasion string) error {
 	}
 
 	if err := wbHotsheet.UpdateLinkedValue(); err != nil {
-		return fmt.Errorf("failed to update linked value in hotsheet file %s: %w", us.Hotsheet, err)
+		return fmt.Errorf("failed to update linked value in hotsheet file %s: %w", u.Hotsheet, err)
 	}
 	if err := wbHotsheet.Save(); err != nil {
 		return fmt.Errorf("failed to save hotsheet file: %w", err)
