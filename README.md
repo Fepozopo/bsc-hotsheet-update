@@ -24,12 +24,17 @@ Before you begin, ensure you have the following installed on your system:
 
 1. You can modify the values in each case to adjust which sheets and columns contain each value. The comments above correspond to each input. The letters are columns in the hotseet.
 ``` go
-// HOTSHEET | SHEET | REPORT | SKU | ON HAND | ON PO | ON SO/BO
-stock := UpdateStock{fileHotsheetNew, "EVERYDAY", fileStockReport, "E", "F", "I", "K"}
-stockHoliday := UpdateStock{fileHotsheetNew, "HOLIDAY", fileStockReport, "C", "D", "F", "H"}
-// HOTSHEET | SHEET | REPORT | SKU | YTD
-sales := UpdateSales{fileHotsheetNew, "EVERYDAY", fileSalesReport, "E", "P"}
-salesHoliday := UpdateSales{fileHotsheetNew, "HOLIDAY", fileSalesReport, "C", "N"}
+everyday := main.Update{
+		Hotsheet:     fileHotsheetNew,
+		Sheet:        "EVERYDAY",
+		Report:       fileReport,
+		SkuCol:       "E",
+		OnHandCol:    "F",
+		OnPOCol:      "I",
+		OnSOBOCol:    "K",
+		YtdSoldCol:   "P",
+		YtdIssuedCol: "Q",
+	}
 ```
 2. The program will prompt you to select the product line and the files to update. Select the Excel document you want to update, the stock report file, and the sales report file.
 3. The program will create a new updated Excel document with the data from the two reports.

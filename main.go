@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2/app"
 	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
+	"github.com/Fepozopo/bsc-hotsheet-update/hotsheet"
 )
 
 // main is the entry point of the application. It initializes the logger, creates a new
@@ -26,16 +27,16 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	product, fileHotsheet, fileStockReport, fileSalesReport := selectFiles(myApp)
+	product, fileHotsheet, fileReport := selectFiles(myApp)
 
 	// If no files are selected, exit
-	if product == "" || fileHotsheet == "" || fileStockReport == "" || fileSalesReport == "" {
+	if product == "" || fileHotsheet == "" || fileReport == "" {
 		logger.Printf("not all files were selected")
 		return
 	}
 
 	// Copy the hotsheet
-	fileHotsheetNew, err := helpers.CopyHotsheet(product, fileHotsheet)
+	fileHotsheetNew, err := hotsheet.CopyHotsheet(product, fileHotsheet)
 	if err != nil {
 		logger.Printf("failed to copy hotsheet file: %v", err)
 		return
@@ -44,12 +45,12 @@ func main() {
 	// Update the hotsheet
 	var updateErr error
 	switch product {
-	case "smd":
-		updateErr = helpers.CaseSMD(fileHotsheetNew, fileStockReport, fileSalesReport)
-	case "bsc":
-		updateErr = helpers.CaseBSC(fileHotsheetNew, fileStockReport, fileSalesReport)
+	case "SMD":
+		updateErr = hotsheet.CaseSMD(fileHotsheetNew, fileReport)
+	case "BSC":
+		updateErr = hotsheet.CaseBSC(fileHotsheetNew, fileReport)
 	case "21c":
-		updateErr = helpers.Case21C(fileHotsheetNew, fileStockReport, fileSalesReport)
+		updateErr = hotsheet.Case21C(fileHotsheetNew, fileReport)
 	default:
 		logger.Printf("unknown product: %s", product)
 		return
