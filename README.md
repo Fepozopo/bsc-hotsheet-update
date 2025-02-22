@@ -25,15 +25,14 @@ Before you begin, ensure you have the following installed on your system:
 1. You can modify the values in each case to adjust which sheets and columns contain each value. The comments above correspond to each input. The letters are columns in the hotseet.
 ``` go
 everyday := Update{
-		Hotsheet:     fileHotsheetNew,
-		Sheet:        "EVERYDAY",
-		Report:       fileReport,
-		SkuCol:       "E",
-		OnHandCol:    "F",
-		OnPOCol:      "I",
-		OnSOBOCol:    "K",
-		YtdSoldCol:   "P",
-		YtdIssuedCol: "Q",
+		Hotsheet:         fileHotsheetNew,
+		Sheet:            "EVERYDAY",
+		Report:           fileReport,
+		SkuCol:           "E",
+		OnHandCol:        "F",
+		OnPOCol:          "I",
+		OnSOBOCol:        "K",
+		YtdSoldIssuedCol: "P",
 	}
 ```
 2. The program will prompt you to select the product line and the files to update. Select the Excel document you want to update, the stock report file, and the sales report file.

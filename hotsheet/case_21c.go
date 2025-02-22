@@ -11,15 +11,14 @@ import (
 // line.
 func Case21C(fileHotsheetNew, fileReport string) error {
 	everyday := Update{
-		Hotsheet:     fileHotsheetNew,
-		Sheet:        "EVERYDAY",
-		Report:       fileReport,
-		SkuCol:       "C",
-		OnHandCol:    "D",
-		OnPOCol:      "E",
-		OnSOBOCol:    "G",
-		YtdSoldCol:   "M",
-		YtdIssuedCol: "N",
+		Hotsheet:         fileHotsheetNew,
+		Sheet:            "EVERYDAY",
+		Report:           fileReport,
+		SkuCol:           "C",
+		OnHandCol:        "D",
+		OnPOCol:          "E",
+		OnSOBOCol:        "G",
+		YtdSoldIssuedCol: "M",
 	}
 
 	// Update the hotsheet

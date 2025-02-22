@@ -11,26 +11,24 @@ import (
 // line.
 func CaseSMD(fileHotsheetNew, fileReport string) error {
 	everyday := Update{
-		Hotsheet:     fileHotsheetNew,
-		Sheet:        "EVERYDAY",
-		Report:       fileReport,
-		SkuCol:       "E",
-		OnHandCol:    "F",
-		OnPOCol:      "I",
-		OnSOBOCol:    "K",
-		YtdSoldCol:   "P",
-		YtdIssuedCol: "Q",
+		Hotsheet:         fileHotsheetNew,
+		Sheet:            "EVERYDAY",
+		Report:           fileReport,
+		SkuCol:           "E",
+		OnHandCol:        "F",
+		OnPOCol:          "I",
+		OnSOBOCol:        "K",
+		YtdSoldIssuedCol: "P",
 	}
 	holiday := Update{
-		Hotsheet:     fileHotsheetNew,
-		Sheet:        "HOLIDAY",
-		Report:       fileReport,
-		SkuCol:       "C",
-		OnHandCol:    "D",
-		OnPOCol:      "F",
-		OnSOBOCol:    "H",
-		YtdSoldCol:   "N",
-		YtdIssuedCol: "O",
+		Hotsheet:         fileHotsheetNew,
+		Sheet:            "HOLIDAY",
+		Report:           fileReport,
+		SkuCol:           "C",
+		OnHandCol:        "D",
+		OnPOCol:          "F",
+		OnSOBOCol:        "H",
+		YtdSoldIssuedCol: "N",
 	}
 
 	// Update the hotsheet

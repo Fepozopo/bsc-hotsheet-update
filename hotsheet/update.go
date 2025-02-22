@@ -9,15 +9,14 @@ import (
 )
 
 type Update struct {
-	Hotsheet     string
-	Sheet        string
-	Report       string
-	SkuCol       string
-	OnHandCol    string
-	OnPOCol      string
-	OnSOBOCol    string
-	YtdSoldCol   string
-	YtdIssuedCol string
+	Hotsheet         string
+	Sheet            string
+	Report           string
+	SkuCol           string
+	OnHandCol        string
+	OnPOCol          string
+	OnSOBOCol        string
+	YtdSoldIssuedCol string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -143,40 +142,40 @@ func (u *Update) Update(product, occasion string) error {
 				var onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt int
 				_, err = fmt.Sscan(onHand, &onHandInt)
 				if err != nil {
-					return fmt.Errorf("failed to convert on_hand value to int: %w", err)
+					return fmt.Errorf("failed to convert onHand value to int: %w", err)
 				}
 				_, err = fmt.Sscan(onPO, &onPOInt)
 				if err != nil {
-					return fmt.Errorf("failed to convert on_po value to int: %w", err)
+					return fmt.Errorf("failed to convert onPO value to int: %w", err)
 				}
 				_, err = fmt.Sscan(onSO, &onSOInt)
 				if err != nil {
-					return fmt.Errorf("failed to convert on_so value to int: %w", err)
+					return fmt.Errorf("failed to convert onSO value to int: %w", err)
 				}
 				_, err = fmt.Sscan(onBO, &onBOInt)
 				if err != nil {
-					return fmt.Errorf("failed to convert on_bo value to int: %w", err)
+					return fmt.Errorf("failed to convert onBO value to int: %w", err)
 				}
 				_, err = fmt.Sscan(ytdSold, &ytdSoldInt)
 				if err != nil {
-					return fmt.Errorf("failed to convert ytd_sold value to int: %w", err)
+					return fmt.Errorf("failed to convert ytdSold value to int: %w", err)
 				}
 				_, err = fmt.Sscan(ytdIssued, &ytdIssuedInt)
 				if err != nil {
-					return fmt.Errorf("failed to convert ytd_issued value to int: %w", err)
+					return fmt.Errorf("failed to convert ytdIssued value to int: %w", err)
 				}
 
-				// Calculate on_so_bo
+				// Calculate onSOBO and ytdSoldIssued
 				onSOBOInt := onSOInt + onBOInt
+				ytdSoldIssuedInt := ytdSoldInt + ytdIssuedInt
 
 				// Update the hotsheet
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt)
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet), onPOInt)
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldCol, rowWsHotsheet), ytdSoldInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdIssuedCol, rowWsHotsheet), ytdIssuedInt)
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldIssuedCol, rowWsHotsheet), ytdSoldIssuedInt)
 
-				logger.Printf("Match found for SKU: %s | on_hand: %d | on_po: %d | on_so_bo: %d | ytd_sold: %d | ytd_issued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOBOInt, ytdSoldInt, ytdIssuedInt)
+				logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt)
 				wsReportPointer = rowWsReport + 1
 				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
