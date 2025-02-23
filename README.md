@@ -2,7 +2,7 @@
 
 ## Description
 
-This is a Go program that updates an Excel document with data from a stock report and a sales report that's pulled from Sage 100. It is designed to be run on a schedule to keep the Excel document up to date.
+This is a Go program that updates an Excel document with data from an 'Item Listing With Sales History' report that's pulled from Sage 100. It is designed to be run on a schedule to keep the Excel document up to date.
 
 ## Motivation
 
@@ -22,7 +22,7 @@ Before you begin, ensure you have the following installed on your system:
 
 ## Usage
 
-1. You can modify the values in each case to adjust which sheets and columns contain each value. The comments above correspond to each input. The letters are columns in the hotseet.
+1. You can modify the values in each case to adjust which sheets and columns contain each value in the hotsheet.
 ``` go
 everyday := Update{
 		Hotsheet:         fileHotsheetNew,
@@ -37,7 +37,7 @@ everyday := Update{
 ```
 2. The program will prompt you to select the product line and the files to update. Select the Excel document you want to update, the stock report file, and the sales report file.
 3. The program will create a new updated Excel document with the data from the two reports.
-4. There will be a 'logs_bsc-hotsheet-update' folder created in the temp directory to store all the logs after each update. I found these helpful if my boss ran into an issue. He could just send me this folder and I could see what happened.
+4. There will be a 'logs-bsc' folder created in the temp directory to store all the logs after each update. I found these helpful if my boss ran into an issue. He could just send me this folder and I could see what happened.
 
 ## 🤝 Contributing
 

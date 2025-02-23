@@ -11,7 +11,7 @@ import (
 // CreateLogger returns a logger that writes to a log file in the temporary directory.
 // The log file name is in the format "YYYY-MM-DD_HHMMSS.ssssss_NAME.log" if product and occasion are empty,
 // and "YYYY-MM-DD_HHMMSS.ssssss_NAME-PRODUCT-OCCASION.log" otherwise.
-// The function also creates the "logs_bsc-hotsheet-update" directory if it does not exist.
+// The function also creates the "logs-bsc" directory if it does not exist.
 // The flag is used to specify the log level.
 func CreateLogger(name, product, occasion, flag string) (*log.Logger, *os.File, error) {
 	// Get the current date
@@ -21,7 +21,7 @@ func CreateLogger(name, product, occasion, flag string) (*log.Logger, *os.File, 
 	tempDir := os.TempDir()
 
 	// Define the logs directory path
-	logDir := filepath.Join(tempDir, "logs_bsc-hotsheet-update")
+	logDir := filepath.Join(tempDir, "logs-bsc")
 
 	// Create a new file path
 	var logFilePath string
