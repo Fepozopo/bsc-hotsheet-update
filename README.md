@@ -39,6 +39,18 @@ everyday := Update{
 3. The program will create a new updated Excel document with the data from the two reports.
 4. There will be a 'logs-bsc' folder created in the temp directory to store all the logs after each update. I found these helpful if my boss ran into an issue. He could just send me this folder and I could see what happened.
 
+## Building the Program
+
+To build the program, I've included a Makefile. You can run `make <target>` to build the program for different platforms. You can also run `make clean` to remove the binary.
+The targets are:
+```bash
+make windows
+make linux
+make macos
+make macos-arm
+```
+These commands will build the program for the specified platform. They all build with GOARCH=amd64, with the exception of `make macos-arm` which builds with GOARCH=arm64.
+
 ## 🤝 Contributing
 
 ### Clone the repo
@@ -46,18 +58,6 @@ everyday := Update{
 ```bash
 git clone https://github.com/Fepozopo/bsc-hotsheet-update
 cd bsc-hotsheet-update
-```
-
-### Build the project
-
-```bash
-go build
-```
-
-### Run the project
-
-```bash
-./bsc-hotsheet-update
 ```
 
 ### Submit a pull request
