@@ -42,15 +42,19 @@ everyday := Update{
 
 ## Building the Program
 
-To build the program, I've included a Makefile. You can run `make <target>` to build the program for different platforms. You can also run `make clean` to remove the binary.
+To build the program, I've included a Makefile. You can run `make <target>` to build the program for different platforms. You can also run `make clean` to remove the `bin` folder that contains the compiled binaries.
 The targets are:
 ```bash
-make windows
-make linux
-make macos
+make windows-amd
+make windows-arm
+make linux-amd
+make linux-arm
+make macos-amd
 make macos-arm
 ```
-These commands will build the program for the specified platform. They all build with GOARCH=amd64, with the exception of `make macos-arm` which builds with GOARCH=arm64.
+You can also run `make all` to build all the targets.
+
+These commands will build the program for the specified platform and output the binary to the `bin` folder.
 
 ## 🤝 Contributing
 
