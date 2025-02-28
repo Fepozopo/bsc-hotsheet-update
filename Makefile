@@ -1,9 +1,5 @@
 # Makefile for building this Go program with CGO for multiple OS targets
 
-# Alternatively, you can use zig for cross-compilation for all OS targets 
-# CC="zig cc -target x86_64-linux"
-# CC="zig cc -target x86_64-macos"
-
 # Base binary name (without extension)
 BINARY_BASE := hotsheet_updater
 

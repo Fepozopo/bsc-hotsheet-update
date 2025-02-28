@@ -14,7 +14,7 @@ Before you begin, ensure you have the following installed on your system:
 
 - Go programming language (version 1.16 or later)
 - A C compiler for your target platform (e.g., GCC for Linux, Clang for macOS, or MinGW for Windows) because this program uses the Fyne GUI toolkit, which requires C bindings.
-- You can optionally use zig as a C cross-compiler for all OS targets. The Makefile uses zig for Windows by default but you can also use it for Linux and macOS targets.
+- You can optionally use zig as a C cross-compiler for all OS targets. The Makefile uses zig for Windows and Linux by default, but you can also use it for macOS if you aren't on that platform.
 
 ## Quick Start
 
