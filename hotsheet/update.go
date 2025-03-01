@@ -2,6 +2,7 @@ package hotsheet
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
@@ -11,12 +12,14 @@ import (
 type Update struct {
 	Hotsheet         string
 	Sheet            string
-	Report           string
+	InventoryReport  string
+	POReport         string
 	SkuCol           string
 	OnHandCol        string
 	OnPOCol          string
 	OnSOBOCol        string
 	YtdSoldIssuedCol string
+	PONumCol         string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -39,9 +42,9 @@ func (u *Update) Update(product, occasion string) error {
 	defer logFile.Close()
 
 	// Open the report workbook
-	wbReport, err := excelize.OpenFile(u.Report)
+	wbReport, err := excelize.OpenFile(u.InventoryReport)
 	if err != nil {
-		return fmt.Errorf("failed to open report file %s: %w", u.Report, err)
+		return fmt.Errorf("failed to open report file %s: %w", u.InventoryReport, err)
 	}
 	defer wbReport.Close()
 
@@ -63,7 +66,7 @@ func (u *Update) Update(product, occasion string) error {
 	}
 	rowsReport, err := wbReport.GetRows(wsReport)
 	if err != nil {
-		return fmt.Errorf("failed to get rows from report file %s: %w", u.Report, err)
+		return fmt.Errorf("failed to get rows from report file %s: %w", u.InventoryReport, err)
 	}
 
 	skuCol := "B"        // 'B' column index in wsReport
@@ -85,7 +88,6 @@ func (u *Update) Update(product, occasion string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get SKU from hotsheet file %s: %w", u.Hotsheet, err)
 		}
-
 		if skuWsHotsheet == "" {
 			continue // Skip rows with no SKU in wsHotsheet
 		}
@@ -93,9 +95,8 @@ func (u *Update) Update(product, occasion string) error {
 		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport)+1; rowWsReport++ {
 			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", skuCol, rowWsReport)) // SKU in column 'B' in wsReport
 			if err != nil {
-				return fmt.Errorf("failed to get SKU from report file %s: %w", u.Report, err)
+				return fmt.Errorf("failed to get SKU from report file %s: %w", u.InventoryReport, err)
 			}
-
 			if skuWsReport == "" {
 				continue
 			}
@@ -107,27 +108,27 @@ func (u *Update) Update(product, occasion string) error {
 				// Get the values for the current SKU in wsReport
 				onHand, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_hand value from report file %s: %w", u.Report, err)
+					return fmt.Errorf("failed to get on_hand value from report file %s: %w", u.InventoryReport, err)
 				}
 				onPO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_po value from report file %s: %w", u.Report, err)
+					return fmt.Errorf("failed to get on_po value from report file %s: %w", u.InventoryReport, err)
 				}
 				onSO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_so value from report file %s: %w", u.Report, err)
+					return fmt.Errorf("failed to get on_so value from report file %s: %w", u.InventoryReport, err)
 				}
 				onBO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get on_bo value from report file %s: %w", u.Report, err)
+					return fmt.Errorf("failed to get on_bo value from report file %s: %w", u.InventoryReport, err)
 				}
 				ytdSold, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdSoldCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get ytd_sold value from report file %s: %w", u.Report, err)
+					return fmt.Errorf("failed to get ytd_sold value from report file %s: %w", u.InventoryReport, err)
 				}
 				ytdIssued, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdIssuedCol, valueLocation))
 				if err != nil {
-					return fmt.Errorf("failed to get ytd_issued value from report file %s: %w", u.Report, err)
+					return fmt.Errorf("failed to get ytd_issued value from report file %s: %w", u.InventoryReport, err)
 				}
 
 				// Replace commas with empty strings
@@ -180,6 +181,116 @@ func (u *Update) Update(product, occasion string) error {
 				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
 
+			}
+		}
+	}
+
+	if err := wbHotsheet.UpdateLinkedValue(); err != nil {
+		return fmt.Errorf("failed to update linked value in hotsheet file %s: %w", u.Hotsheet, err)
+	}
+	if err := wbHotsheet.Save(); err != nil {
+		return fmt.Errorf("failed to save hotsheet file: %w", err)
+	}
+
+	bar.Finish()
+	return nil
+}
+
+func (u *Update) UpdatePONumber(product, occasion string) error {
+	logger, logFile, err := helpers.CreateLogger("PO", product, occasion, "INFO")
+	if err != nil {
+		return fmt.Errorf("failed to create log file: %w", err)
+	}
+	defer logFile.Close()
+
+	// Open the report workbook
+	wbReport, err := excelize.OpenFile(u.POReport)
+	if err != nil {
+		return fmt.Errorf("failed to open report file %s: %w", u.POReport, err)
+	}
+	defer wbReport.Close()
+
+	// Open the hotsheet workbook
+	wbHotsheet, err := excelize.OpenFile(u.Hotsheet)
+	if err != nil {
+		return fmt.Errorf("failed to open hotsheet file %s: %w", u.Hotsheet, err)
+	}
+	defer wbHotsheet.Close()
+
+	// Get the sheets
+	wsReport := "Sheet1"
+	wsHotsheet := u.Sheet
+
+	// Get the rows
+	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
+	if err != nil {
+		return fmt.Errorf("failed to get rows from hotsheet file %s: %w", u.Hotsheet, err)
+	}
+	rowsReport, err := wbReport.GetRows(wsReport)
+	if err != nil {
+		return fmt.Errorf("failed to get rows from report file %s: %w", u.POReport, err)
+	}
+
+	dataCol := "A"       // 'A' column index in wsReport
+	wsReportPointer := 1 // Start pointer for wsReport
+
+	// Progress bar
+	var bar helpers.Bar
+	bar.NewOption(int64(2), int64(len(rowsHotsheet)))
+
+	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
+
+		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.SkuCol, rowWsHotsheet)) // SKU column in wsHotsheet
+		if err != nil {
+			return fmt.Errorf("failed to get SKU from hotsheet file %s: %w", u.Hotsheet, err)
+		}
+		if skuWsHotsheet == "" {
+			continue // Skip rows with no SKU in wsHotsheet
+		}
+
+		// No reason to look for a match if onPO is 0
+		onPO, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet)) // onPO column in wsHotsheet
+		if err != nil {
+			return fmt.Errorf("failed to get onPO value from hotsheet file %s: %w", u.Hotsheet, err)
+		}
+		if onPO == "0" {
+			continue // Skip rows with no onPO value in wsHotsheet
+		}
+
+		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport)+1; rowWsReport++ {
+			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, rowWsReport)) // SKU in column 'A' in wsReport
+			if err != nil {
+				return fmt.Errorf("failed to get SKU from report file %s: %w", u.POReport, err)
+			}
+			if skuWsReport == "" {
+				continue
+			}
+
+			logger.Printf("Comparing Hotsheet SKU: [%d]-'%s' with Report SKU: [%d]-'%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReport, skuWsReport)
+			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
+				valueLocation := rowWsReport + 1
+
+				// Get the PO number
+				poNum, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation))
+				if err != nil {
+					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
+				}
+
+				// Convert the value to an integer
+				poNumInt, err := strconv.Atoi(poNum)
+				if err != nil {
+					return fmt.Errorf("failed to convert PO number to integer: %w", err)
+				}
+
+				// Update the PO number in the hotsheet
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol, rowWsHotsheet), poNumInt); err != nil {
+					return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+
+				logger.Printf("%s is on PO number %d\n", skuWsHotsheet, poNumInt)
+				wsReportPointer = rowWsReport + 1
+				bar.Play(int64(rowWsHotsheet))
+				break // Move to the next row in wsHotsheet once a match is found
 			}
 		}
 	}

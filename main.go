@@ -27,10 +27,10 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	product, fileHotsheet, fileReport := selectFiles(myApp)
+	product, fileHotsheet, inventoryReport, poReport := selectFiles(myApp)
 
 	// If no files are selected, exit
-	if product == "" || fileHotsheet == "" || fileReport == "" {
+	if product == "" || fileHotsheet == "" || inventoryReport == "" || poReport == "" {
 		logger.Printf("not all files were selected")
 		return
 	}
@@ -46,11 +46,11 @@ func main() {
 	var updateErr error
 	switch product {
 	case "SMD":
-		updateErr = hotsheet.CaseSMD(fileHotsheetNew, fileReport)
+		updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
 	case "BSC":
-		updateErr = hotsheet.CaseBSC(fileHotsheetNew, fileReport)
+		updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
 	case "21c":
-		updateErr = hotsheet.Case21C(fileHotsheetNew, fileReport)
+		updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
 	default:
 		logger.Printf("unknown product: %s", product)
 		return

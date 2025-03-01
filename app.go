@@ -18,7 +18,7 @@ func openFileWindow(parent fyne.Window, callback func(r fyne.URIReadCloser, e er
 
 // selectFiles creates a GUI window to select the product line to update and the paths to the hotsheet, stock report, and sales report files.
 // It then returns the selection and the paths as strings.
-func selectFiles(a fyne.App) (string, string, string) {
+func selectFiles(a fyne.App) (string, string, string, string) {
 	window := a.NewWindow("Hotsheet Updater")
 	window.SetContent(widget.NewLabel("Please select the files to update:"))
 	window.Resize(fyne.NewSize(900, 800))
@@ -64,9 +64,13 @@ func selectFiles(a fyne.App) (string, string, string) {
 		files[0],
 		buttons[0],
 		layout.NewSpacer(),
-		widget.NewLabelWithStyle("Select Sage Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("Select Inventory Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		files[1],
 		buttons[1],
+		layout.NewSpacer(),
+		widget.NewLabelWithStyle("Select PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		files[2],
+		buttons[2],
 		layout.NewSpacer(),
 		submitButton,
 	))
@@ -77,5 +81,5 @@ func selectFiles(a fyne.App) (string, string, string) {
 		window.Close()
 	})
 
-	return selection, filePaths[0], filePaths[1]
+	return selection, filePaths[0], filePaths[1], filePaths[2]
 }
