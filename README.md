@@ -67,4 +67,4 @@ cd bsc-hotsheet-update
 
 ### Submit a pull request
 
-If you'd like to contribute, please fork the repository and open a pull request to the `main` branch.
+Sorry, I'm not accepting pull requests at this time.
