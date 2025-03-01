@@ -34,8 +34,8 @@ type Update struct {
 // Returns:
 //   - error: An error if any operation (e.g., file opening, reading, or writing)
 //     fails during the update process.
-func (u *Update) Update(product, occasion string) error {
-	logger, logFile, err := helpers.CreateLogger("hotsheet", product, occasion, "INFO")
+func (u *Update) UpdateInventory(product, occasion string) error {
+	logger, logFile, err := helpers.CreateLogger("inventory", product, occasion, "INFO")
 	if err != nil {
 		return fmt.Errorf("failed to create log file: %w", err)
 	}

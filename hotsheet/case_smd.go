@@ -36,7 +36,7 @@ func CaseSMD(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 
 	// Update the hotsheet
-	err := everyday.Update("SMD", "everyday")
+	err := everyday.UpdateInventory("SMD", "everyday")
 	if err != nil {
 		return fmt.Errorf("failed to update everyday stock: %w", err)
 	}
@@ -48,7 +48,7 @@ func CaseSMD(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 	fmt.Println("Everyday PO number updated successfully")
 
-	err = holiday.Update("SMD", "holiday")
+	err = holiday.UpdateInventory("SMD", "holiday")
 	if err != nil {
 		return fmt.Errorf("failed to update holiday stock: %w", err)
 	}

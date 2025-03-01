@@ -48,7 +48,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 
 	// Update the hotsheet
-	err := everyday.Update("21c", "everyday")
+	err := everyday.UpdateInventory("21c", "everyday")
 	if err != nil {
 		return fmt.Errorf("failed to update everyday stock: %w", err)
 	}
@@ -60,7 +60,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 	fmt.Println("Everyday PO number updated successfully")
 
-	err = winter.Update("21c", "winter")
+	err = winter.UpdateInventory("21c", "winter")
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}
@@ -72,7 +72,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 	fmt.Println("Winter PO number updated successfully")
 
-	err = spring.Update("21c", "spring")
+	err = spring.UpdateInventory("21c", "spring")
 	if err != nil {
 		return fmt.Errorf("failed to update stock: %w", err)
 	}

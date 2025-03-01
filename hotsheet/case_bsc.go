@@ -60,7 +60,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 
 	// Update the hotsheet
-	err := everyday.Update("BSC", "everyday")
+	err := everyday.UpdateInventory("BSC", "everyday")
 	if err != nil {
 		return fmt.Errorf("failed to update everyday stock: %w", err)
 	}
@@ -72,7 +72,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 	fmt.Println("Everyday PO number updated successfully")
 
-	err = winter.Update("BSC", "winter")
+	err = winter.UpdateInventory("BSC", "winter")
 	if err != nil {
 		return fmt.Errorf("failed to update holiday stock: %w", err)
 	}
@@ -84,7 +84,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 	fmt.Println("Holiday PO number updated successfully")
 
-	err = spring.Update("BSC", "spring")
+	err = spring.UpdateInventory("BSC", "spring")
 	if err != nil {
 		return fmt.Errorf("failed to update spring stock: %w", err)
 	}
@@ -96,7 +96,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 	}
 	fmt.Println("Spring PO number updated successfully")
 
-	err = a2Notecards.Update("BSC", "a2notecards")
+	err = a2Notecards.UpdateInventory("BSC", "a2notecards")
 	if err != nil {
 		return fmt.Errorf("failed to update A2 Notecards stock: %w", err)
 	}
