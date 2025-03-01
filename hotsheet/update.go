@@ -106,29 +106,24 @@ func (u *Update) Update(product, occasion string) error {
 				valueLocation := rowWsReport + 2
 
 				// Get the values for the current SKU in wsReport
-				onHand, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, valueLocation))
-				if err != nil {
-					return fmt.Errorf("failed to get on_hand value from report file %s: %w", u.InventoryReport, err)
+				var onHand, onPO, onSO, onBO, ytdSold, ytdIssued string
+				if onHand, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, valueLocation)); err != nil {
+					return fmt.Errorf("failed to get On Hand value from report file %s: %w", u.InventoryReport, err)
 				}
-				onPO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation))
-				if err != nil {
-					return fmt.Errorf("failed to get on_po value from report file %s: %w", u.InventoryReport, err)
+				if onPO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation)); err != nil {
+					return fmt.Errorf("failed to get On PO value from report file %s: %w", u.InventoryReport, err)
 				}
-				onSO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, valueLocation))
-				if err != nil {
-					return fmt.Errorf("failed to get on_so value from report file %s: %w", u.InventoryReport, err)
+				if onSO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, valueLocation)); err != nil {
+					return fmt.Errorf("failed to get On SO value from report file %s: %w", u.InventoryReport, err)
 				}
-				onBO, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, valueLocation))
-				if err != nil {
-					return fmt.Errorf("failed to get on_bo value from report file %s: %w", u.InventoryReport, err)
+				if onBO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, valueLocation)); err != nil {
+					return fmt.Errorf("failed to get On BO value from report file %s: %w", u.InventoryReport, err)
 				}
-				ytdSold, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdSoldCol, valueLocation))
-				if err != nil {
-					return fmt.Errorf("failed to get ytd_sold value from report file %s: %w", u.InventoryReport, err)
+				if ytdSold, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdSoldCol, valueLocation)); err != nil {
+					return fmt.Errorf("failed to get YTD Sold value from report file %s: %w", u.InventoryReport, err)
 				}
-				ytdIssued, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdIssuedCol, valueLocation))
-				if err != nil {
-					return fmt.Errorf("failed to get ytd_issued value from report file %s: %w", u.InventoryReport, err)
+				if ytdIssued, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdIssuedCol, valueLocation)); err != nil {
+					return fmt.Errorf("failed to get YTD Issued value from report file %s: %w", u.InventoryReport, err)
 				}
 
 				// Replace commas with empty strings
@@ -141,28 +136,22 @@ func (u *Update) Update(product, occasion string) error {
 
 				// Convert the values to integers
 				var onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt int
-				_, err = fmt.Sscan(onHand, &onHandInt)
-				if err != nil {
+				if _, err = fmt.Sscan(onHand, &onHandInt); err != nil {
 					return fmt.Errorf("failed to convert onHand value to int: %w", err)
 				}
-				_, err = fmt.Sscan(onPO, &onPOInt)
-				if err != nil {
+				if _, err = fmt.Sscan(onPO, &onPOInt); err != nil {
 					return fmt.Errorf("failed to convert onPO value to int: %w", err)
 				}
-				_, err = fmt.Sscan(onSO, &onSOInt)
-				if err != nil {
+				if _, err = fmt.Sscan(onSO, &onSOInt); err != nil {
 					return fmt.Errorf("failed to convert onSO value to int: %w", err)
 				}
-				_, err = fmt.Sscan(onBO, &onBOInt)
-				if err != nil {
+				if _, err = fmt.Sscan(onBO, &onBOInt); err != nil {
 					return fmt.Errorf("failed to convert onBO value to int: %w", err)
 				}
-				_, err = fmt.Sscan(ytdSold, &ytdSoldInt)
-				if err != nil {
+				if _, err = fmt.Sscan(ytdSold, &ytdSoldInt); err != nil {
 					return fmt.Errorf("failed to convert ytdSold value to int: %w", err)
 				}
-				_, err = fmt.Sscan(ytdIssued, &ytdIssuedInt)
-				if err != nil {
+				if _, err = fmt.Sscan(ytdIssued, &ytdIssuedInt); err != nil {
 					return fmt.Errorf("failed to convert ytdIssued value to int: %w", err)
 				}
 
@@ -171,10 +160,18 @@ func (u *Update) Update(product, occasion string) error {
 				ytdSoldIssuedInt := ytdSoldInt + ytdIssuedInt
 
 				// Update the hotsheet
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet), onPOInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt)
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldIssuedCol, rowWsHotsheet), ytdSoldIssuedInt)
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt); err != nil {
+					return fmt.Errorf("failed to set onHand value in hotsheet file: %w", err)
+				}
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet), onPOInt); err != nil {
+					return fmt.Errorf("failed to set onPO value in hotsheet file: %w", err)
+				}
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt); err != nil {
+					return fmt.Errorf("failed to set onSOBO value in hotsheet file: %w", err)
+				}
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldIssuedCol, rowWsHotsheet), ytdSoldIssuedInt); err != nil {
+					return fmt.Errorf("failed to set ytdSoldIssued value in hotsheet file: %w", err)
+				}
 
 				// Remove the old PO number
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol, rowWsHotsheet), "")
