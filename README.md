@@ -28,12 +28,14 @@ Before you begin, ensure you have the following installed on your system:
 everyday := Update{
 		Hotsheet:         fileHotsheetNew,
 		Sheet:            "EVERYDAY",
-		Report:           fileReport,
+		InventoryReport:  inventoryReport,
+		POReport:         POReport,
 		SkuCol:           "E",
 		OnHandCol:        "F",
 		OnPOCol:          "I",
 		OnSOBOCol:        "K",
 		YtdSoldIssuedCol: "P",
+		PONumCol:         "J",
 	}
 ```
 2. The program will prompt you to select the product line and the files to update. Select the Excel document you want to update, the stock report file, and the sales report file.
