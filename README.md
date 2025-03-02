@@ -19,7 +19,10 @@ Before you begin, ensure you have the following installed on your system:
 ## Quick Start
 
 1. Clone the repository and navigate to the project root in a terminal.
-2. Run `go build && ./bsc-hotsheet-update` to build and run the program.
+2. Run `make <target>` to build and run the program. Replace `<target>` with one of the following targets: `windows-amd`, `windows-arm`, `linux-amd`, `linux-arm`, `macos-amd`, or `macos-arm`.
+3. The program will open a GUI window to select the product line to update and the files to update.
+4. Select the Excel document you want to update, the stock report file, and the sales report file.
+5. The program will create a new updated Excel document with the data from the two reports.
 
 ## Usage
 
