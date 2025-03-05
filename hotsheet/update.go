@@ -16,10 +16,15 @@ type Update struct {
 	POReport         string
 	SkuCol           string
 	OnHandCol        string
-	OnPOCol          string
+	OnPOCol1         string
+	OnPOCol2         string
+	OnPOCol3         string
+	OnPOColTotal     string
 	OnSOBOCol        string
 	YtdSoldIssuedCol string
-	PONumCol         string
+	PONumCol1        string
+	PONumCol2        string
+	PONumCol3        string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -163,7 +168,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt); err != nil {
 					return fmt.Errorf("failed to set onHand value in hotsheet file: %w", err)
 				}
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet), onPOInt); err != nil {
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOColTotal, rowWsHotsheet), onPOInt); err != nil {
 					return fmt.Errorf("failed to set onPO value in hotsheet file: %w", err)
 				}
 				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt); err != nil {
@@ -174,7 +179,9 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 				}
 
 				// Remove the old PO number
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol, rowWsHotsheet), "")
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), "")
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), "")
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), "")
 
 				logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt)
 				wsReportPointer = rowWsReport + 1
@@ -196,6 +203,17 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	return nil
 }
 
+// UpdatePONumber updates the Purchase Order (PO) numbers in the hotsheet
+// by matching SKUs between the hotsheet and the PO report.
+// It logs each operation and writes the updated PO numbers back to the hotsheet.
+//
+// Parameters:
+//   - product: A string representing the product name for logging purposes.
+//   - occasion: A string representing the occasion for logging purposes.
+//
+// Returns:
+//   - error: An error if any operation (e.g., file opening, reading, writing, or conversion)
+//     fails during the PO number update process.
 func (u *Update) UpdatePONumber(product, occasion string) error {
 	logger, logFile, err := helpers.CreateLogger("PO", product, occasion, "INFO")
 	if err != nil {
@@ -231,8 +249,11 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 		return fmt.Errorf("failed to get rows from report file %s: %w", u.POReport, err)
 	}
 
-	dataCol := "A"       // 'A' column index in wsReport
-	wsReportPointer := 1 // Start pointer for wsReport
+	dataCol := "A"          // 'A' column index in wsReport
+	onPOCol := "I"          // 'I' column index in wsReport
+	onPOBackorderCol := "K" // 'K' column index in wsReport
+	POStatusCol := "G"      // 'G' column index in wsReport
+	wsReportPointer := 1    // Start pointer for wsReport
 
 	// Progress bar
 	var bar helpers.Bar
@@ -249,7 +270,7 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 		}
 
 		// No reason to look for a match if onPO is 0
-		onPO, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol, rowWsHotsheet)) // onPO column in wsHotsheet
+		onPO, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOColTotal, rowWsHotsheet)) // onPO column in wsHotsheet
 		if err != nil {
 			return fmt.Errorf("failed to get onPO value from hotsheet file %s: %w", u.Hotsheet, err)
 		}
@@ -268,26 +289,133 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 
 			logger.Printf("Comparing Hotsheet SKU: [%d]-'%s' with Report SKU: [%d]-'%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReport, skuWsReport)
 			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
-				valueLocation := rowWsReport + 1
+				valueLocation1 := rowWsReport + 1
+				valueLocation2 := rowWsReport + 2
+				valueLocation3 := rowWsReport + 3
 
-				// Get the PO number
-				poNum, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation))
-				if err != nil {
+				// Get the PO numbers and the first PO amount
+				var poNum1, poNum2, poNum3, onPO1, poStatus string
+				if poNum1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation1)); err != nil {
 					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
 				}
+				if poNum2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation2)); err != nil {
+					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
+				}
+				if poNum3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation3)); err != nil {
+					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
+				}
+				if poStatus, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation1)); err != nil {
+					return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
+				}
+				if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
+					if onPO1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation1)); err != nil {
+						return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
+					}
+					// Remove the commas from the backorder value
+					onPO1 = strings.ReplaceAll(onPO1, ",", "")
+				} else { // If the PO status column is not 'Back Order', then get the onPO value
+					if onPO1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation1)); err != nil {
+						return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
+					}
+					// Remove the commas from the onPO value
+					onPO1 = strings.ReplaceAll(onPO1, ",", "")
+				}
 
-				// Convert the value to an integer
-				poNumInt, err := strconv.Atoi(poNum)
+				// Convert the values to an integer. On PO values have to use fmt.Sscanf
+				var onPO1Int int
+				poNum1Int, err := strconv.Atoi(poNum1)
 				if err != nil {
 					return fmt.Errorf("failed to convert PO number to integer: %w", err)
 				}
-
-				// Update the PO number in the hotsheet
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol, rowWsHotsheet), poNumInt); err != nil {
-					return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+				_, err = fmt.Sscan(onPO1, &onPO1Int)
+				if err != nil {
+					return fmt.Errorf("failed to convert onPO value to integer: %w", err)
 				}
 
-				logger.Printf("%s is on PO number %d\n", skuWsHotsheet, poNumInt)
+				// Update the PO number in the hotsheet
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), poNum1Int); err != nil {
+					return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+				// Update the onPO value in the hotsheet
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol1, rowWsHotsheet), onPO1Int); err != nil {
+					return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+				logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO1Int, poNum1Int)
+
+				// If poNum2 starts with "00"
+				if strings.HasPrefix(poNum2, "00") {
+					// Get the PO numbers and the second PO amount
+					var poNum2, onPO2 string
+					if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
+						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation2)); err != nil {
+							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
+						}
+						// Remove the comma from the backorder value
+						onPO2 = strings.ReplaceAll(onPO2, ",", "")
+					} else { // If the PO status column is not 'Back Order', then get the onPO value
+						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation2)); err != nil {
+							return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
+						}
+					}
+					// Convert the values to an integer
+					var onPO2Int int
+					poNum2Int, err := strconv.Atoi(poNum2)
+					if err != nil {
+						return fmt.Errorf("failed to convert PO number to integer: %w", err)
+					}
+					_, err = fmt.Sscan(onPO2, &onPO2Int)
+					if err != nil {
+						return fmt.Errorf("failed to convert onPO value to integer: %w", err)
+					}
+					// Update the PO number in the hotsheet
+					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), poNum2Int); err != nil {
+						return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+					}
+					// Update the onPO value in the hotsheet
+					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), onPO2Int); err != nil {
+						return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
+					}
+					logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO2Int, poNum2Int)
+				}
+
+				// If poNum3 starts with "00"
+				if strings.HasPrefix(poNum3, "00") {
+					// Get the PO numbers and the second PO amount
+					var poNum3, onPO3 string
+					if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
+						if onPO3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation3)); err != nil {
+							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
+						}
+						// Remove the comma from the backorder value
+						onPO3 = strings.ReplaceAll(onPO3, ",", "")
+					} else { // If the PO status column is not 'Back Order', then get the onPO value
+						if onPO3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation3)); err != nil {
+							return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
+						}
+						// Remove the comma from the onPO value
+						onPO3 = strings.ReplaceAll(onPO3, ",", "")
+					}
+					// Convert the values to an integer
+					poNum3Int, err := strconv.Atoi(poNum3)
+					if err != nil {
+						return fmt.Errorf("failed to convert PO number to integer: %w", err)
+					}
+					var onPO3Int int
+					_, err = fmt.Sscan(onPO3, &onPO3Int)
+					if err != nil {
+						return fmt.Errorf("failed to convert onPO value to integer: %w", err)
+					}
+					// Update the PO number in the hotsheet
+					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), poNum3Int); err != nil {
+						return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+					}
+					// Update the onPO value in the hotsheet
+					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), onPO3Int); err != nil {
+						return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
+					}
+					logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO3Int, poNum3Int)
+				}
+
 				wsReportPointer = rowWsReport + 1
 				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
