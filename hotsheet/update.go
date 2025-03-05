@@ -178,10 +178,13 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 					return fmt.Errorf("failed to set ytdSoldIssued value in hotsheet file: %w", err)
 				}
 
-				// Remove the old PO number
+				// Remove the old PO number and old PO quantities
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), "")
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), "")
 				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), "")
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol1, rowWsHotsheet), "")
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), "")
+				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), "")
 
 				logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt)
 				wsReportPointer = rowWsReport + 1
@@ -345,7 +348,7 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				// If poNum2 starts with "00"
 				if strings.HasPrefix(poNum2, "00") {
 					// Get the PO numbers and the second PO amount
-					var poNum2, onPO2 string
+					var onPO2 string
 					if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
 						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation2)); err != nil {
 							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
@@ -381,7 +384,7 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				// If poNum3 starts with "00"
 				if strings.HasPrefix(poNum3, "00") {
 					// Get the PO numbers and the second PO amount
-					var poNum3, onPO3 string
+					var onPO3 string
 					if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
 						if onPO3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation3)); err != nil {
 							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
