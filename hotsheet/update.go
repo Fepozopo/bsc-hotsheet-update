@@ -4,27 +4,29 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
 	"github.com/xuri/excelize/v2"
 )
 
 type Update struct {
-	Hotsheet         string
-	Sheet            string
-	InventoryReport  string
-	POReport         string
-	SkuCol           string
-	OnHandCol        string
-	OnPOCol1         string
-	OnPOCol2         string
-	OnPOCol3         string
-	OnPOColTotal     string
-	OnSOBOCol        string
-	YtdSoldIssuedCol string
-	PONumCol1        string
-	PONumCol2        string
-	PONumCol3        string
+	Hotsheet          string
+	Sheet             string
+	InventoryReport   string
+	POReport          string
+	SkuCol            string
+	OnHandCol         string
+	OnPOCol1          string
+	OnPOCol2          string
+	OnPOCol3          string
+	OnPOColTotal      string
+	OnSOBOCol         string
+	YtdSoldIssuedCol  string
+	PONumCol1         string
+	PONumCol2         string
+	PONumCol3         string
+	AverageMonthlyCol string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -45,6 +47,17 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		return fmt.Errorf("failed to create log file: %w", err)
 	}
 	defer logFile.Close()
+
+	// Get the current date
+	currentDate := time.Now()
+
+	// Get the current month, day, and last day of the current month
+	currentMonth := float64(currentDate.Month())
+	currentDay := float64(currentDate.Day())
+	lastDay := float64(time.Date(currentDate.Year(), currentDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day())
+
+	// Calculate the fractional part of the month
+	monthFloat := (currentMonth - 1) + (currentDay / lastDay)
 
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(u.InventoryReport)
@@ -160,9 +173,10 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 					return fmt.Errorf("failed to convert ytdIssued value to int: %w", err)
 				}
 
-				// Calculate onSOBO and ytdSoldIssued
+				// Calculate onSOBO, ytdSoldIssued, and averageMonthly
 				onSOBOInt := onSOInt + onBOInt
 				ytdSoldIssuedInt := ytdSoldInt + ytdIssuedInt
+				averageMonthly := float64(ytdSoldIssuedInt) / monthFloat
 
 				// Update the hotsheet
 				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt); err != nil {
@@ -176,6 +190,9 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 				}
 				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldIssuedCol, rowWsHotsheet), ytdSoldIssuedInt); err != nil {
 					return fmt.Errorf("failed to set ytdSoldIssued value in hotsheet file: %w", err)
+				}
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.AverageMonthlyCol, rowWsHotsheet), averageMonthly); err != nil {
+					return fmt.Errorf("failed to set averageMonthly value in hotsheet file: %w", err)
 				}
 
 				// Remove the old PO number and old PO quantities
