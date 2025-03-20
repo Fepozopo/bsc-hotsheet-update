@@ -314,7 +314,7 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				valueLocation3 := rowWsReport + 3
 
 				// Get the PO numbers and the first PO amount
-				var poNum1, poNum2, poNum3, onPO1, poStatus string
+				var poNum1, poNum2, poNum3, onPO1, poStatus1 string
 				if poNum1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation1)); err != nil {
 					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
 				}
@@ -324,10 +324,10 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				if poNum3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation3)); err != nil {
 					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
 				}
-				if poStatus, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation1)); err != nil {
+				if poStatus1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation1)); err != nil {
 					return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
 				}
-				if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
+				if poStatus1 == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
 					if onPO1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation1)); err != nil {
 						return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
 					}
@@ -365,8 +365,11 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				// If poNum2 starts with "00"
 				if strings.HasPrefix(poNum2, "00") {
 					// Get the PO numbers and the second PO amount
-					var onPO2 string
-					if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
+					var onPO2, poStatus2 string
+					if poStatus2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation2)); err != nil {
+						return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
+					}
+					if poStatus2 == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
 						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation2)); err != nil {
 							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
 						}
@@ -376,6 +379,8 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation2)); err != nil {
 							return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
 						}
+						// Remove the comma from the backorder value
+						onPO2 = strings.ReplaceAll(onPO2, ",", "")
 					}
 					// Convert the values to an integer
 					var onPO2Int int
@@ -401,8 +406,11 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				// If poNum3 starts with "00"
 				if strings.HasPrefix(poNum3, "00") {
 					// Get the PO numbers and the second PO amount
-					var onPO3 string
-					if poStatus == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
+					var onPO3, poStatus3 string
+					if poStatus3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation3)); err != nil {
+						return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
+					}
+					if poStatus3 == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
 						if onPO3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation3)); err != nil {
 							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
 						}
