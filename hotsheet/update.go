@@ -152,26 +152,52 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 				ytdSold = strings.ReplaceAll(ytdSold, ",", "")
 				ytdIssued = strings.ReplaceAll(ytdIssued, ",", "")
 
-				// Convert the values to integers
-				var onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt int
-				if _, err = fmt.Sscan(onHand, &onHandInt); err != nil {
+				// If the string ends with a dash, move it to the front
+				if strings.HasSuffix(onHand, "-") {
+					onHand = "-" + strings.TrimSuffix(onHand, "-")
+				}
+				if strings.HasSuffix(onPO, "-") {
+					onPO = "-" + strings.TrimSuffix(onPO, "-")
+				}
+				if strings.HasSuffix(onSO, "-") {
+					onSO = "-" + strings.TrimSuffix(onSO, "-")
+				}
+				if strings.HasSuffix(onBO, "-") {
+					onBO = "-" + strings.TrimSuffix(onBO, "-")
+				}
+				if strings.HasSuffix(ytdSold, "-") {
+					ytdSold = "-" + strings.TrimSuffix(ytdSold, "-")
+				}
+				if strings.HasSuffix(ytdIssued, "-") {
+					ytdIssued = "-" + strings.TrimSuffix(ytdIssued, "-")
+				}
+
+				// // Convert the values from strings to a floats first, then convert to ints
+				var onHandFloat, onPOFloat, onSOFloat, onBOFloat, ytdSoldFloat, ytdIssuedFloat float64
+				if onHandFloat, err = strconv.ParseFloat(onHand, 64); err != nil {
 					return fmt.Errorf("failed to convert onHand value to int: %w", err)
 				}
-				if _, err = fmt.Sscan(onPO, &onPOInt); err != nil {
+				onHandInt := int(onHandFloat)
+				if onPOFloat, err = strconv.ParseFloat(onPO, 64); err != nil {
 					return fmt.Errorf("failed to convert onPO value to int: %w", err)
 				}
-				if _, err = fmt.Sscan(onSO, &onSOInt); err != nil {
+				onPOInt := int(onPOFloat)
+				if onSOFloat, err = strconv.ParseFloat(onSO, 64); err != nil {
 					return fmt.Errorf("failed to convert onSO value to int: %w", err)
 				}
-				if _, err = fmt.Sscan(onBO, &onBOInt); err != nil {
+				onSOInt := int(onSOFloat)
+				if onBOFloat, err = strconv.ParseFloat(onBO, 64); err != nil {
 					return fmt.Errorf("failed to convert onBO value to int: %w", err)
 				}
-				if _, err = fmt.Sscan(ytdSold, &ytdSoldInt); err != nil {
+				onBOInt := int(onBOFloat)
+				if ytdSoldFloat, err = strconv.ParseFloat(ytdSold, 64); err != nil {
 					return fmt.Errorf("failed to convert ytdSold value to int: %w", err)
 				}
-				if _, err = fmt.Sscan(ytdIssued, &ytdIssuedInt); err != nil {
+				ytdSoldInt := int(ytdSoldFloat)
+				if ytdIssuedFloat, err = strconv.ParseFloat(ytdIssued, 64); err != nil {
 					return fmt.Errorf("failed to convert ytdIssued value to int: %w", err)
 				}
+				ytdIssuedInt := int(ytdIssuedFloat)
 
 				// Calculate onSOBO, ytdSoldIssued, and averageMonthly
 				onSOBOInt := onSOInt + onBOInt
