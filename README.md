@@ -26,16 +26,22 @@ Before you begin, ensure you have the following installed on your system:
 1. You can modify the values in each case to adjust which sheets and columns contain each value in the hotsheet.
 ``` go
 everyday := Update{
-		Hotsheet:         fileHotsheetNew,
-		Sheet:            "EVERYDAY",
-		InventoryReport:  inventoryReport,
-		POReport:         POReport,
-		SkuCol:           "E",
-		OnHandCol:        "F",
-		OnPOCol:          "I",
-		OnSOBOCol:        "K",
-		YtdSoldIssuedCol: "P",
-		PONumCol:         "J",
+		Hotsheet:          fileHotsheetNew,
+		Sheet:             "EVERYDAY",
+		InventoryReport:   inventoryReport,
+		POReport:          POReport,
+		SkuCol:            "C",
+		OnHandCol:         "D",
+		OnPOCol1:          "E",
+		OnPOCol2:          "G",
+		OnPOCol3:          "I",
+		OnPOColTotal:      "K",
+		OnSOBOCol:         "L",
+		YtdSoldIssuedCol:  "Q",
+		PONumCol1:         "F",
+		PONumCol2:         "H",
+		PONumCol3:         "J",
+		AverageMonthlyCol: "R",
 	}
 ```
 2. The program will open a GUI window to select the product line to update and the files to update.
