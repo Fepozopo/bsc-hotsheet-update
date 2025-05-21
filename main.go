@@ -45,12 +45,15 @@ func main() {
 	// Update the hotsheet
 	var updateErr error
 	switch product {
-	case "SMD":
-		updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
-	case "BSC":
-		updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
 	case "21c":
 		updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
+	case "BSC":
+		updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
+	case "BJP":
+		updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
+	case "SMD":
+		updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
+
 	default:
 		logger.Printf("unknown product: %s", product)
 		return

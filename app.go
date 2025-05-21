@@ -26,7 +26,7 @@ func selectFiles(a fyne.App) (string, string, string, string) {
 	files := make([]*widget.Entry, 3)
 	buttons := make([]*widget.Button, 3)
 
-	options := []string{"SMD", "BSC", "21c"}
+	options := []string{"21c", "BSC", "BJP", "SMD"}
 	list := widget.NewSelect(options, func(s string) {
 	})
 
