@@ -11,7 +11,7 @@ import (
 
 // main is the entry point of the application. It initializes the logger, creates a new
 // Fyne application, and prompts the user to select the product line and the paths to the
-// hotsheet, stock report, and sales report files. If the selection is successful, it copies
+// hotsheet, inventory report, and PO report files. If the selection is successful, it copies
 // the hotsheet file and updates it based on the selected product line by invoking the
 // appropriate helper functions. The function logs errors and exits early if any step fails.
 func main() {
