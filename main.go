@@ -53,7 +53,6 @@ func main() {
 		updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
 	case "SMD":
 		updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
-
 	default:
 		logger.Printf("unknown product: %s", product)
 		return
