@@ -41,10 +41,18 @@ func (bar *Bar) getPercent() int64 {
 // total value.
 func (bar *Bar) Play(cur int64) {
 	bar.cur = cur
-	last := bar.percent
 	bar.percent = bar.getPercent()
-	if bar.percent != last && bar.percent%2 == 0 {
+	barWidth := 50
+	filled := int((float64(bar.percent) / 100.0) * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar.rate = ""
+	for i := 0; i < filled; i++ {
 		bar.rate += bar.graph
+	}
+	for i := filled; i < barWidth; i++ {
+		bar.rate += " "
 	}
 	fmt.Printf("\r[%-50s]%3d%% %8d/%d", bar.rate, bar.percent, bar.cur, bar.total)
 }

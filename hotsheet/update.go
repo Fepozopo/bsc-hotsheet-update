@@ -98,9 +98,10 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 
 	// Progress bar
 	var bar helpers.Bar
-	bar.NewOption(int64(2), int64(len(rowsHotsheet)))
+	bar.NewOption(int64(0), int64(len(rowsHotsheet)-1))
 
 	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
+		bar.Play(int64(rowWsHotsheet - 1))
 
 		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.SkuCol, rowWsHotsheet)) // SKU column in wsHotsheet
 		if err != nil {
@@ -231,9 +232,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 
 				logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt)
 				wsReportPointer = rowWsReport + 1
-				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
-
 			}
 		}
 	}
@@ -303,9 +302,10 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 
 	// Progress bar
 	var bar helpers.Bar
-	bar.NewOption(int64(2), int64(len(rowsHotsheet)))
+	bar.NewOption(int64(2), int64(len(rowsHotsheet)-1))
 
 	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
+		bar.Play(int64(rowWsHotsheet - 1))
 
 		skuWsHotsheet, err := wbHotsheet.GetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.SkuCol, rowWsHotsheet)) // SKU column in wsHotsheet
 		if err != nil {
@@ -471,7 +471,6 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				}
 
 				wsReportPointer = rowWsReport + 1
-				bar.Play(int64(rowWsHotsheet))
 				break // Move to the next row in wsHotsheet once a match is found
 			}
 		}
