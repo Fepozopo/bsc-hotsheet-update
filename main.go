@@ -27,39 +27,77 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	product, fileHotsheet, inventoryReport, poReport := selectFiles(myApp)
+	selection, hotsheetPaths, inventoryReport, poReport := selectFiles(myApp)
 
 	// If no files are selected, exit
-	if product == "" || fileHotsheet == "" || inventoryReport == "" || poReport == "" {
+	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" {
 		logger.Printf("not all files were selected")
 		return
 	}
 
-	// Copy the hotsheet
-	fileHotsheetNew, err := hotsheet.CopyHotsheet(product, fileHotsheet)
-	if err != nil {
-		logger.Printf("failed to copy hotsheet file: %v", err)
-		return
-	}
+	if selection == "All" {
+		products := []struct {
+			name       string
+			updateFunc func(string, string, string) error
+		}{
+			{"21c", hotsheet.Case21C},
+			{"BSC", hotsheet.CaseBSC},
+			{"BJP", hotsheet.CaseBJP},
+			{"SMD", hotsheet.CaseSMD},
+		}
+		for i, p := range products {
+			if i >= len(hotsheetPaths) {
+				logger.Printf("missing hotsheet file for %s", p.name)
+				continue
+			}
+			fileHotsheet := hotsheetPaths[i]
+			if fileHotsheet == "" {
+				logger.Printf("no hotsheet file selected for %s", p.name)
+				continue
+			}
+			fileHotsheetNew, err := hotsheet.CopyHotsheet(p.name, fileHotsheet)
+			if err != nil {
+				logger.Printf("failed to copy %s hotsheet file: %v", p.name, err)
+				continue
+			}
+			if err := p.updateFunc(fileHotsheetNew, inventoryReport, poReport); err != nil {
+				logger.Printf("failed to update %s hotsheet: %v", p.name, err)
+			} else {
+				fmt.Printf("%s hotsheet updated successfully.\n", p.name)
+			}
+		}
+	} else {
+		fileHotsheet := hotsheetPaths[0]
+		if fileHotsheet == "" {
+			logger.Printf("no hotsheet file selected")
+			return
+		}
+		// Copy the hotsheet
+		fileHotsheetNew, err := hotsheet.CopyHotsheet(selection, fileHotsheet)
+		if err != nil {
+			logger.Printf("failed to copy hotsheet file: %v", err)
+			return
+		}
 
-	// Update the hotsheet
-	var updateErr error
-	switch product {
-	case "21c":
-		updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
-	case "BSC":
-		updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
-	case "BJP":
-		updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
-	case "SMD":
-		updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
-	default:
-		logger.Printf("unknown product: %s", product)
-		return
-	}
-	if updateErr != nil {
-		logger.Printf("failed to update %s hotsheet: %v", product, updateErr)
-		return
+		// Update the hotsheet
+		var updateErr error
+		switch selection {
+		case "21c":
+			updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
+		case "BSC":
+			updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
+		case "BJP":
+			updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
+		case "SMD":
+			updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
+		default:
+			logger.Printf("unknown product: %s", selection)
+			return
+		}
+		if updateErr != nil {
+			logger.Printf("failed to update %s hotsheet: %v", selection, updateErr)
+			return
+		}
 	}
 
 	fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
