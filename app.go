@@ -1,19 +1,31 @@
 package main
 
 import (
+	"errors"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
+	fyneDialog "fyne.io/fyne/v2/dialog" // Alias Fyne's dialog package
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/sqweek/dialog" // Keep this as 'dialog' since it's the one we'll primarily use for file selection
 )
 
-// openFileWindow creates a file open dialog and calls the given callback function with the selected file.
+// openFileWindow creates a file open dialog using the system's native file manager
+// and calls the given callback function with the selected file path.
 // If the user cancels the dialog, the error argument will be set to an error with message "cancelled".
-func openFileWindow(parent fyne.Window, callback func(r fyne.URIReadCloser, e error)) {
-	dialog.NewFileOpen(func(r fyne.URIReadCloser, e error) {
-		callback(r, e)
-	}, parent).Show()
+func openFileWindow(parent fyne.Window, callback func(filePath string, e error)) {
+	filePath, err := dialog.File().Load() // Use the aliased dialog for the native file open
+	if err != nil {
+		if err.Error() == "cancelled" {
+			callback("", errors.New("cancelled"))
+		} else {
+			callback("", err)
+		}
+		return
+	}
+	callback(filePath, nil)
 }
 
 // selectFiles creates a GUI window to select the product line to update and the paths to the hotsheet, stock report, and sales report files.
@@ -33,11 +45,16 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 		files[i] = widget.NewEntry()
 		buttons[i] = widget.NewButton("Browse", func(i int) func() {
 			return func() {
-				openFileWindow(window, func(r fyne.URIReadCloser, e error) {
+				openFileWindow(window, func(filePath string, e error) {
 					if e != nil {
+						if e.Error() == "cancelled" {
+							// User cancelled, no action needed other than not setting the path
+						} else {
+							fyneDialog.ShowError(e, window) // Use the aliased Fyne dialog for error messages
+						}
 						return
 					}
-					files[i].SetText(r.URI().Path())
+					files[i].SetText(filePath)
 				})
 			}
 		}(i))
@@ -45,22 +62,24 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 
 	var selection string
 	var hotsheetPaths []string
+	var inventoryReportPath string
+	var poReportPath string
 
 	hotsheetLabels := []string{"21c Hotsheet:", "BSC Hotsheet:", "BJP Hotsheet:", "SMD Hotsheet:"}
 
 	hotsheetLabel := widget.NewLabelWithStyle("Select Hotsheet:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	hotsheetRows := []fyne.CanvasObject{
 		hotsheetLabel,
-		files[0],
-		buttons[0],
 	}
-	// Add all four hotsheet fields (21C, BSC, BJP, SMD)
 	for i := 0; i < 4; i++ {
 		hotsheetRows = append(hotsheetRows, widget.NewLabelWithStyle(hotsheetLabels[i], fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
 		hotsheetRows = append(hotsheetRows, files[i], buttons[i])
 	}
+	hotsheetRows = append(hotsheetRows, widget.NewLabelWithStyle("Select Inventory Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+	hotsheetRows = append(hotsheetRows, files[4], buttons[4])
+	hotsheetRows = append(hotsheetRows, widget.NewLabelWithStyle("Select PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+	hotsheetRows = append(hotsheetRows, files[5], buttons[5])
 
-	// Start with only the label and select list visible
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("Which hotsheet would you like to update? (Select 'All' to update all 4)", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		list,
@@ -74,40 +93,57 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 				hotsheetPaths[i] = files[i].Text
 			}
 		} else {
-			hotsheetPaths = []string{files[0].Text}
+			selectedIndex := -1
+			for idx, opt := range options {
+				if opt == selection {
+					selectedIndex = idx - 1
+					break
+				}
+			}
+			if selectedIndex >= 0 && selectedIndex < 4 {
+				hotsheetPaths = []string{files[selectedIndex].Text}
+			} else {
+				hotsheetPaths = []string{}
+			}
 		}
+		inventoryReportPath = files[4].Text
+		poReportPath = files[5].Text
 		window.Close()
 	})
 
-	// Dynamically add fields after selection
 	list.OnChanged = func(s string) {
-		// Remove all but the label and select list
 		content.Objects = content.Objects[:2]
+
 		if s == "All" {
-			hotsheetLabel.SetText("Select Hotsheets:")
-			// Add all hotsheet fields (21C, BSC, BJP, SMD)
 			for i := 0; i < 4; i++ {
-				content.Add(hotsheetRows[3+i*3])   // label
-				content.Add(hotsheetRows[3+i*3+1]) // entry
-				content.Add(hotsheetRows[3+i*3+2]) // button
+				content.Add(hotsheetRows[1+i*3])
+				content.Add(hotsheetRows[1+i*3+1])
+				content.Add(hotsheetRows[1+i*3+2])
 			}
 		} else if s != "" {
-			hotsheetLabel.SetText("Select Hotsheet:")
-			// Only show the first hotsheet field
-			content.Add(hotsheetRows[0])
-			content.Add(hotsheetRows[1])
-			content.Add(hotsheetRows[2])
+			selectedIndex := -1
+			for idx, opt := range options {
+				if opt == s {
+					selectedIndex = idx - 1
+					break
+				}
+			}
+			if selectedIndex >= 0 && selectedIndex < 4 {
+				content.Add(hotsheetRows[1+selectedIndex*3])
+				content.Add(hotsheetRows[1+selectedIndex*3+1])
+				content.Add(hotsheetRows[1+selectedIndex*3+2])
+			}
 		}
-		// Always add report fields and submit button if a selection is made
+
 		if s != "" {
 			content.Add(layout.NewSpacer())
-			content.Add(widget.NewLabelWithStyle("Select Inventory Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
-			content.Add(files[4])
-			content.Add(buttons[4])
+			content.Add(hotsheetRows[1+4*3])
+			content.Add(hotsheetRows[1+4*3+1])
+			content.Add(hotsheetRows[1+4*3+2])
 			content.Add(layout.NewSpacer())
-			content.Add(widget.NewLabelWithStyle("Select PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
-			content.Add(files[5])
-			content.Add(buttons[5])
+			content.Add(hotsheetRows[1+5*3])
+			content.Add(hotsheetRows[1+5*3+1])
+			content.Add(hotsheetRows[1+5*3+2])
 			content.Add(layout.NewSpacer())
 			content.Add(submitButton)
 		}
@@ -121,9 +157,5 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 		window.Close()
 	})
 
-	if selection == "All" {
-		return selection, hotsheetPaths, files[4].Text, files[5].Text
-	} else {
-		return selection, hotsheetPaths, files[4].Text, files[5].Text
-	}
+	return selection, hotsheetPaths, inventoryReportPath, poReportPath
 }
