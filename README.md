@@ -19,7 +19,7 @@ Before you begin, ensure you have the following installed on your system:
 ## Quick Start
 
 1. Clone the repository and navigate to the project root in a terminal.
-2. Run `make <target>` to build and run the program. Replace `<target>` with one of the following targets: `windows-amd`, `windows-arm`, `linux-amd`, `linux-arm`, `macos-amd`, or `macos-arm`.
+2. Run `make <target>` to build and run the program. Replace `<target>` with one of the following targets: `windows-x86_64`, `windows-arm`, `linux-x86_64`, `linux-arm`, `macos-arm`.
 
 ## Usage
 
@@ -54,11 +54,10 @@ everyday := Update{
 To build the program, I've included a Makefile. You can run `make <target>` to build the program for different platforms. You can also run `make clean` to remove the `bin` folder that contains the compiled binaries.
 The targets are:
 ```bash
-make windows-amd
+make windows-x86_64
 make windows-arm
-make linux-amd
+make linux-x86_64
 make linux-arm
-make macos-amd
 make macos-arm
 ```
 You can also run `make all` to build all the targets.
