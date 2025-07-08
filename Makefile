@@ -54,7 +54,7 @@ macos-arm:
 		go build -o bin/$(BINARY_BASE)-macos-arm .
 
 # Build all targets
-all: windows-x86_64 windows-arm linux-x86_64 linux-arm macos-x86_64 macos-arm
+all: windows-x86_64 windows-arm linux-x86_64 linux-arm macos-arm
 
 # Clean target to remove generated binaries and bin folder if needed
 clean:
