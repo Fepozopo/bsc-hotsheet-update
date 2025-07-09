@@ -60,7 +60,7 @@ make linux-x86_64
 make linux-arm
 make macos-arm
 ```
-You can also run `make all` to build all the targets.
+You can also run `make all` to build all the targets or `make clean` to remove the binaries and bin folder.
 
 These commands will build the program for the specified platform and output the binary to the `bin` folder.
 
