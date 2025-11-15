@@ -1,7 +1,7 @@
 # Makefile for building this Go program with CGO for multiple OS targets
 
 # Base binary name (without extension)
-BINARY_BASE := hotsheet_updater
+BINARY_BASE := hotsheet
 
 # Create folder function
 define MAKE_BIN_DIR
@@ -15,7 +15,7 @@ windows-amd64:
 	@echo "Using zig cross compiler for Windows"
 	@echo "Building with CC="zig cc -target x86_64-windows""
 	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC="zig cc -target x86_64-windows" \
-		go build -o bin/$(BINARY_BASE)_windows-amd64.exe .
+		go build -o bin/$(BINARY_BASE)-windows-amd64.exe .
 
 # Build for Windows (ARM64)
 windows-arm64:
