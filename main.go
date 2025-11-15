@@ -15,8 +15,6 @@ import (
 // the hotsheet file and updates it based on the selected product line by invoking the
 // appropriate helper functions. The function logs errors and exits early if any step fails.
 func main() {
-	startTime := time.Now()
-
 	logger, logFile, err := helpers.CreateLogger("main", "", "", "ERROR")
 	if err != nil {
 		logger.Printf("failed to create log file: %v", err)
@@ -99,8 +97,6 @@ func main() {
 			return
 		}
 	}
-
-	fmt.Printf("Done!\nElapsed time: %v\n", time.Since(startTime))
 
 	for i := 0; i < 3; i++ {
 		fmt.Printf("Quitting in %d seconds...\n", 3-i)
