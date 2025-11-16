@@ -313,6 +313,10 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), "")
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), "")
 
+		// Remove possibly old BN values
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), "")
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), "")
+
 		logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, data.onHand, data.onPO, data.onSO, data.onBO, data.ytdSold, data.ytdIssued)
 		// BN handling: lookup in bnMap
 		if bnVal, ok := bnMap[skuKey]; ok {
