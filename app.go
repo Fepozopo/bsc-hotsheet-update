@@ -98,16 +98,16 @@ func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 
 // selectFiles creates a GUI window to select the product line to update and the paths to the hotsheet, stock report, and sales report files.
 // It then returns the selection and the paths as strings.
-func selectFiles(a fyne.App) (string, []string, string, string) {
+func selectFiles(a fyne.App) (string, []string, string, string, string) {
 	window := a.NewWindow("Hotsheet Updater")
 	checkForUpdates(window, false)
 	window.SetContent(widget.NewLabel("Please select the files to update:"))
 	window.Resize(fyne.NewSize(900, 800))
 
-	files := make([]*widget.Entry, 6) // 4 hotsheets + 2 reports
-	buttons := make([]*widget.Button, 6)
+	files := make([]*widget.Entry, 7) // 4 hotsheets + 3 reports
+	buttons := make([]*widget.Button, 7)
 
-	options := []string{"All", "21c", "BSC", "BJP", "SMD"}
+	options := []string{"All", "21c", "BJP", "BSC", "SMD"}
 	list := widget.NewSelect(options, nil)
 
 	for i := range files {
@@ -133,8 +133,9 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 	var hotsheetPaths []string
 	var inventoryReportPath string
 	var poReportPath string
+	var bnReportPath string
 
-	hotsheetLabels := []string{"21c Hotsheet:", "BSC Hotsheet:", "BJP Hotsheet:", "SMD Hotsheet:"}
+	hotsheetLabels := []string{"21c Hotsheet:", "BJP Hotsheet:", "BSC Hotsheet:", "SMD Hotsheet:"}
 
 	hotsheetLabel := widget.NewLabelWithStyle("Select Hotsheet:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	hotsheetRows := []fyne.CanvasObject{
@@ -148,19 +149,19 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 	hotsheetRows = append(hotsheetRows, files[4], buttons[4])
 	hotsheetRows = append(hotsheetRows, widget.NewLabelWithStyle("Select PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
 	hotsheetRows = append(hotsheetRows, files[5], buttons[5])
+	hotsheetRows = append(hotsheetRows, widget.NewLabelWithStyle("Select BN Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+	hotsheetRows = append(hotsheetRows, files[6], buttons[6])
 
 	content := container.NewVBox(
-		widget.NewLabelWithStyle("Which hotsheet would you like to update? (Select 'All' to update all 4)", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("Which hotsheet would you like to update? (Select 'All' to update all (excluding BJP))", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		list,
 	)
 
 	submitButton := widget.NewButton("Submit", func() {
 		selection = list.Selected
 		if selection == "All" {
-			hotsheetPaths = make([]string, 4)
-			for i := 0; i < 4; i++ {
-				hotsheetPaths[i] = files[i].Text
-			}
+			// Only update 21c (files[0]), BSC (files[2]), and SMD (files[3])
+			hotsheetPaths = []string{files[0].Text, files[2].Text, files[3].Text}
 		} else {
 			selectedIndex := -1
 			for idx, opt := range options {
@@ -177,6 +178,8 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 		}
 		inventoryReportPath = files[4].Text
 		poReportPath = files[5].Text
+		bnReportPath = files[6].Text
+
 		window.Close()
 	})
 
@@ -184,7 +187,9 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 		content.Objects = content.Objects[:2]
 
 		if s == "All" {
-			for i := 0; i < 4; i++ {
+			// Show only 21c (index 0), BSC (index 2), and SMD (index 3)
+			toShow := []int{0, 2, 3}
+			for _, i := range toShow {
 				content.Add(hotsheetRows[1+i*3])
 				content.Add(hotsheetRows[1+i*3+1])
 				content.Add(hotsheetRows[1+i*3+2])
@@ -206,13 +211,23 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 
 		if s != "" {
 			content.Add(layout.NewSpacer())
+			// Inventory report UI
 			content.Add(hotsheetRows[1+4*3])
 			content.Add(hotsheetRows[1+4*3+1])
 			content.Add(hotsheetRows[1+4*3+2])
+
 			content.Add(layout.NewSpacer())
+			// PO report UI
 			content.Add(hotsheetRows[1+5*3])
 			content.Add(hotsheetRows[1+5*3+1])
 			content.Add(hotsheetRows[1+5*3+2])
+
+			content.Add(layout.NewSpacer())
+			// BN report UI
+			content.Add(hotsheetRows[1+6*3])
+			content.Add(hotsheetRows[1+6*3+1])
+			content.Add(hotsheetRows[1+6*3+2])
+
 			content.Add(layout.NewSpacer())
 			content.Add(submitButton)
 		}
@@ -226,5 +241,5 @@ func selectFiles(a fyne.App) (string, []string, string, string) {
 		window.Close()
 	})
 
-	return selection, hotsheetPaths, inventoryReportPath, poReportPath
+	return selection, hotsheetPaths, inventoryReportPath, poReportPath, bnReportPath
 }

@@ -25,10 +25,10 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	selection, hotsheetPaths, inventoryReport, poReport := selectFiles(myApp)
+	selection, hotsheetPaths, inventoryReport, poReport, bnReport := selectFiles(myApp)
 
 	// If no files are selected, exit
-	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" {
+	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" || bnReport == "" {
 		logger.Printf("not all files were selected")
 		return
 	}
@@ -36,11 +36,10 @@ func main() {
 	if selection == "All" {
 		products := []struct {
 			name       string
-			updateFunc func(string, string, string) error
+			updateFunc func(string, string, string, string) error
 		}{
 			{"21c", hotsheet.Case21C},
 			{"BSC", hotsheet.CaseBSC},
-			{"BJP", hotsheet.CaseBJP},
 			{"SMD", hotsheet.CaseSMD},
 		}
 		for i, p := range products {
@@ -58,7 +57,7 @@ func main() {
 				logger.Printf("failed to copy %s hotsheet file: %v", p.name, err)
 				continue
 			}
-			if err := p.updateFunc(fileHotsheetNew, inventoryReport, poReport); err != nil {
+			if err := p.updateFunc(fileHotsheetNew, inventoryReport, poReport, bnReport); err != nil {
 				logger.Printf("failed to update %s hotsheet: %v", p.name, err)
 			} else {
 				fmt.Printf("%s hotsheet updated successfully.\n", p.name)
@@ -81,13 +80,13 @@ func main() {
 		var updateErr error
 		switch selection {
 		case "21c":
-			updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
-		case "BSC":
-			updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
+			updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport, bnReport)
 		case "BJP":
-			updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
+			updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport, bnReport)
+		case "BSC":
+			updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport, bnReport)
 		case "SMD":
-			updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
+			updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport, bnReport)
 		default:
 			logger.Printf("unknown product: %s", selection)
 			return
