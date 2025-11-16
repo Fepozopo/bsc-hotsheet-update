@@ -9,12 +9,13 @@ import (
 //
 // This function is called by the main function when the user selects 'BSC' as the product
 // line.
-func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
+func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error {
 	everyday := Update{
 		Hotsheet:          fileHotsheetNew,
 		Sheet:             "Everyday",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "D",
 		OnHandCol:         "E",
 		OnPOCol1:          "F",
@@ -33,6 +34,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 		Sheet:             "Winter Holiday",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "E",
 		OnHandCol:         "F",
 		OnPOCol1:          "I",
@@ -51,6 +53,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 		Sheet:             "Spring Holiday",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "D",
 		OnHandCol:         "E",
 		OnPOCol1:          "G",
@@ -69,6 +72,7 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 		Sheet:             "A2 Notecards",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "D",
 		OnHandCol:         "E",
 		OnPOCol1:          "F",

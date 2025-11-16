@@ -9,12 +9,13 @@ import (
 //
 // This function is called by the main function when the user selects 'SMD' as the product
 // line.
-func CaseSMD(fileHotsheetNew, inventoryReport, POReport string) error {
+func CaseSMD(fileHotsheetNew, inventoryReport, POReport, BNReport string) error {
 	everyday := Update{
 		Hotsheet:          fileHotsheetNew,
 		Sheet:             "EVERYDAY",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "E",
 		OnHandCol:         "F",
 		OnPOCol1:          "G",
@@ -33,6 +34,7 @@ func CaseSMD(fileHotsheetNew, inventoryReport, POReport string) error {
 		Sheet:             "HOLIDAY",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "D",
 		OnHandCol:         "E",
 		OnPOCol1:          "F",

@@ -9,12 +9,13 @@ import (
 //
 // This function is called by the main function when the user selects '21C' as the product
 // line.
-func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
+func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error {
 	everyday := Update{
 		Hotsheet:          fileHotsheetNew,
 		Sheet:             "EVERYDAY",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "C",
 		OnHandCol:         "D",
 		OnPOCol1:          "E",
@@ -33,6 +34,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
 		Sheet:             "Winter Holiday",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "C",
 		OnHandCol:         "D",
 		OnPOCol1:          "E",
@@ -51,6 +53,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
 		Sheet:             "Spring Holiday",
 		InventoryReport:   inventoryReport,
 		POReport:          POReport,
+		BNReport:          BNReport,
 		SkuCol:            "C",
 		OnHandCol:         "D",
 		OnPOCol1:          "E",
