@@ -11,22 +11,25 @@ import (
 )
 
 type Update struct {
-	Hotsheet          string
-	Sheet             string
-	InventoryReport   string
-	POReport          string
-	SkuCol            string
-	OnHandCol         string
-	OnPOCol1          string
-	OnPOCol2          string
-	OnPOCol3          string
-	OnPOColTotal      string
-	OnSOBOCol         string
-	YtdSoldIssuedCol  string
-	PONumCol1         string
-	PONumCol2         string
-	PONumCol3         string
-	AverageMonthlyCol string
+	Hotsheet            string
+	Sheet               string
+	InventoryReport     string
+	POReport            string
+	BNReport            string
+	SkuCol              string
+	OnHandCol           string
+	OnPOCol1            string
+	OnPOCol2            string
+	OnPOCol3            string
+	OnPOColTotal        string
+	OnSOBOCol           string
+	YtdSoldIssuedCol    string
+	PONumCol1           string
+	PONumCol2           string
+	PONumCol3           string
+	AverageMonthlyCol   string
+	BNYtdSoldCol        string
+	BNAverageMonthlyCol string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -73,9 +76,17 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	}
 	defer wbHotsheet.Close()
 
+	// Open the BN report workbook
+	wbReportBN, err := excelize.OpenFile(u.BNReport)
+	if err != nil {
+		return fmt.Errorf("failed to open BN report file %s: %w", u.BNReport, err)
+	}
+	defer wbReportBN.Close()
+
 	// Get the sheets
 	wsReport := "Sheet1"
 	wsHotsheet := u.Sheet
+	wsReportBN := "Sheet1"
 
 	// Get the rows
 	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
@@ -86,6 +97,10 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get rows from report file %s: %w", u.InventoryReport, err)
 	}
+	rowsReportBN, err := wbReportBN.GetRows(wsReportBN)
+	if err != nil {
+		return fmt.Errorf("failed to get rows from BN report file %s: %w", u.BNReport, err)
+	}
 
 	skuCol := "B"        // 'B' column index in wsReport
 	onHandCol := "B"     // 'B' column index in wsReport
@@ -95,6 +110,10 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	ytdSoldCol := "L"    // 'L' column index in wsReport
 	ytdIssuedCol := "N"  // 'N' column index in wsReport
 	wsReportPointer := 1 // Start pointer for wsReport
+
+	bnSkuCol := "J"        // 'J' column index in wsReportBN
+	bnYtdSoldCol := "O"    // 'O' column index in wsReportBN
+	wsBnReportPointer := 1 // Start pointer for wsReportBN
 
 	// Progress bar
 	var bar helpers.Bar
@@ -173,7 +192,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 					ytdIssued = "-" + strings.TrimSuffix(ytdIssued, "-")
 				}
 
-				// // Convert the values from strings to a floats first, then convert to ints
+				// Convert the values from strings to a floats first, then convert to ints
 				var onHandFloat, onPOFloat, onSOFloat, onBOFloat, ytdSoldFloat, ytdIssuedFloat float64
 				if onHandFloat, err = strconv.ParseFloat(onHand, 64); err != nil {
 					return fmt.Errorf("failed to convert onHand value to int: %w", err)
@@ -232,6 +251,59 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 
 				logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt)
 				wsReportPointer = rowWsReport + 1
+
+				for rowWsReportBN := wsBnReportPointer; rowWsReportBN < len(rowsReportBN)+1; rowWsReportBN++ {
+					skuWsReportBN, err := wbReportBN.GetCellValue(wsReportBN, fmt.Sprintf("%s%d", bnSkuCol, rowWsReportBN)) // SKU in column 'J' in wsReportBN
+					if err != nil {
+						return fmt.Errorf("failed to get SKU from BN report file %s: %w", u.BNReport, err)
+					}
+					if skuWsReportBN == "" {
+						continue
+					}
+
+					logger.Printf("Comparing Hotsheet SKU: [%d]-'%s' with BN Report SKU: [%d]-'%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReportBN, skuWsReportBN)
+					if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReportBN) {
+						valueLocationBN := rowWsReportBN + 1 // Offset by 1 to get the correct row
+
+						// Get the BN YTD Sold value
+						var bnYtdSold string
+						if bnYtdSold, err = wbReportBN.GetCellValue(wsReportBN, fmt.Sprintf("%s%d", bnYtdSoldCol, valueLocationBN)); err != nil {
+							return fmt.Errorf("failed to get BN YTD Sold value from BN report file %s: %w", u.BNReport, err)
+						}
+
+						// Replace commas with empty strings
+						bnYtdSold = strings.ReplaceAll(bnYtdSold, ",", "")
+
+						// If the string ends with a dash, move it to the front
+						if strings.HasSuffix(bnYtdSold, "-") {
+							bnYtdSold = "-" + strings.TrimSuffix(bnYtdSold, "-")
+						}
+
+						// Convert the BN YTD Sold value from string to int
+						var bnYtdSoldFloat float64
+						if bnYtdSoldFloat, err = strconv.ParseFloat(bnYtdSold, 64); err != nil {
+							return fmt.Errorf("failed to convert BN YTD Sold value to int: %w", err)
+						}
+						bnYtdSoldInt := int(bnYtdSoldFloat)
+
+						// Calculate BN average monthly and subtract the BN sales from the YTD sales
+						bnYtdSoldIssuedInt := ytdSoldIssuedInt - bnYtdSoldInt
+						bnAverageMonthly := float64(bnYtdSoldIssuedInt) / monthFloat
+
+						// Update the BN YTD Sold value in the hotsheet and the BN average monthly
+						if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), bnYtdSoldInt); err != nil {
+							return fmt.Errorf("failed to set BN YTD Sold value in hotsheet file: %w", err)
+						}
+						if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), bnAverageMonthly); err != nil {
+							return fmt.Errorf("failed to set BN average monthly value in hotsheet file: %w", err)
+						}
+
+						logger.Printf("BN Match found for SKU: %s | BN YTD Sold: %d\n", skuWsHotsheet, bnYtdSoldInt)
+						wsBnReportPointer = rowWsReportBN + 1
+						break // Move to the next row in wsHotsheet once a match is found
+					}
+				}
+
 				break // Move to the next row in wsHotsheet once a match is found
 			}
 		}
