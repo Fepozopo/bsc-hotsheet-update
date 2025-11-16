@@ -102,23 +102,169 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		return fmt.Errorf("failed to get rows from BN report file %s: %w", u.BNReport, err)
 	}
 
-	skuCol := "B"        // 'B' column index in wsReport
-	onHandCol := "B"     // 'B' column index in wsReport
-	onPOCol := "D"       // 'D' column index in wsReport
-	onSOCol := "F"       // 'F' column index in wsReport
-	onBOCol := "H"       // 'H' column index in wsReport
-	ytdSoldCol := "L"    // 'L' column index in wsReport
-	ytdIssuedCol := "N"  // 'N' column index in wsReport
-	wsReportPointer := 1 // Start pointer for wsReport
+	skuCol := "B"       // 'B' column index in wsReport
+	onHandCol := "B"    // 'B' column index in wsReport
+	onPOCol := "D"      // 'D' column index in wsReport
+	onSOCol := "F"      // 'F' column index in wsReport
+	onBOCol := "H"      // 'H' column index in wsReport
+	ytdSoldCol := "L"   // 'L' column index in wsReport
+	ytdIssuedCol := "N" // 'N' column index in wsReport
 
-	bnSkuCol := "J"        // 'J' column index in wsReportBN
-	bnYtdSoldCol := "O"    // 'O' column index in wsReportBN
-	wsBnReportPointer := 1 // Start pointer for wsReportBN
+	bnSkuCol := "J"     // 'J' column index in wsReportBN
+	bnYtdSoldCol := "O" // 'O' column index in wsReportBN
+
+	// helper: convert column letter(s) to zero-based index (A -> 0, B -> 1, ...)
+	colToIndex := func(col string) int {
+		col = strings.ToUpper(col)
+		idx := 0
+		for i := 0; i < len(col); i++ {
+			idx *= 26
+			idx += int(col[i]-'A') + 1
+		}
+		return idx - 1
+	}
+
+	// helper: parse numeric-like cell strings to int (handles commas and trailing dash)
+	parseNum := func(s string) (int, error) {
+		if s == "" {
+			return 0, nil
+		}
+		s = strings.ReplaceAll(s, ",", "")
+		if strings.HasSuffix(s, "-") {
+			s = "-" + strings.TrimSuffix(s, "-")
+		}
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return 0, err
+		}
+		return int(f), nil
+	}
+
+	// Build a map of inventory data keyed by SKU using the same offsets the original code used.
+	type invData struct {
+		onHand    int
+		onPO      int
+		onSO      int
+		onBO      int
+		ytdSold   int
+		ytdIssued int
+	}
+	reportMap := make(map[string]invData)
+	skuIdx := colToIndex(skuCol)
+	onHandIdx := colToIndex(onHandCol)
+	onPOIdx := colToIndex(onPOCol)
+	onSOIdx := colToIndex(onSOCol)
+	onBOIdx := colToIndex(onBOCol)
+	ytdSoldIdx := colToIndex(ytdSoldCol)
+	ytdIssuedIdx := colToIndex(ytdIssuedCol)
+
+	// rowsReport is a slice of rows; the original code used 1-based row numbers and then
+	// used valueLocation := rowWsReport + 2 when reading numeric fields.
+	for rowNum := 1; rowNum < len(rowsReport)+1; rowNum++ {
+		// get SKU at rowNum (which corresponds to rowsReport[rowNum-1])
+		if rowNum-1 >= len(rowsReport) {
+			continue
+		}
+		row := rowsReport[rowNum-1]
+		if skuIdx >= len(row) {
+			continue
+		}
+		sku := strings.TrimSpace(row[skuIdx])
+		if sku == "" {
+			continue
+		}
+		// valueLocation := rowNum + 2 (preserve original offset)
+		valueLocation := rowNum + 2
+		if valueLocation-1 >= len(rowsReport) {
+			continue
+		}
+		valRow := rowsReport[valueLocation-1]
+
+		// safe-get helpers
+		getCell := func(idx int) string {
+			if idx < 0 || idx >= len(valRow) {
+				return ""
+			}
+			return valRow[idx]
+		}
+
+		onHandStr := strings.ReplaceAll(getCell(onHandIdx), ",", "")
+		onPOStr := strings.ReplaceAll(getCell(onPOIdx), ",", "")
+		onSOStr := strings.ReplaceAll(getCell(onSOIdx), ",", "")
+		onBOStr := strings.ReplaceAll(getCell(onBOIdx), ",", "")
+		ytdSoldStr := strings.ReplaceAll(getCell(ytdSoldIdx), ",", "")
+		ytdIssuedStr := strings.ReplaceAll(getCell(ytdIssuedIdx), ",", "")
+
+		onHandInt, err1 := parseNum(onHandStr)
+		onPOInt, err2 := parseNum(onPOStr)
+		onSOInt, err3 := parseNum(onSOStr)
+		onBOInt, err4 := parseNum(onBOStr)
+		ytdSoldInt, err5 := parseNum(ytdSoldStr)
+		ytdIssuedInt, err6 := parseNum(ytdIssuedStr)
+		// if any parse fails, skip this row but log the problem
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil || err6 != nil {
+			logger.Printf("Skipping SKU %s due to parse error: %v %v %v %v %v %v\n", sku, err1, err2, err3, err4, err5, err6)
+			continue
+		}
+		reportMap[sku] = invData{
+			onHand:    onHandInt,
+			onPO:      onPOInt,
+			onSO:      onSOInt,
+			onBO:      onBOInt,
+			ytdSold:   ytdSoldInt,
+			ytdIssued: ytdIssuedInt,
+		}
+	}
+
+	// Build BN map using an offset of +1
+	bnMap := make(map[string]int)
+	bnSkuIdx := colToIndex(bnSkuCol)
+	bnYtdSoldIdx := colToIndex(bnYtdSoldCol)
+	for rowNum := 1; rowNum < len(rowsReportBN)+1; rowNum++ {
+		if rowNum-1 >= len(rowsReportBN) {
+			continue
+		}
+		row := rowsReportBN[rowNum-1]
+		if bnSkuIdx >= len(row) {
+			continue
+		}
+		sku := strings.TrimSpace(row[bnSkuIdx])
+		if sku == "" {
+			continue
+		}
+		// valueLocationBN := rowNum + 1
+		valueLocationBN := rowNum + 1
+		if valueLocationBN-1 >= len(rowsReportBN) {
+			continue
+		}
+		valRow := rowsReportBN[valueLocationBN-1]
+		getCell := func(idx int) string {
+			if idx < 0 || idx >= len(valRow) {
+				return ""
+			}
+			return valRow[idx]
+		}
+		bnYtdSoldStr := strings.ReplaceAll(getCell(bnYtdSoldIdx), ",", "")
+		if strings.HasSuffix(bnYtdSoldStr, "-") {
+			bnYtdSoldStr = "-" + strings.TrimSuffix(bnYtdSoldStr, "-")
+		}
+		if bnYtdSoldStr == "" {
+			bnMap[sku] = 0
+			continue
+		}
+		bnValFloat, err := strconv.ParseFloat(bnYtdSoldStr, 64)
+		if err != nil {
+			logger.Printf("Skipping BN SKU %s due to parse error: %v\n", sku, err)
+			continue
+		}
+		bnMap[sku] = int(bnValFloat)
+	}
 
 	// Progress bar
 	var bar helpers.Bar
 	bar.NewOption(int64(0), int64(len(rowsHotsheet)-1))
 
+	// Iterate hotsheet and lookup in maps
 	for rowWsHotsheet := 2; rowWsHotsheet < len(rowsHotsheet)+1; rowWsHotsheet++ {
 		bar.Play(int64(rowWsHotsheet - 1))
 
@@ -129,183 +275,57 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		if skuWsHotsheet == "" {
 			continue // Skip rows with no SKU in wsHotsheet
 		}
+		skuKey := strings.TrimSpace(skuWsHotsheet)
 
-		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport)+1; rowWsReport++ {
-			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", skuCol, rowWsReport)) // SKU in column 'B' in wsReport
-			if err != nil {
-				return fmt.Errorf("failed to get SKU from report file %s: %w", u.InventoryReport, err)
+		data, ok := reportMap[skuKey]
+		if !ok {
+			// no match, clear PO columns (as original didn't clear everything on misses, we keep same behavior)
+			continue
+		}
+
+		// Calculate onSOBO, ytdSoldIssued, and averageMonthly
+		onSOBOInt := data.onSO + data.onBO
+		ytdSoldIssuedInt := data.ytdSold + data.ytdIssued
+		averageMonthly := float64(ytdSoldIssuedInt) / monthFloat
+
+		// Update the hotsheet
+		if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), data.onHand); err != nil {
+			return fmt.Errorf("failed to set onHand value in hotsheet file: %w", err)
+		}
+		if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOColTotal, rowWsHotsheet), data.onPO); err != nil {
+			return fmt.Errorf("failed to set onPO value in hotsheet file: %w", err)
+		}
+		if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt); err != nil {
+			return fmt.Errorf("failed to set onSOBO value in hotsheet file: %w", err)
+		}
+		if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldIssuedCol, rowWsHotsheet), ytdSoldIssuedInt); err != nil {
+			return fmt.Errorf("failed to set ytdSoldIssued value in hotsheet file: %w", err)
+		}
+		if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.AverageMonthlyCol, rowWsHotsheet), averageMonthly); err != nil {
+			return fmt.Errorf("failed to set averageMonthly value in hotsheet file: %w", err)
+		}
+
+		// Remove the old PO number and old PO quantities
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), "")
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), "")
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), "")
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol1, rowWsHotsheet), "")
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), "")
+		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), "")
+
+		logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, data.onHand, data.onPO, data.onSO, data.onBO, data.ytdSold, data.ytdIssued)
+		// BN handling: lookup in bnMap
+		if bnVal, ok := bnMap[skuKey]; ok {
+			bnYtdSoldInt := bnVal
+			bnYtdSoldIssuedInt := (data.ytdSold + data.ytdIssued) - bnYtdSoldInt
+			bnAverageMonthly := float64(bnYtdSoldIssuedInt) / monthFloat
+			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), bnYtdSoldIssuedInt); err != nil {
+				return fmt.Errorf("failed to set BN YTD Sold value in hotsheet file: %w", err)
 			}
-			if skuWsReport == "" {
-				continue
+			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), bnAverageMonthly); err != nil {
+				return fmt.Errorf("failed to set BN average monthly value in hotsheet file: %w", err)
 			}
-
-			logger.Printf("Comparing Hotsheet SKU: [%d]-'%s' with Report SKU: [%d]-'%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReport, skuWsReport)
-			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
-				valueLocation := rowWsReport + 2
-
-				// Get the values for the current SKU in wsReport
-				var onHand, onPO, onSO, onBO, ytdSold, ytdIssued string
-				if onHand, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onHandCol, valueLocation)); err != nil {
-					return fmt.Errorf("failed to get On Hand value from report file %s: %w", u.InventoryReport, err)
-				}
-				if onPO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation)); err != nil {
-					return fmt.Errorf("failed to get On PO value from report file %s: %w", u.InventoryReport, err)
-				}
-				if onSO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onSOCol, valueLocation)); err != nil {
-					return fmt.Errorf("failed to get On SO value from report file %s: %w", u.InventoryReport, err)
-				}
-				if onBO, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onBOCol, valueLocation)); err != nil {
-					return fmt.Errorf("failed to get On BO value from report file %s: %w", u.InventoryReport, err)
-				}
-				if ytdSold, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdSoldCol, valueLocation)); err != nil {
-					return fmt.Errorf("failed to get YTD Sold value from report file %s: %w", u.InventoryReport, err)
-				}
-				if ytdIssued, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", ytdIssuedCol, valueLocation)); err != nil {
-					return fmt.Errorf("failed to get YTD Issued value from report file %s: %w", u.InventoryReport, err)
-				}
-
-				// Replace commas with empty strings
-				onHand = strings.ReplaceAll(onHand, ",", "")
-				onPO = strings.ReplaceAll(onPO, ",", "")
-				onSO = strings.ReplaceAll(onSO, ",", "")
-				onBO = strings.ReplaceAll(onBO, ",", "")
-				ytdSold = strings.ReplaceAll(ytdSold, ",", "")
-				ytdIssued = strings.ReplaceAll(ytdIssued, ",", "")
-
-				// If the string ends with a dash, move it to the front
-				if strings.HasSuffix(onHand, "-") {
-					onHand = "-" + strings.TrimSuffix(onHand, "-")
-				}
-				if strings.HasSuffix(onPO, "-") {
-					onPO = "-" + strings.TrimSuffix(onPO, "-")
-				}
-				if strings.HasSuffix(onSO, "-") {
-					onSO = "-" + strings.TrimSuffix(onSO, "-")
-				}
-				if strings.HasSuffix(onBO, "-") {
-					onBO = "-" + strings.TrimSuffix(onBO, "-")
-				}
-				if strings.HasSuffix(ytdSold, "-") {
-					ytdSold = "-" + strings.TrimSuffix(ytdSold, "-")
-				}
-				if strings.HasSuffix(ytdIssued, "-") {
-					ytdIssued = "-" + strings.TrimSuffix(ytdIssued, "-")
-				}
-
-				// Convert the values from strings to a floats first, then convert to ints
-				var onHandFloat, onPOFloat, onSOFloat, onBOFloat, ytdSoldFloat, ytdIssuedFloat float64
-				if onHandFloat, err = strconv.ParseFloat(onHand, 64); err != nil {
-					return fmt.Errorf("failed to convert onHand value to int: %w", err)
-				}
-				onHandInt := int(onHandFloat)
-				if onPOFloat, err = strconv.ParseFloat(onPO, 64); err != nil {
-					return fmt.Errorf("failed to convert onPO value to int: %w", err)
-				}
-				onPOInt := int(onPOFloat)
-				if onSOFloat, err = strconv.ParseFloat(onSO, 64); err != nil {
-					return fmt.Errorf("failed to convert onSO value to int: %w", err)
-				}
-				onSOInt := int(onSOFloat)
-				if onBOFloat, err = strconv.ParseFloat(onBO, 64); err != nil {
-					return fmt.Errorf("failed to convert onBO value to int: %w", err)
-				}
-				onBOInt := int(onBOFloat)
-				if ytdSoldFloat, err = strconv.ParseFloat(ytdSold, 64); err != nil {
-					return fmt.Errorf("failed to convert ytdSold value to int: %w", err)
-				}
-				ytdSoldInt := int(ytdSoldFloat)
-				if ytdIssuedFloat, err = strconv.ParseFloat(ytdIssued, 64); err != nil {
-					return fmt.Errorf("failed to convert ytdIssued value to int: %w", err)
-				}
-				ytdIssuedInt := int(ytdIssuedFloat)
-
-				// Calculate onSOBO, ytdSoldIssued, and averageMonthly
-				onSOBOInt := onSOInt + onBOInt
-				ytdSoldIssuedInt := ytdSoldInt + ytdIssuedInt
-				averageMonthly := float64(ytdSoldIssuedInt) / monthFloat
-
-				// Update the hotsheet
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnHandCol, rowWsHotsheet), onHandInt); err != nil {
-					return fmt.Errorf("failed to set onHand value in hotsheet file: %w", err)
-				}
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOColTotal, rowWsHotsheet), onPOInt); err != nil {
-					return fmt.Errorf("failed to set onPO value in hotsheet file: %w", err)
-				}
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnSOBOCol, rowWsHotsheet), onSOBOInt); err != nil {
-					return fmt.Errorf("failed to set onSOBO value in hotsheet file: %w", err)
-				}
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.YtdSoldIssuedCol, rowWsHotsheet), ytdSoldIssuedInt); err != nil {
-					return fmt.Errorf("failed to set ytdSoldIssued value in hotsheet file: %w", err)
-				}
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.AverageMonthlyCol, rowWsHotsheet), averageMonthly); err != nil {
-					return fmt.Errorf("failed to set averageMonthly value in hotsheet file: %w", err)
-				}
-
-				// Remove the old PO number and old PO quantities
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), "")
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), "")
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), "")
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol1, rowWsHotsheet), "")
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), "")
-				wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), "")
-
-				logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, onHandInt, onPOInt, onSOInt, onBOInt, ytdSoldInt, ytdIssuedInt)
-				wsReportPointer = rowWsReport + 1
-
-				for rowWsReportBN := wsBnReportPointer; rowWsReportBN < len(rowsReportBN)+1; rowWsReportBN++ {
-					skuWsReportBN, err := wbReportBN.GetCellValue(wsReportBN, fmt.Sprintf("%s%d", bnSkuCol, rowWsReportBN)) // SKU in column 'J' in wsReportBN
-					if err != nil {
-						return fmt.Errorf("failed to get SKU from BN report file %s: %w", u.BNReport, err)
-					}
-					if skuWsReportBN == "" {
-						continue
-					}
-
-					logger.Printf("Comparing Hotsheet SKU: [%d]-'%s' with BN Report SKU: [%d]-'%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReportBN, skuWsReportBN)
-					if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReportBN) {
-						valueLocationBN := rowWsReportBN + 1 // Offset by 1 to get the correct row
-
-						// Get the BN YTD Sold value
-						var bnYtdSold string
-						if bnYtdSold, err = wbReportBN.GetCellValue(wsReportBN, fmt.Sprintf("%s%d", bnYtdSoldCol, valueLocationBN)); err != nil {
-							return fmt.Errorf("failed to get BN YTD Sold value from BN report file %s: %w", u.BNReport, err)
-						}
-
-						// Replace commas with empty strings
-						bnYtdSold = strings.ReplaceAll(bnYtdSold, ",", "")
-
-						// If the string ends with a dash, move it to the front
-						if strings.HasSuffix(bnYtdSold, "-") {
-							bnYtdSold = "-" + strings.TrimSuffix(bnYtdSold, "-")
-						}
-
-						// Convert the BN YTD Sold value from string to int
-						var bnYtdSoldFloat float64
-						if bnYtdSoldFloat, err = strconv.ParseFloat(bnYtdSold, 64); err != nil {
-							return fmt.Errorf("failed to convert BN YTD Sold value to int: %w", err)
-						}
-						bnYtdSoldInt := int(bnYtdSoldFloat)
-
-						// Calculate BN average monthly and subtract the BN sales from the YTD sales
-						bnYtdSoldIssuedInt := ytdSoldIssuedInt - bnYtdSoldInt
-						bnAverageMonthly := float64(bnYtdSoldIssuedInt) / monthFloat
-
-						// Update the BN YTD Sold value in the hotsheet and the BN average monthly
-						if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), bnYtdSoldInt); err != nil {
-							return fmt.Errorf("failed to set BN YTD Sold value in hotsheet file: %w", err)
-						}
-						if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), bnAverageMonthly); err != nil {
-							return fmt.Errorf("failed to set BN average monthly value in hotsheet file: %w", err)
-						}
-
-						logger.Printf("BN Match found for SKU: %s | BN YTD Sold: %d\n", skuWsHotsheet, bnYtdSoldInt)
-						wsBnReportPointer = rowWsReportBN + 1
-						break // Move to the next row in wsHotsheet once a match is found
-					}
-				}
-
-				break // Move to the next row in wsHotsheet once a match is found
-			}
+			logger.Printf("BN Match found for SKU: %s | BN YTD Sold: %d\n", skuWsHotsheet, bnYtdSoldInt)
 		}
 	}
 
@@ -370,7 +390,109 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 	onPOCol := "I"          // 'I' column index in wsReport
 	onPOBackorderCol := "K" // 'K' column index in wsReport
 	POStatusCol := "G"      // 'G' column index in wsReport
-	wsReportPointer := 1    // Start pointer for wsReport
+
+	// helper: convert column letter(s) to zero-based index (A -> 0, B -> 1, ...)
+	colToIndex := func(col string) int {
+		col = strings.ToUpper(col)
+		idx := 0
+		for i := 0; i < len(col); i++ {
+			idx *= 26
+			idx += int(col[i]-'A') + 1
+		}
+		return idx - 1
+	}
+
+	// Build PO report map keyed by SKU. Preserve the original offsets used by the code:
+	// valueLocation1 := rowWsReport + 1, valueLocation2 := rowWsReport + 2, valueLocation3 := rowWsReport + 3
+	type poEntry struct {
+		poNum1 string
+		onPO1  string
+		poNum2 string
+		onPO2  string
+		poNum3 string
+		onPO3  string
+	}
+	poMap := make(map[string]poEntry)
+	dataIdx := colToIndex(dataCol)
+	onPOIdx := colToIndex(onPOCol)
+	onPOBackIdx := colToIndex(onPOBackorderCol)
+	poStatusIdx := colToIndex(POStatusCol)
+
+	for rowNum := 1; rowNum < len(rowsReport)+1; rowNum++ {
+		if rowNum-1 >= len(rowsReport) {
+			continue
+		}
+		row := rowsReport[rowNum-1]
+		if dataIdx >= len(row) {
+			continue
+		}
+		sku := strings.TrimSpace(row[dataIdx])
+		if sku == "" {
+			continue
+		}
+
+		// Read the subsequent rows preserving offsets
+		valueLocation1 := rowNum + 1
+		valueLocation2 := rowNum + 2
+		valueLocation3 := rowNum + 3
+
+		getRow := func(vloc int) []string {
+			if vloc-1 >= 0 && vloc-1 < len(rowsReport) {
+				return rowsReport[vloc-1]
+			}
+			return nil
+		}
+
+		row1 := getRow(valueLocation1)
+		row2 := getRow(valueLocation2)
+		row3 := getRow(valueLocation3)
+
+		getCell := func(r []string, idx int) string {
+			if r == nil || idx < 0 || idx >= len(r) {
+				return ""
+			}
+			return r[idx]
+		}
+
+		var poNum1, poNum2, poNum3, onPO1, onPO2, onPO3 string
+
+		if row1 != nil {
+			poNum1 = getCell(row1, dataIdx)
+			poStatus1 := getCell(row1, poStatusIdx)
+			if poStatus1 == "Back Order" {
+				onPO1 = strings.ReplaceAll(getCell(row1, onPOBackIdx), ",", "")
+			} else {
+				onPO1 = strings.ReplaceAll(getCell(row1, onPOIdx), ",", "")
+			}
+		}
+		if row2 != nil {
+			poNum2 = getCell(row2, dataIdx)
+			poStatus2 := getCell(row2, poStatusIdx)
+			if poStatus2 == "Back Order" {
+				onPO2 = strings.ReplaceAll(getCell(row2, onPOBackIdx), ",", "")
+			} else {
+				onPO2 = strings.ReplaceAll(getCell(row2, onPOIdx), ",", "")
+			}
+		}
+		if row3 != nil {
+			poNum3 = getCell(row3, dataIdx)
+			poStatus3 := getCell(row3, poStatusIdx)
+			if poStatus3 == "Back Order" {
+				onPO3 = strings.ReplaceAll(getCell(row3, onPOBackIdx), ",", "")
+			} else {
+				onPO3 = strings.ReplaceAll(getCell(row3, onPOIdx), ",", "")
+			}
+		}
+
+		poMap[sku] = poEntry{
+			poNum1: strings.TrimSpace(poNum1),
+			onPO1:  strings.TrimSpace(onPO1),
+			poNum2: strings.TrimSpace(poNum2),
+			onPO2:  strings.TrimSpace(onPO2),
+			poNum3: strings.TrimSpace(poNum3),
+			onPO3:  strings.TrimSpace(onPO3),
+		}
+	}
 
 	// Progress bar
 	var bar helpers.Bar
@@ -396,156 +518,88 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 			continue // Skip rows with no onPO value in wsHotsheet
 		}
 
-		for rowWsReport := wsReportPointer; rowWsReport < len(rowsReport)+1; rowWsReport++ {
-			skuWsReport, err := wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, rowWsReport)) // SKU in column 'A' in wsReport
-			if err != nil {
-				return fmt.Errorf("failed to get SKU from report file %s: %w", u.POReport, err)
-			}
-			if skuWsReport == "" {
-				continue
-			}
+		skuKey := strings.TrimSpace(skuWsHotsheet)
+		entry, ok := poMap[skuKey]
+		if !ok {
+			continue
+		}
 
-			logger.Printf("Comparing Hotsheet SKU: [%d]-'%s' with Report SKU: [%d]-'%s'\n", rowWsHotsheet, skuWsHotsheet, rowWsReport, skuWsReport)
-			if strings.TrimSpace(skuWsHotsheet) == strings.TrimSpace(skuWsReport) {
-				valueLocation1 := rowWsReport + 1
-				valueLocation2 := rowWsReport + 2
-				valueLocation3 := rowWsReport + 3
-
-				// Get the PO numbers and the first PO amount
-				var poNum1, poNum2, poNum3, onPO1, poStatus1 string
-				if poNum1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation1)); err != nil {
-					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
-				}
-				if poNum2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation2)); err != nil {
-					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
-				}
-				if poNum3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", dataCol, valueLocation3)); err != nil {
-					return fmt.Errorf("failed to get PO number from report file %s: %w", u.POReport, err)
-				}
-				if poStatus1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation1)); err != nil {
-					return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
-				}
-				if poStatus1 == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
-					if onPO1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation1)); err != nil {
-						return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
-					}
-					// Remove the commas from the backorder value
-					onPO1 = strings.ReplaceAll(onPO1, ",", "")
-				} else { // If the PO status column is not 'Back Order', then get the onPO value
-					if onPO1, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation1)); err != nil {
-						return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
-					}
-					// Remove the commas from the onPO value
-					onPO1 = strings.ReplaceAll(onPO1, ",", "")
-				}
-
-				// Convert the values to an integer. On PO values have to use fmt.Sscanf
-				var onPO1Int int
-				poNum1Int, err := strconv.Atoi(poNum1)
-				if err != nil {
-					return fmt.Errorf("failed to convert PO number to integer: %w", err)
-				}
-				_, err = fmt.Sscan(onPO1, &onPO1Int)
-				if err != nil {
-					return fmt.Errorf("failed to convert onPO value to integer: %w", err)
-				}
-
-				// Update the PO number in the hotsheet
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), poNum1Int); err != nil {
-					return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
-				}
-				// Update the onPO value in the hotsheet
-				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol1, rowWsHotsheet), onPO1Int); err != nil {
-					return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
-				}
-				logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO1Int, poNum1Int)
-
-				// If poNum2 starts with "00"
-				if strings.HasPrefix(poNum2, "00") {
-					// Get the PO numbers and the second PO amount
-					var onPO2, poStatus2 string
-					if poStatus2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation2)); err != nil {
-						return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
-					}
-					if poStatus2 == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
-						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation2)); err != nil {
-							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
-						}
-						// Remove the comma from the backorder value
-						onPO2 = strings.ReplaceAll(onPO2, ",", "")
-					} else { // If the PO status column is not 'Back Order', then get the onPO value
-						if onPO2, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation2)); err != nil {
-							return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
-						}
-						// Remove the comma from the backorder value
-						onPO2 = strings.ReplaceAll(onPO2, ",", "")
-					}
-					// Convert the values to an integer
-					var onPO2Int int
-					poNum2Int, err := strconv.Atoi(poNum2)
-					if err != nil {
-						return fmt.Errorf("failed to convert PO number to integer: %w", err)
-					}
-					_, err = fmt.Sscan(onPO2, &onPO2Int)
-					if err != nil {
-						return fmt.Errorf("failed to convert onPO value to integer: %w", err)
-					}
-					// Update the PO number in the hotsheet
-					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), poNum2Int); err != nil {
-						return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
-					}
-					// Update the onPO value in the hotsheet
-					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), onPO2Int); err != nil {
-						return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
-					}
-					logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO2Int, poNum2Int)
-				}
-
-				// If poNum3 starts with "00"
-				if strings.HasPrefix(poNum3, "00") {
-					// Get the PO numbers and the second PO amount
-					var onPO3, poStatus3 string
-					if poStatus3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", POStatusCol, valueLocation3)); err != nil {
-						return fmt.Errorf("failed to get PO status from report file %s: %w", u.POReport, err)
-					}
-					if poStatus3 == "Back Order" { // If the PO status column is 'Back Order', then get the backorder value
-						if onPO3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOBackorderCol, valueLocation3)); err != nil {
-							return fmt.Errorf("failed to get backorder value from report file %s: %w", u.POReport, err)
-						}
-						// Remove the comma from the backorder value
-						onPO3 = strings.ReplaceAll(onPO3, ",", "")
-					} else { // If the PO status column is not 'Back Order', then get the onPO value
-						if onPO3, err = wbReport.GetCellValue(wsReport, fmt.Sprintf("%s%d", onPOCol, valueLocation3)); err != nil {
-							return fmt.Errorf("failed to get onPO value from report file %s: %w", u.POReport, err)
-						}
-						// Remove the comma from the onPO value
-						onPO3 = strings.ReplaceAll(onPO3, ",", "")
-					}
-					// Convert the values to an integer
-					poNum3Int, err := strconv.Atoi(poNum3)
-					if err != nil {
-						return fmt.Errorf("failed to convert PO number to integer: %w", err)
-					}
-					var onPO3Int int
-					_, err = fmt.Sscan(onPO3, &onPO3Int)
-					if err != nil {
-						return fmt.Errorf("failed to convert onPO value to integer: %w", err)
-					}
-					// Update the PO number in the hotsheet
-					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), poNum3Int); err != nil {
-						return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
-					}
-					// Update the onPO value in the hotsheet
-					if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), onPO3Int); err != nil {
-						return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
-					}
-					logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO3Int, poNum3Int)
-				}
-
-				wsReportPointer = rowWsReport + 1
-				break // Move to the next row in wsHotsheet once a match is found
+		// PO1
+		var onPO1Int int
+		poNum1Int := 0
+		if entry.poNum1 != "" {
+			if n, err := strconv.Atoi(entry.poNum1); err == nil {
+				poNum1Int = n
 			}
 		}
+		if entry.onPO1 != "" {
+			_, err = fmt.Sscan(entry.onPO1, &onPO1Int)
+			if err != nil {
+				logger.Printf("failed to parse onPO1 for SKU %s: %v\n", skuKey, err)
+			}
+		}
+		if poNum1Int != 0 {
+			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), poNum1Int); err != nil {
+				return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+			}
+			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol1, rowWsHotsheet), onPO1Int); err != nil {
+				return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
+			}
+			logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO1Int, poNum1Int)
+		}
+
+		// PO2 (only if starts with "00")
+		if strings.HasPrefix(entry.poNum2, "00") {
+			var onPO2Int int
+			poNum2Int := 0
+			if entry.poNum2 != "" {
+				if n, err := strconv.Atoi(entry.poNum2); err == nil {
+					poNum2Int = n
+				}
+			}
+			if entry.onPO2 != "" {
+				_, err = fmt.Sscan(entry.onPO2, &onPO2Int)
+				if err != nil {
+					logger.Printf("failed to parse onPO2 for SKU %s: %v\n", skuKey, err)
+				}
+			}
+			if poNum2Int != 0 {
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol2, rowWsHotsheet), poNum2Int); err != nil {
+					return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), onPO2Int); err != nil {
+					return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+				logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO2Int, poNum2Int)
+			}
+		}
+
+		// PO3 (only if starts with "00")
+		if strings.HasPrefix(entry.poNum3, "00") {
+			var onPO3Int int
+			poNum3Int := 0
+			if entry.poNum3 != "" {
+				if n, err := strconv.Atoi(entry.poNum3); err == nil {
+					poNum3Int = n
+				}
+			}
+			if entry.onPO3 != "" {
+				_, err = fmt.Sscan(entry.onPO3, &onPO3Int)
+				if err != nil {
+					logger.Printf("failed to parse onPO3 for SKU %s: %v\n", skuKey, err)
+				}
+			}
+			if poNum3Int != 0 {
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol3, rowWsHotsheet), poNum3Int); err != nil {
+					return fmt.Errorf("failed to set PO number in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+				if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), onPO3Int); err != nil {
+					return fmt.Errorf("failed to set onPO value in hotsheet file %s: %w", u.Hotsheet, err)
+				}
+				logger.Printf("%s has a quantity of %d on PO number %d\n", skuWsHotsheet, onPO3Int, poNum3Int)
+			}
+		}
+
 	}
 
 	if err := wbHotsheet.UpdateLinkedValue(); err != nil {
