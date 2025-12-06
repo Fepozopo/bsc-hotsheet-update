@@ -51,6 +51,9 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	}
 	defer logFile.Close()
 
+	// Track whether any parse errors occurred so we can notify the user once
+	var parseErrorOccurred bool
+
 	// Get the current date
 	currentDate := time.Now()
 
@@ -203,6 +206,8 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		// if any parse fails, skip this row but log the problem
 		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil || err6 != nil {
 			logger.Printf("Skipping SKU %s due to parse error: %v %v %v %v %v %v\n", sku, err1, err2, err3, err4, err5, err6)
+			// Mark that a parse error occurred so we can notify the user after processing
+			parseErrorOccurred = true
 			continue
 		}
 		reportMap[sku] = invData{
@@ -254,6 +259,8 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		bnValFloat, err := strconv.ParseFloat(bnYtdSoldStr, 64)
 		if err != nil {
 			logger.Printf("Skipping BN SKU %s due to parse error: %v\n", sku, err)
+			// Mark that a parse error occurred so we can notify the user after processing
+			parseErrorOccurred = true
 			continue
 		}
 		bnMap[sku] = int(bnValFloat)
@@ -339,6 +346,11 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		return fmt.Errorf("failed to save hotsheet file: %w", err)
 	}
 
+	// If any parse errors happened while reading the inventory/BN reports, let the user know to check the log file.
+	if parseErrorOccurred {
+		fmt.Printf("Parse errors occurred during inventory update; see log file: %s\n", logFile.Name())
+	}
+
 	bar.Finish()
 	return nil
 }
@@ -360,6 +372,9 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 		return fmt.Errorf("failed to create log file: %w", err)
 	}
 	defer logFile.Close()
+
+	// Track parse errors during PO processing so we can notify the user once
+	var parseErrorOccurred bool
 
 	// Open the report workbook
 	wbReport, err := excelize.OpenFile(u.POReport)
@@ -539,6 +554,8 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 			_, err = fmt.Sscan(entry.onPO1, &onPO1Int)
 			if err != nil {
 				logger.Printf("failed to parse onPO1 for SKU %s: %v\n", skuKey, err)
+				// mark that a parse error occurred and notify user later
+				parseErrorOccurred = true
 			}
 		}
 		if poNum1Int != 0 {
@@ -564,6 +581,8 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				_, err = fmt.Sscan(entry.onPO2, &onPO2Int)
 				if err != nil {
 					logger.Printf("failed to parse onPO2 for SKU %s: %v\n", skuKey, err)
+					// mark that a parse error occurred and notify user later
+					parseErrorOccurred = true
 				}
 			}
 			if poNum2Int != 0 {
@@ -590,6 +609,8 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 				_, err = fmt.Sscan(entry.onPO3, &onPO3Int)
 				if err != nil {
 					logger.Printf("failed to parse onPO3 for SKU %s: %v\n", skuKey, err)
+					// mark that a parse error occurred and notify user later
+					parseErrorOccurred = true
 				}
 			}
 			if poNum3Int != 0 {
@@ -610,6 +631,11 @@ func (u *Update) UpdatePONumber(product, occasion string) error {
 	}
 	if err := wbHotsheet.Save(); err != nil {
 		return fmt.Errorf("failed to save hotsheet file: %w", err)
+	}
+
+	// If any parse errors happened while reading the PO report, let the user know to check the log file.
+	if parseErrorOccurred {
+		fmt.Printf("Parse errors occurred during PO update; see log file: %s\n", logFile.Name())
 	}
 
 	bar.Finish()
