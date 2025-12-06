@@ -2,77 +2,105 @@
 
 ## Description
 
-This is a Go program that updates Excel documents with data from an 'Item Listing With Sales History' report pulled from Sage 100. It supports updating multiple product lines (21c, BSC, BJP, SMD) and their respective sheets (e.g., Everyday, Winter Holiday, Spring Holiday, A2 Notecards) in one run. The program automatically matches and updates PO numbers and quantities for each SKU, and provides a console progress bar for feedback during updates. All operations generate detailed logs in a dedicated `logs-bsc` folder in the system temp directory, with robust error handling for easier troubleshooting. The GUI allows you to select and update all product lines at once.
+This is a Go program with a small GUI (Fyne) that updates Excel hotsheets using data from an "Item Listing With Sales History" report pulled from Sage 100. It can update multiple product lines and their respective sheets in one run and automatically matches and updates PO numbers and quantities for each SKU. The program shows a GUI for selecting files and a console progress indicator during updates. Detailed logs are written to a `logs-bsc` folder inside the system temporary directory.
 
 ## Motivation
 
-I made this for my boss, who used to manually go through the reports and update the hotsheet himself—a process that took hours per product line. Now, with support for multiple product lines and automated PO updates, the program saves significant time and reduces errors. The progress bar and detailed logs make it easier to track updates and troubleshoot any issues quickly.
+This tool replaces the manual process of copying PO and inventory values into hotsheets. It significantly reduces time and human error by automating:
 
-## Prerequisites
+- Matching SKU rows,
+- Updating PO quantities and numbers,
+- Copying a source hotsheet and writing an updated file,
+- Writing detailed logs for troubleshooting.
 
-Before you begin, ensure you have the following installed on your system:
+## Requirements
 
-- Go programming language (version 1.16 or later)
-- A C compiler for your target platform (e.g., GCC for Linux, Clang for macOS, or MinGW for Windows) because this program uses the Fyne GUI toolkit, which requires C bindings.
-- You can optionally use zig as a C cross-compiler for all OS targets. The Makefile uses zig for Windows and Linux by default, but you can also use it for macOS if you aren't on that platform.
+- Go 1.16+ (recommended latest stable Go)
+- A C compiler for CGO (Fyne requires C bindings):
+  - The Makefile uses `zig` for cross compilation targets. If you don't have zig, you can adjust the Makefile to use a local C compiler (e.g., `clang` or `gcc`).
+  - For macOS builds the provided target uses `clang`.
+- Fyne GUI dependencies are handled by Go modules in `go.mod`.
+- Internet access is required for the built-in auto-update check to contact GitHub releases.
 
 ## Quick Start
 
-1. Clone the repository and navigate to the project root in a terminal.
-2. Run `make <target>` to build and run the program. Replace `<target>` with one of the following targets: `windows-x86_64`, `windows-arm`, `linux-x86_64`, `linux-arm`, `macos-arm`.
+1. Clone the repository and open the project root.
+2. Build for your platform using one of the Makefile targets. Example targets:
+   - `make windows-amd64`
+   - `make windows-arm64`
+   - `make linux-amd64`
+   - `make linux-arm64`
+   - `make darwin-arm64` (macOS ARM64)
+   - `make all` (builds all targets)
+   - `make clean` (removes the `bin` folder)
 
-## Usage
+Built binaries are placed in the `bin` directory and are named like `hotsheet-windows-amd64.exe`, `hotsheet-linux-amd64`, `hotsheet-darwin-arm64`, etc.
 
-1. You can modify the values in each case to adjust which sheets and columns contain each value in the hotsheet. The updater supports multiple product lines and sheets, and will automatically match and update PO numbers and quantities for each SKU from the PO report.
-```go
-everyday := Update{
-	Hotsheet:          fileHotsheetNew,
-	Sheet:             "EVERYDAY",
-	InventoryReport:   inventoryReport,
-	POReport:          POReport,
-	SkuCol:            "C",
-	OnHandCol:         "D",
-	OnPOCol1:          "E",
-	OnPOCol2:          "G",
-	OnPOCol3:          "I",
-	OnPOColTotal:      "K",
-	OnSOBOCol:         "L",
-	YtdSoldIssuedCol:  "Q",
-	PONumCol1:         "F",
-	PONumCol2:         "H",
-	PONumCol3:         "J",
-	AverageMonthlyCol: "R",
-}
-```
-2. The program will open a GUI window to select the product line(s) to update and the files to update. You can select and update all product lines at once.
-3. Select the Excel document(s) you want to update, the stock report file, and the sales report file.
-4. The program will create new updated Excel documents with the data from the two reports, showing a progress bar in the console during the update.
-5. All logs are stored in a 'logs-bsc' folder in the temp directory after each update, making troubleshooting easier if any issues arise.
+Notes about building:
 
-## Building the Program
+- The Makefile sets `CGO_ENABLED=1` and uses `zig cc` for cross compilation. If you prefer another toolchain, edit the corresponding target.
 
-To build the program, I've included a Makefile. You can run `make <target>` to build the program for different platforms. You can also run `make clean` to remove the `bin` folder that contains the compiled binaries.
-The targets are:
-```bash
-make windows-x86_64
-make windows-arm
-make linux-x86_64
-make linux-arm
-make macos-arm
-```
-You can also run `make all` to build all the targets or `make clean` to remove the binaries and bin folder.
+## Usage (GUI)
 
-These commands will build the program for the specified platform and output the binary to the `bin` folder.
+1. Run the built binary (or run `go run .` during development).
+2. The application window asks which hotsheet you want to update. Options include:
+   - All (updates 21c, BSC, SMD — BJP is excluded from the "All" option)
+   - 21c
+   - BJP
+   - BSC
+   - SMD
+3. Hotsheet file selection:
+   - If you choose a single product (e.g., `BSC`), only that product's hotsheet file selector is shown and is required.
+   - If you choose `All`, three hotsheet file entries are required (in the UI these correspond to the 21c, BSC, and SMD hotsheet selectors). You must fill all three when selecting `All`.
+   - The "Next" button (to select reports) is enabled only after the required hotsheet file(s) are chosen.
+4. Reports:
+   - Inventory report: required
+   - PO report: required
+   - BN report: optional — enable the "Include BN report (optional)" checkbox to show the BN selector (if checked, a BN file must be chosen).
+5. Submit: After validation, the app copies the selected hotsheet(s) and performs updates using the selected reports. Progress is shown in the console and operations are logged.
 
-## 🤝 Contributing
+Important behaviors:
 
-### Clone the repo
+- "All" maps to the following required hotsheet files: 21c, BSC, SMD (in that order). The program will attempt to update these three product lines in that order.
+- If you want to update BJP, choose it explicitly (do not use "All" — BJP is not included in "All").
 
-```bash
-git clone https://github.com/Fepozopo/bsc-hotsheet-update
-cd bsc-hotsheet-update
-```
+## Logs
 
-### Submit a pull request
+Logs are written to a `logs-bsc` directory inside the OS temporary directory. The logger creates files with a timestamped name and includes product/occasion information when available. Example file name patterns:
 
-Sorry, I'm not accepting pull requests at this time.
+- `YYYY-MM-DD_HHMMSS.sssssss_NAME.log`
+- `YYYY-MM-DD_HHMMSS.sssssss_NAME-PRODUCT-OCCASION.log`
+
+The logger implementation lives in `helpers/create_logger.go`.
+
+## Auto-update
+
+The GUI performs a GitHub release check (using `go-github-selfupdate`) on startup:
+
+- If a newer release is found, the user is prompted to update.
+- When an update is accepted the app downloads the new asset, attempts to replace the executable, and restarts the new binary.
+- If update checks fail, an error dialog is shown.
+
+## Example: Update struct usage
+
+You can still configure which columns and sheets to update via the `Update{...}` struct usage in code. An example snippet used in the codebase (this is illustrative; edit code in `hotsheet` package where needed):
+`Update{ Hotsheet: fileHotsheetNew, Sheet: "EVERYDAY", SkuCol: "C", OnHandCol: "D", ... }`
+
+(See `hotsheet/update.go` and the various `case_*.go` files for concrete examples.)
+
+## Files of interest
+
+- `main.go` — app entry; orchestrates file selection and per-product updating.
+- `app.go` — GUI logic, file selection, validation, and update checks.
+- `hotsheet/` — core logic for copying and updating hotsheet Excel files:
+  - `case_21c.go`, `case_bsc.go`, `case_bjp.go`, `case_smd.go`
+  - `copy_hotsheet.go`, `update.go`
+- `helpers/` — logger and progress bar helpers.
+- `internal/version/version.go` — application version string (update before releases).
+- `Makefile` — build targets and instructions.
+
+## Troubleshooting
+
+- If the GUI reports the auto-update failed, check internet connectivity and permissions to replace the executable.
+- If logs are missing, check your OS temp directory for `logs-bsc` and verify the process has permission to write to it.
+- If a build fails due to missing `zig`, either install `zig` (recommended for cross-compiles) or edit the Makefile to use another CC for your environment.
