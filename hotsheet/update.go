@@ -158,8 +158,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	ytdSoldIdx := colToIndex(ytdSoldCol)
 	ytdIssuedIdx := colToIndex(ytdIssuedCol)
 
-	// rowsReport is a slice of rows; the original code used 1-based row numbers and then
-	// used valueLocation := rowWsReport + 2 when reading numeric fields.
+	// rowsReport is a slice of rows
 	for rowNum := 1; rowNum < len(rowsReport)+1; rowNum++ {
 		// get SKU at rowNum (which corresponds to rowsReport[rowNum-1])
 		if rowNum-1 >= len(rowsReport) {
@@ -173,7 +172,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		if sku == "" {
 			continue
 		}
-		// valueLocation := rowNum + 2 (preserve original offset)
+		// valueLocation := rowNum + 2
 		valueLocation := rowNum + 2
 		if valueLocation-1 >= len(rowsReport) {
 			continue
@@ -279,7 +278,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 
 		data, ok := reportMap[skuKey]
 		if !ok {
-			// no match, clear PO columns (as original didn't clear everything on misses, we keep same behavior)
+			// no match, clear PO columns
 			continue
 		}
 
