@@ -155,7 +155,7 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 	}
 
 	// Report labels/controls (built separately and only added after Next)
-	reportHeader := widget.NewLabelWithStyle("Select Report Files (Inventory and PO required, BN optional):", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	reportHeader := widget.NewLabelWithStyle("(Inventory and PO required, BN optional):", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	inventoryLabel := widget.NewLabelWithStyle("Inventory Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	poLabel := widget.NewLabelWithStyle("PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	bnLabel := widget.NewLabelWithStyle("BN Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
@@ -250,14 +250,17 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 
 	// Next button: initially disabled until required hotsheet file(s) are filled for the selection
 	nextButton = widget.NewButton("Next: Reports", func() {
-		// When Next is pressed, hide the hotsheet selection rows (they're saved in the entries) and show reports section
-		// Reset content to header + select and do NOT re-add the hotsheet rows (keeps UI uncluttered)
-		content.Objects = content.Objects[:2]
+		// When Next is pressed, hide the hotsheet selection rows and show a smaller title + the reports section
+		// Clear the existing content and show a compact Reports title to reduce clutter
+		content.Objects = content.Objects[:0]
 
-		// Add reports section (inventory, PO, BN checkbox, submit)
-		content.Add(layout.NewSpacer())
+		// Smaller title replacing the original header and select
+		reportTitle := widget.NewLabelWithStyle("Select Report Files", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		content.Add(reportTitle)
 		content.Add(reportHeader)
+		content.Add(layout.NewSpacer())
 
+		// Add reports section
 		content.Add(inventoryLabel)
 		content.Add(files[4])
 		content.Add(buttons[4])
