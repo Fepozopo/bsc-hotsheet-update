@@ -28,7 +28,7 @@ func main() {
 	selection, hotsheetPaths, inventoryReport, poReport, bnReport := selectFiles(myApp)
 
 	// If no files are selected, exit
-	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" || bnReport == "" {
+	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" {
 		logger.Printf("not all files were selected")
 		return
 	}

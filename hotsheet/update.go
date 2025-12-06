@@ -79,19 +79,13 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	}
 	defer wbHotsheet.Close()
 
-	// Open the BN report workbook
-	wbReportBN, err := excelize.OpenFile(u.BNReport)
-	if err != nil {
-		return fmt.Errorf("failed to open BN report file %s: %w", u.BNReport, err)
-	}
-	defer wbReportBN.Close()
-
+	// Open (optionally) the BN report workbook. BN report is optional — only open/read if a path was provided.
 	// Get the sheets
 	wsReport := "Sheet1"
 	wsHotsheet := u.Sheet
 	wsReportBN := "Sheet1"
 
-	// Get the rows
+	// Get the rows for hotsheet and inventory report (required)
 	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
 	if err != nil {
 		return fmt.Errorf("failed to get rows from hotsheet file %s: %w", u.Hotsheet, err)
@@ -100,9 +94,24 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get rows from report file %s: %w", u.InventoryReport, err)
 	}
-	rowsReportBN, err := wbReportBN.GetRows(wsReportBN)
-	if err != nil {
-		return fmt.Errorf("failed to get rows from BN report file %s: %w", u.BNReport, err)
+
+	// Prepare BN rows optionally. If no BNReport path provided, leave rowsReportBN empty so downstream BN logic is skipped.
+	var wbReportBN *excelize.File
+	var rowsReportBN [][]string
+	if strings.TrimSpace(u.BNReport) != "" {
+		wbReportBN, err = excelize.OpenFile(u.BNReport)
+		if err != nil {
+			return fmt.Errorf("failed to open BN report file %s: %w", u.BNReport, err)
+		}
+		defer wbReportBN.Close()
+
+		rowsReportBN, err = wbReportBN.GetRows(wsReportBN)
+		if err != nil {
+			return fmt.Errorf("failed to get rows from BN report file %s: %w", u.BNReport, err)
+		}
+	} else {
+		// no BN report supplied — keep rowsReportBN empty
+		rowsReportBN = [][]string{}
 	}
 
 	skuCol := "B"       // 'B' column index in wsReport
