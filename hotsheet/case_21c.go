@@ -30,6 +30,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		AverageMonthlyCol:   "R",
 		BNYtdSoldCol:        "T",
 		BNAverageMonthlyCol: "U",
+		UpcCol:              "Y",
 	}
 	winter := Update{
 		Hotsheet:            fileHotsheetNew,
@@ -51,6 +52,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		AverageMonthlyCol:   "R",
 		BNYtdSoldCol:        "T",
 		BNAverageMonthlyCol: "U",
+		UpcCol:              "Y",
 	}
 	spring := Update{
 		Hotsheet:            fileHotsheetNew,
@@ -72,6 +74,7 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		AverageMonthlyCol:   "R",
 		BNYtdSoldCol:        "T",
 		BNAverageMonthlyCol: "U",
+		UpcCol:              "Y",
 	}
 
 	// Update the hotsheet

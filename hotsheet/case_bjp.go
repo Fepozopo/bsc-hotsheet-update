@@ -30,6 +30,7 @@ func CaseBJP(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		AverageMonthlyCol:   "O",
 		BNYtdSoldCol:        "Q",
 		BNAverageMonthlyCol: "R",
+		UpcCol:              "U",
 	}
 
 	// Update the hotsheet

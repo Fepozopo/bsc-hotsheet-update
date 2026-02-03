@@ -16,6 +16,7 @@ type Update struct {
 	InventoryReport     string
 	POReport            string
 	BNReport            string
+	UpcCol              string
 	SkuCol              string
 	OnHandCol           string
 	OnPOCol1            string
@@ -121,6 +122,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	onBOCol := "H"      // 'H' column index in wsReport
 	ytdSoldCol := "L"   // 'L' column index in wsReport
 	ytdIssuedCol := "N" // 'N' column index in wsReport
+	upcCol := "P"       // 'P' column index in wsReport
 
 	bnSkuCol := "J"     // 'J' column index in wsReportBN
 	bnYtdSoldCol := "O" // 'O' column index in wsReportBN
@@ -152,7 +154,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		return int(f), nil
 	}
 
-	// Build a map of inventory data keyed by SKU using the same offsets the original code used.
+	// Build a map of inventory data keyed by SKU
 	type invData struct {
 		onHand    int
 		onPO      int
@@ -160,6 +162,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		onBO      int
 		ytdSold   int
 		ytdIssued int
+		upc       string
 	}
 	reportMap := make(map[string]invData)
 	skuIdx := colToIndex(skuCol)
@@ -169,6 +172,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	onBOIdx := colToIndex(onBOCol)
 	ytdSoldIdx := colToIndex(ytdSoldCol)
 	ytdIssuedIdx := colToIndex(ytdIssuedCol)
+	upcIdx := colToIndex(upcCol)
 
 	// rowsReport is a slice of rows
 	for rowNum := 1; rowNum < len(rowsReport)+1; rowNum++ {
@@ -205,6 +209,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		onBOStr := strings.ReplaceAll(getCell(onBOIdx), ",", "")
 		ytdSoldStr := strings.ReplaceAll(getCell(ytdSoldIdx), ",", "")
 		ytdIssuedStr := strings.ReplaceAll(getCell(ytdIssuedIdx), ",", "")
+		upcStr := strings.TrimSpace(getCell(upcIdx))
 
 		onHandInt, err1 := parseNum(onHandStr)
 		onPOInt, err2 := parseNum(onPOStr)
@@ -226,6 +231,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 			onBO:      onBOInt,
 			ytdSold:   ytdSoldInt,
 			ytdIssued: ytdIssuedInt,
+			upc:       upcStr,
 		}
 	}
 
@@ -319,6 +325,12 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.AverageMonthlyCol, rowWsHotsheet), averageMonthly); err != nil {
 			return fmt.Errorf("failed to set averageMonthly value in hotsheet file: %w", err)
 		}
+		// Write UPC to hotsheet if destination column provided
+		if strings.TrimSpace(u.UpcCol) != "" {
+			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.UpcCol, rowWsHotsheet), data.upc); err != nil {
+				return fmt.Errorf("failed to set UPC value in hotsheet file: %w", err)
+			}
+		}
 
 		// Remove the old PO number and old PO quantities
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.PONumCol1, rowWsHotsheet), "")
@@ -332,7 +344,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), "")
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), "")
 
-		logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d\n", skuWsHotsheet, data.onHand, data.onPO, data.onSO, data.onBO, data.ytdSold, data.ytdIssued)
+		logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d | upcCol: %s\n", skuWsHotsheet, data.onHand, data.onPO, data.onSO, data.onBO, data.ytdSold, data.ytdIssued, data.upc)
 		// BN handling: lookup in bnMap
 		if bnVal, ok := bnMap[skuKey]; ok {
 			bnYtdSoldInt := bnVal

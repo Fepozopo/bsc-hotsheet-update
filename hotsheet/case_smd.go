@@ -30,6 +30,7 @@ func CaseSMD(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		AverageMonthlyCol:   "T",
 		BNYtdSoldCol:        "V",
 		BNAverageMonthlyCol: "W",
+		UpcCol:              "Z",
 	}
 	holiday := Update{
 		Hotsheet:            fileHotsheetNew,
@@ -51,6 +52,7 @@ func CaseSMD(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		AverageMonthlyCol:   "T",
 		BNYtdSoldCol:        "V",
 		BNAverageMonthlyCol: "W",
+		UpcCol:              "Z",
 	}
 
 	// Update the hotsheet
