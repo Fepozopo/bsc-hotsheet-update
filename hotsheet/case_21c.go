@@ -9,13 +9,12 @@ import (
 //
 // This function is called by the main function when the user selects '21C' as the product
 // line.
-func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error {
+func Case21C(fileHotsheetNew, inventoryReport, POReport string) error {
 	everyday := Update{
 		Hotsheet:            fileHotsheetNew,
 		Sheet:               "EVERYDAY",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "C",
 		OnHandCol:           "D",
 		OnPOCol1:            "E",
@@ -28,8 +27,6 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "H",
 		PONumCol3:           "J",
 		AverageMonthlyCol:   "R",
-		BNYtdSoldCol:        "T",
-		BNAverageMonthlyCol: "U",
 		UpcCol:              "Y",
 	}
 	winter := Update{
@@ -37,7 +34,6 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		Sheet:               "Winter Holiday",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "C",
 		OnHandCol:           "D",
 		OnPOCol1:            "E",
@@ -50,8 +46,6 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "H",
 		PONumCol3:           "J",
 		AverageMonthlyCol:   "R",
-		BNYtdSoldCol:        "T",
-		BNAverageMonthlyCol: "U",
 		UpcCol:              "Y",
 	}
 	spring := Update{
@@ -59,7 +53,6 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		Sheet:               "Spring Holiday",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "C",
 		OnHandCol:           "D",
 		OnPOCol1:            "E",
@@ -72,8 +65,6 @@ func Case21C(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "H",
 		PONumCol3:           "J",
 		AverageMonthlyCol:   "R",
-		BNYtdSoldCol:        "T",
-		BNAverageMonthlyCol: "U",
 		UpcCol:              "Y",
 	}
 

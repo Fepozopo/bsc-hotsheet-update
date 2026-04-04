@@ -99,14 +99,14 @@ func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 // selectFiles creates a GUI window that asks for which hotsheet(s) to update first and then
 // asks for report files. The reports section only appears after the user selects a hotsheet file
 // and clicks Next. The Next button is enabled only when required hotsheet file(s) are filled.
-func selectFiles(a fyne.App) (string, []string, string, string, string) {
+func selectFiles(a fyne.App) (string, []string, string, string) {
 	window := a.NewWindow("Hotsheet Updater")
 	checkForUpdates(window, false)
 	window.Resize(fyne.NewSize(900, 800))
 
-	// 4 hotsheets + 3 reports
-	files := make([]*widget.Entry, 7)
-	buttons := make([]*widget.Button, 7)
+	// 4 hotsheets + 2 reports
+	files := make([]*widget.Entry, 6)
+	buttons := make([]*widget.Button, 6)
 
 	options := []string{"All", "21c", "BJP", "BSC", "SMD"}
 	list := widget.NewSelect(options, nil)
@@ -138,7 +138,6 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 	var hotsheetPaths []string
 	var inventoryReportPath string
 	var poReportPath string
-	var bnReportPath string
 
 	hotsheetLabels := []string{"21c Hotsheet:", "BJP Hotsheet:", "BSC Hotsheet:", "SMD Hotsheet:"}
 
@@ -155,11 +154,9 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 	}
 
 	// Report labels/controls (built separately and only added after Next)
-	reportHeader := widget.NewLabelWithStyle("(Inventory and PO required, BN optional):", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	reportHeader := widget.NewLabelWithStyle("(Inventory and PO required):", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	inventoryLabel := widget.NewLabelWithStyle("Inventory Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	poLabel := widget.NewLabelWithStyle("PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	bnLabel := widget.NewLabelWithStyle("BN Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	bnCheck := widget.NewCheck("Include BN report (optional)", nil)
 
 	// Submit button (will be shown in reports view)
 	submitButton := widget.NewButton("Submit", func() {
@@ -184,12 +181,6 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 
 		inventoryReportPath = files[4].Text
 		poReportPath = files[5].Text
-		if bnCheck.Checked {
-			bnReportPath = files[6].Text
-		} else {
-			bnReportPath = ""
-		}
-
 		// Validation
 		if inventoryReportPath == "" {
 			dialog.ShowError(errors.New("Inventory report is required"), window)
@@ -197,10 +188,6 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 		}
 		if poReportPath == "" {
 			dialog.ShowError(errors.New("PO report is required"), window)
-			return
-		}
-		if bnCheck.Checked && bnReportPath == "" {
-			dialog.ShowError(errors.New("BN report selected to be included but no file chosen"), window)
 			return
 		}
 
@@ -273,14 +260,6 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 
 		content.Add(layout.NewSpacer())
 
-		content.Add(bnCheck)
-		// If checkbox already checked (unlikely at this point) show BN inputs
-		if bnCheck.Checked {
-			content.Add(bnLabel)
-			content.Add(files[6])
-			content.Add(buttons[6])
-		}
-
 		content.Add(layout.NewSpacer())
 		content.Add(submitButton)
 		content.Refresh()
@@ -342,48 +321,7 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 		content.Refresh()
 	}
 
-	// bnCheck toggles showing the BN file inputs when reports area is visible.
-	bnCheck.OnChanged = func(checked bool) {
-		// If reports haven't been added yet, nothing to do
-		hasReports := false
-		for _, obj := range content.Objects {
-			if obj == reportHeader {
-				hasReports = true
-				break
-			}
-		}
-		if !hasReports {
-			return
-		}
-		if checked {
-			// insert BN inputs after the checkbox
-			idx := -1
-			for i, obj := range content.Objects {
-				if obj == bnCheck {
-					idx = i
-					break
-				}
-			}
-			if idx != -1 {
-				after := make([]fyne.CanvasObject, 0, len(content.Objects)+3)
-				after = append(after, content.Objects[:idx+1]...)
-				after = append(after, bnLabel, files[6], buttons[6])
-				after = append(after, content.Objects[idx+1:]...)
-				content.Objects = after
-			}
-		} else {
-			// remove BN inputs if present
-			newObjs := make([]fyne.CanvasObject, 0, len(content.Objects))
-			for _, obj := range content.Objects {
-				if obj == bnLabel || obj == files[6] || obj == buttons[6] {
-					continue
-				}
-				newObjs = append(newObjs, obj)
-			}
-			content.Objects = newObjs
-		}
-		content.Refresh()
-	}
+	// BN support removed; nothing to toggle here.
 
 	// Ensure the window closes cleanly
 	window.SetCloseIntercept(func() {
@@ -393,5 +331,5 @@ func selectFiles(a fyne.App) (string, []string, string, string, string) {
 	window.SetContent(content)
 	window.ShowAndRun()
 
-	return selection, hotsheetPaths, inventoryReportPath, poReportPath, bnReportPath
+	return selection, hotsheetPaths, inventoryReportPath, poReportPath
 }

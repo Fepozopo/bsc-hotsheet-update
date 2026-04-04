@@ -56,7 +56,6 @@ Notes about building:
 4. Reports:
    - Inventory report: required
    - PO report: required
-   - BN report: optional — enable the "Include BN report (optional)" checkbox to show the BN selector (if checked, a BN file must be chosen).
 5. Submit: After validation, the app copies the selected hotsheet(s) and performs updates using the selected reports. Progress is shown in the console and operations are logged.
 
 Important behaviors:

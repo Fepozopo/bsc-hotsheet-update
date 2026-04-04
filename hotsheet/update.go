@@ -15,7 +15,6 @@ type Update struct {
 	Sheet               string
 	InventoryReport     string
 	POReport            string
-	BNReport            string
 	UpcCol              string
 	SkuCol              string
 	OnHandCol           string
@@ -29,8 +28,6 @@ type Update struct {
 	PONumCol2           string
 	PONumCol3           string
 	AverageMonthlyCol   string
-	BNYtdSoldCol        string
-	BNAverageMonthlyCol string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -80,11 +77,9 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	}
 	defer wbHotsheet.Close()
 
-	// Open (optionally) the BN report workbook. BN report is optional — only open/read if a path was provided.
 	// Get the sheets
 	wsReport := "Sheet1"
 	wsHotsheet := u.Sheet
-	wsReportBN := "Sheet1"
 
 	// Get the rows for hotsheet and inventory report (required)
 	rowsHotsheet, err := wbHotsheet.GetRows(wsHotsheet)
@@ -96,24 +91,6 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		return fmt.Errorf("failed to get rows from report file %s: %w", u.InventoryReport, err)
 	}
 
-	// Prepare BN rows optionally. If no BNReport path provided, leave rowsReportBN empty so downstream BN logic is skipped.
-	var wbReportBN *excelize.File
-	var rowsReportBN [][]string
-	if strings.TrimSpace(u.BNReport) != "" {
-		wbReportBN, err = excelize.OpenFile(u.BNReport)
-		if err != nil {
-			return fmt.Errorf("failed to open BN report file %s: %w", u.BNReport, err)
-		}
-		defer wbReportBN.Close()
-
-		rowsReportBN, err = wbReportBN.GetRows(wsReportBN)
-		if err != nil {
-			return fmt.Errorf("failed to get rows from BN report file %s: %w", u.BNReport, err)
-		}
-	} else {
-		// no BN report supplied — keep rowsReportBN empty
-		rowsReportBN = [][]string{}
-	}
 
 	skuCol := "B"       // 'B' column index in wsReport
 	onHandCol := "B"    // 'B' column index in wsReport
@@ -123,9 +100,6 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	ytdSoldCol := "L"   // 'L' column index in wsReport
 	ytdIssuedCol := "N" // 'N' column index in wsReport
 	upcCol := "P"       // 'P' column index in wsReport
-
-	bnSkuCol := "J"     // 'J' column index in wsReportBN
-	bnYtdSoldCol := "O" // 'O' column index in wsReportBN
 
 	// helper: convert column letter(s) to zero-based index (A -> 0, B -> 1, ...)
 	colToIndex := func(col string) int {
@@ -235,51 +209,6 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		}
 	}
 
-	// Build BN map using an offset of +1
-	bnMap := make(map[string]int)
-	bnSkuIdx := colToIndex(bnSkuCol)
-	bnYtdSoldIdx := colToIndex(bnYtdSoldCol)
-	for rowNum := 1; rowNum < len(rowsReportBN)+1; rowNum++ {
-		if rowNum-1 >= len(rowsReportBN) {
-			continue
-		}
-		row := rowsReportBN[rowNum-1]
-		if bnSkuIdx >= len(row) {
-			continue
-		}
-		sku := strings.TrimSpace(row[bnSkuIdx])
-		if sku == "" {
-			continue
-		}
-		// valueLocationBN := rowNum + 1
-		valueLocationBN := rowNum + 1
-		if valueLocationBN-1 >= len(rowsReportBN) {
-			continue
-		}
-		valRow := rowsReportBN[valueLocationBN-1]
-		getCell := func(idx int) string {
-			if idx < 0 || idx >= len(valRow) {
-				return ""
-			}
-			return valRow[idx]
-		}
-		bnYtdSoldStr := strings.ReplaceAll(getCell(bnYtdSoldIdx), ",", "")
-		if strings.HasSuffix(bnYtdSoldStr, "-") {
-			bnYtdSoldStr = "-" + strings.TrimSuffix(bnYtdSoldStr, "-")
-		}
-		if bnYtdSoldStr == "" {
-			bnMap[sku] = 0
-			continue
-		}
-		bnValFloat, err := strconv.ParseFloat(bnYtdSoldStr, 64)
-		if err != nil {
-			logger.Printf("Skipping BN SKU %s due to parse error: %v\n", sku, err)
-			// Mark that a parse error occurred so we can notify the user after processing
-			parseErrorOccurred = true
-			continue
-		}
-		bnMap[sku] = int(bnValFloat)
-	}
 
 	// Progress bar
 	var bar helpers.Bar
@@ -340,24 +269,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol2, rowWsHotsheet), "")
 		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.OnPOCol3, rowWsHotsheet), "")
 
-		// Remove possibly old BN values
-		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), "")
-		wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), "")
-
 		logger.Printf("Match found for SKU: %s | onHand: %d | onPO: %d | onSO: %d | onBO: %d | ytdSold: %d | ytdIssued: %d | upcCol: %s\n", skuWsHotsheet, data.onHand, data.onPO, data.onSO, data.onBO, data.ytdSold, data.ytdIssued, data.upc)
-		// BN handling: lookup in bnMap
-		if bnVal, ok := bnMap[skuKey]; ok {
-			bnYtdSoldInt := bnVal
-			bnYtdSoldIssuedInt := (data.ytdSold + data.ytdIssued) - bnYtdSoldInt
-			bnAverageMonthly := float64(bnYtdSoldIssuedInt) / monthFloat
-			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNYtdSoldCol, rowWsHotsheet), bnYtdSoldIssuedInt); err != nil {
-				return fmt.Errorf("failed to set BN YTD Sold value in hotsheet file: %w", err)
-			}
-			if err := wbHotsheet.SetCellValue(wsHotsheet, fmt.Sprintf("%s%d", u.BNAverageMonthlyCol, rowWsHotsheet), bnAverageMonthly); err != nil {
-				return fmt.Errorf("failed to set BN average monthly value in hotsheet file: %w", err)
-			}
-			logger.Printf("BN Match found for SKU: %s | BN YTD Sold: %d\n", skuWsHotsheet, bnYtdSoldInt)
-		}
 	}
 
 	if err := wbHotsheet.UpdateLinkedValue(); err != nil {
@@ -367,7 +279,7 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 		return fmt.Errorf("failed to save hotsheet file: %w", err)
 	}
 
-	// If any parse errors happened while reading the inventory/BN reports, let the user know to check the log file.
+	// If any parse errors happened while reading the inventory reports, let the user know to check the log file.
 	if parseErrorOccurred {
 		fmt.Printf("Parse errors occurred during inventory update; see log file: %s\n", logFile.Name())
 	}

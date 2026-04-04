@@ -9,13 +9,12 @@ import (
 //
 // This function is called by the main function when the user selects 'BSC' as the product
 // line.
-func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error {
+func CaseBSC(fileHotsheetNew, inventoryReport, POReport string) error {
 	everyday := Update{
 		Hotsheet:            fileHotsheetNew,
 		Sheet:               "Everyday",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "D",
 		OnHandCol:           "E",
 		OnPOCol1:            "F",
@@ -28,8 +27,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "I",
 		PONumCol3:           "K",
 		AverageMonthlyCol:   "Q",
-		BNYtdSoldCol:        "S",
-		BNAverageMonthlyCol: "T",
 		UpcCol:              "V",
 	}
 	winter := Update{
@@ -37,7 +34,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		Sheet:               "Winter Holiday",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "E",
 		OnHandCol:           "F",
 		OnPOCol1:            "I",
@@ -50,8 +46,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "L",
 		PONumCol3:           "N",
 		AverageMonthlyCol:   "R",
-		BNYtdSoldCol:        "T",
-		BNAverageMonthlyCol: "U",
 		UpcCol:              "W",
 	}
 	spring := Update{
@@ -59,7 +53,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		Sheet:               "Spring Holiday",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "D",
 		OnHandCol:           "E",
 		OnPOCol1:            "G",
@@ -72,8 +65,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "J",
 		PONumCol3:           "L",
 		AverageMonthlyCol:   "Q",
-		BNYtdSoldCol:        "S",
-		BNAverageMonthlyCol: "T",
 		UpcCol:              "V",
 	}
 	a2Notecards := Update{
@@ -81,7 +72,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		Sheet:               "A2 Notecards",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "D",
 		OnHandCol:           "E",
 		OnPOCol1:            "F",
@@ -94,8 +84,6 @@ func CaseBSC(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "I",
 		PONumCol3:           "K",
 		AverageMonthlyCol:   "Q",
-		BNYtdSoldCol:        "S",
-		BNAverageMonthlyCol: "T",
 		UpcCol:              "V",
 	}
 

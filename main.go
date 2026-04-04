@@ -25,7 +25,7 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	selection, hotsheetPaths, inventoryReport, poReport, bnReport := selectFiles(myApp)
+	selection, hotsheetPaths, inventoryReport, poReport := selectFiles(myApp)
 
 	// If no files are selected, exit
 	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" {
@@ -36,7 +36,7 @@ func main() {
 	if selection == "All" {
 		products := []struct {
 			name       string
-			updateFunc func(string, string, string, string) error
+			updateFunc func(string, string, string) error
 		}{
 			{"21c", hotsheet.Case21C},
 			{"BSC", hotsheet.CaseBSC},
@@ -57,7 +57,7 @@ func main() {
 				logger.Printf("failed to copy %s hotsheet file: %v", p.name, err)
 				continue
 			}
-			if err := p.updateFunc(fileHotsheetNew, inventoryReport, poReport, bnReport); err != nil {
+			if err := p.updateFunc(fileHotsheetNew, inventoryReport, poReport); err != nil {
 				logger.Printf("failed to update %s hotsheet: %v", p.name, err)
 			} else {
 				fmt.Printf("%s hotsheet updated successfully.\n", p.name)
@@ -80,13 +80,13 @@ func main() {
 		var updateErr error
 		switch selection {
 		case "21c":
-			updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport, bnReport)
+			updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
 		case "BJP":
-			updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport, bnReport)
+			updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
 		case "BSC":
-			updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport, bnReport)
+			updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
 		case "SMD":
-			updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport, bnReport)
+			updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
 		default:
 			logger.Printf("unknown product: %s", selection)
 			return
