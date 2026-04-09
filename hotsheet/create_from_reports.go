@@ -139,17 +139,11 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				onPOCol := "I"
 				onPOBackorderCol := "K"
 				poStatusCol := "G"
-				poNumCol1 := "F"
-				poNumCol2 := "H"
-				poNumCol3 := "J"
 
 				dataIdx := colToIndex(dataCol)
 				onPOIdx := colToIndex(onPOCol)
 				onPOBackIdx := colToIndex(onPOBackorderCol)
 				poStatusIdx := colToIndex(poStatusCol)
-				poNum1Idx := colToIndex(poNumCol1)
-				poNum2Idx := colToIndex(poNumCol2)
-				poNum3Idx := colToIndex(poNumCol3)
 
 				for rowNum := 1; rowNum < len(poRows)+1; rowNum++ {
 					row := poRows[rowNum-1]
@@ -161,49 +155,40 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 						continue
 					}
 
-					row1 := getRow(poRows, rowNum+1)
-					row2 := getRow(poRows, rowNum+2)
-					row3 := getRow(poRows, rowNum+3)
-
-					// ensure entry exists
+					// ensure inventory entry exists; skip PO-only SKUs (avoid creating UNKNOWN product-line groups)
 					e, ok := invMap[sku]
 					if !ok {
-						e = &entry{SKU: sku}
-						invMap[sku] = e
+						logger.Printf("Skipping PO-only SKU %s (not present in inventory)", sku)
+						continue
 					}
 
-					if row1 != nil {
-						status := strings.TrimSpace(getCell(row1, poStatusIdx))
-						qty := 0
-						if strings.EqualFold(status, "Back Order") {
-							qty = parseInt(getCell(row1, onPOBackIdx))
-						} else {
-							qty = parseInt(getCell(row1, onPOIdx))
+					// Walk subsequent rows until we hit a line that starts with "Item" (end of section)
+					// or we've collected up to three PO lines for this SKU.
+					maxPOs := 3
+					poCount := 0
+					for r := rowNum + 1; r <= len(poRows) && poCount < maxPOs; r++ {
+						nextRow := getRow(poRows, r)
+						if nextRow == nil {
+							break
 						}
-						poNum := strings.TrimSpace(getCell(row1, poNum1Idx))
-						assignPO(e, poNum, qty)
-					}
-					if row2 != nil {
-						status := strings.TrimSpace(getCell(row2, poStatusIdx))
-						qty := 0
-						if strings.EqualFold(status, "Back Order") {
-							qty = parseInt(getCell(row2, onPOBackIdx))
-						} else {
-							qty = parseInt(getCell(row2, onPOIdx))
+						poCell := strings.TrimSpace(getCell(nextRow, dataIdx))
+						if poCell == "" {
+							// skip empty lines
+							continue
 						}
-						poNum := strings.TrimSpace(getCell(row2, poNum2Idx))
-						assignPO(e, poNum, qty)
-					}
-					if row3 != nil {
-						status := strings.TrimSpace(getCell(row3, poStatusIdx))
-						qty := 0
-						if strings.EqualFold(status, "Back Order") {
-							qty = parseInt(getCell(row3, onPOBackIdx))
-						} else {
-							qty = parseInt(getCell(row3, onPOIdx))
+						if strings.HasPrefix(strings.ToUpper(poCell), "ITEM") {
+							// end of PO block for this SKU
+							break
 						}
-						poNum := strings.TrimSpace(getCell(row3, poNum3Idx))
-						assignPO(e, poNum, qty)
+						status := strings.TrimSpace(getCell(nextRow, poStatusIdx))
+						var qty int
+						if strings.EqualFold(status, "Back Order") {
+							qty = parseInt(getCell(nextRow, onPOBackIdx))
+						} else {
+							qty = parseInt(getCell(nextRow, onPOIdx))
+						}
+						assignPO(e, poCell, qty)
+						poCount++
 					}
 				}
 			}
