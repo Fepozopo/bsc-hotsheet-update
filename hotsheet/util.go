@@ -1,13 +1,14 @@
 package hotsheet
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 // Token lists used by mapOccasion
 var (
-	everTokens = []string{"SYMPATHY", "PET SYMPATHY", "LOVE", "ENCOURAGEMENT", "THANK YOU", "BIRTHDAY", "BLANK", "BAPTISM-COMMUNION", "BABY", "CONGRATULATIONS", "NEW HOME", "CAMP", "CANCER", "THINKING OF YOU", "GET WELL", "KID BIRTHDAY", "ALL OCCASION", "FRIENDSHIP", "MENOPAUSE", "MISS YOU", "SORRY", "TEACHER APPRECIATION", "WEDDING ANNIVERSARY"}
+	everTokens   = []string{"SYMPATHY", "PET SYMPATHY", "LOVE", "ENCOURAGEMENT", "THANK YOU", "BIRTHDAY", "BLANK", "BAPTISM-COMMUNION", "BABY", "CONGRATULATIONS", "NEW HOME", "CAMP", "CANCER", "THINKING OF YOU", "GET WELL", "KID BIRTHDAY", "ALL OCCASION", "FRIENDSHIP", "MENOPAUSE", "MISS YOU", "SORRY", "TEACHER APPRECIATION", "WEDDING ANNIVERSARY"}
 	winterTokens = []string{"CHRISTMAS", "HALLOWEEN", "THANKSGIVING", "VETERAN'S DAY", "VETERANS DAY"}
 	springTokens = []string{"EASTER", "FATHER'S DAY", "FATHERS DAY", "GRADUATION", "INDEPENDENCE DAY", "MOTHER'S DAY", "MOTHERS DAY", "ST. PATRICK'S DAY", "ST PATRICKS DAY", "VALENTINE'S DAY", "VALENTINES DAY"}
 )
@@ -157,4 +158,16 @@ func mapOccasion(occ string) string {
 		}
 	}
 	return "Everyday"
+}
+
+// simple sanitizer for file names
+func sanitizeFileName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "unknown"
+	}
+	// replace path separators and colons
+	s = strings.ReplaceAll(s, string(filepath.Separator), "_")
+	s = strings.ReplaceAll(s, ":", "")
+	return s
 }

@@ -17,7 +17,7 @@ import (
 // Returns the list of generated file paths.
 func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error) {
 	// logger for the operation
-	logger, logFile, err := helpers.CreateLogger("create", "all", "", "INFO")
+	logger, logFile, err := helpers.CreateLogger("create", "all", "", "ERROR")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
@@ -274,20 +274,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			return outputs, fmt.Errorf("failed to save hotsheet %s: %w", outPath, err)
 		}
 		outputs = append(outputs, outPath)
-		logger.Printf("Generated hotsheet: %s", outPath)
 	}
 
 	return outputs, nil
-}
-
-// simple sanitizer for file names
-func sanitizeFileName(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return "unknown"
-	}
-	// replace path separators and colons
-	s = strings.ReplaceAll(s, string(filepath.Separator), "_")
-	s = strings.ReplaceAll(s, ":", "")
-	return s
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"fyne.io/fyne/v2/app"
 	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
@@ -42,9 +41,7 @@ func main() {
 		fmt.Printf("Created: %s\n", out)
 	}
 
-	for i := 0; i < 3; i++ {
-		fmt.Printf("Quitting in %d seconds...\n", 3-i)
-		time.Sleep(1 * time.Second)
-	}
+	fmt.Println("Press ENTER to quit the application...")
+	_, _ = fmt.Scanln()
 
 }
