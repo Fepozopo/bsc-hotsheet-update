@@ -25,76 +25,21 @@ func main() {
 	myApp := app.New()
 	defer myApp.Quit()
 
-	selection, hotsheetPaths, inventoryReport, poReport := selectFiles(myApp)
+	inventoryReport, poReport, outputDir := selectFiles(myApp)
 
-	// If no files are selected, exit
-	if selection == "" || len(hotsheetPaths) == 0 || inventoryReport == "" || poReport == "" {
-		logger.Printf("not all files were selected")
+	// If no reports are selected, exit
+	if inventoryReport == "" || poReport == "" {
+		logger.Printf("not all report files were selected")
 		return
 	}
 
-	if selection == "All" {
-		products := []struct {
-			name       string
-			updateFunc func(string, string, string) error
-		}{
-			{"21c", hotsheet.Case21C},
-			{"BSC", hotsheet.CaseBSC},
-			{"SMD", hotsheet.CaseSMD},
-		}
-		for i, p := range products {
-			if i >= len(hotsheetPaths) {
-				logger.Printf("missing hotsheet file for %s", p.name)
-				continue
-			}
-			fileHotsheet := hotsheetPaths[i]
-			if fileHotsheet == "" {
-				logger.Printf("no hotsheet file selected for %s", p.name)
-				continue
-			}
-			fileHotsheetNew, err := hotsheet.CopyHotsheet(p.name, fileHotsheet)
-			if err != nil {
-				logger.Printf("failed to copy %s hotsheet file: %v", p.name, err)
-				continue
-			}
-			if err := p.updateFunc(fileHotsheetNew, inventoryReport, poReport); err != nil {
-				logger.Printf("failed to update %s hotsheet: %v", p.name, err)
-			} else {
-				fmt.Printf("%s hotsheet updated successfully.\n", p.name)
-			}
-		}
-	} else {
-		fileHotsheet := hotsheetPaths[0]
-		if fileHotsheet == "" {
-			logger.Printf("no hotsheet file selected")
-			return
-		}
-		// Copy the hotsheet
-		fileHotsheetNew, err := hotsheet.CopyHotsheet(selection, fileHotsheet)
-		if err != nil {
-			logger.Printf("failed to copy hotsheet file: %v", err)
-			return
-		}
-
-		// Update the hotsheet
-		var updateErr error
-		switch selection {
-		case "21c":
-			updateErr = hotsheet.Case21C(fileHotsheetNew, inventoryReport, poReport)
-		case "BJP":
-			updateErr = hotsheet.CaseBJP(fileHotsheetNew, inventoryReport, poReport)
-		case "BSC":
-			updateErr = hotsheet.CaseBSC(fileHotsheetNew, inventoryReport, poReport)
-		case "SMD":
-			updateErr = hotsheet.CaseSMD(fileHotsheetNew, inventoryReport, poReport)
-		default:
-			logger.Printf("unknown product: %s", selection)
-			return
-		}
-		if updateErr != nil {
-			logger.Printf("failed to update %s hotsheet: %v", selection, updateErr)
-			return
-		}
+	outputs, err := hotsheet.CreateFromReports(inventoryReport, poReport, outputDir)
+	if err != nil {
+		logger.Printf("failed to create hotsheets: %v", err)
+		return
+	}
+	for _, out := range outputs {
+		fmt.Printf("Created: %s\n", out)
 	}
 
 	for i := 0; i < 3; i++ {
