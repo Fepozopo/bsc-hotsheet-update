@@ -17,7 +17,7 @@ import (
 // Returns the list of generated file paths.
 func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error) {
 	// logger for the operation
-	logger, logFile, err := helpers.CreateLogger("create", "all", "", "ERROR")
+	logger, logFile, err := helpers.CreateLogger("create", "all", "", "INFO")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
@@ -85,11 +85,14 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			break
 		}
 		sku := getCellAt(invRows, r, skuIdx)
+		// skip empty SKU rows and continue scanning; do not break here because blank rows may appear
 		if sku == "" {
-			break
+			logger.Printf("Skipping empty SKU at inventory row %d", r)
+			continue
 		}
 		// if the SKU cell looks like a run date, stop parsing
 		if isRunDate(sku) {
+			logger.Printf("Encountered run-date/footer '%s' at inventory row %d — stopping parse", sku, r)
 			break
 		}
 
@@ -115,6 +118,8 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		e.Occasion = getCellAt(invRows, valRow, occasionIdx)
 		e.Description = getCellAt(invRows, valRow, descIdx)
 		e.UPC = getCellAt(invRows, valRow, upcIdx)
+
+		logger.Printf("Inventory parse: SKU=%s skuRow=%d valRow=%d ProductLine=%s OnHand=%d OnPO=%d", e.SKU, r, valRow, e.ProductLine, e.OnHand, e.OnPO)
 
 		invMap[e.SKU] = e
 	}
@@ -210,7 +215,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	for _, e := range invMap {
 		pl := strings.TrimSpace(e.ProductLine)
 		if pl == "" {
-			pl = "UNKNOWN"
+			// skip entries without a ProductLine (likely discovered only from PO); this avoids many UNKNOWN files
+			logger.Printf("Skipping SKU %s with empty ProductLine (likely PO-only entry)", e.SKU)
+			continue
 		}
 		productGroups[pl] = append(productGroups[pl], e)
 	}

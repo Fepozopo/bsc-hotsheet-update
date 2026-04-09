@@ -2,6 +2,7 @@ package hotsheet
 
 import (
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -84,13 +85,25 @@ func getCellAt(rows [][]string, rowNum int, colIdx int) string {
 	return strings.TrimSpace(row[colIdx])
 }
 
-// isRunDate determines whether a cell looks like a run-date (contains slash or colon)
+// isRunDate determines whether a cell looks like a run-date (tries to detect explicit dates/times or a "Run Date" label)
 func isRunDate(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return false
 	}
-	if strings.Contains(s, "/") || strings.Contains(s, ":") {
+	upper := strings.ToUpper(s)
+	// explicit label like "Run Date" is a strong indicator
+	if strings.Contains(upper, "RUN") && strings.Contains(upper, "DATE") {
+		return true
+	}
+	// match common date formats like 04/09/2026 or 4/9/26
+	dateRe := regexp.MustCompile(`\b\d{1,2}/\d{1,2}/\d{2,4}\b`)
+	if dateRe.MatchString(s) {
+		return true
+	}
+	// match time patterns like 12:34
+	timeRe := regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
+	if timeRe.MatchString(s) {
 		return true
 	}
 	return false
