@@ -187,7 +187,13 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 						} else {
 							qty = parseInt(getCell(nextRow, onPOIdx))
 						}
-						assignPO(e, poCell, qty)
+						// normalize PO number by removing leading zeros
+						poNum := strings.TrimLeft(strings.TrimSpace(poCell), "0")
+						if poNum == "" {
+							// if result is empty (e.g., original was "0000"), set to "0"
+							poNum = "0"
+						}
+						assignPO(e, poNum, qty)
 						poCount++
 					}
 				}
