@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -39,67 +38,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		return nil, fmt.Errorf("inventory report appears empty")
 	}
 
-	// entry represents a single inventory item
-	type entry struct {
-		SKU         string
-		ProductLine string
-		ClassDesc   string
-		Status      string
-		OnHand      int
-		OnPO        int
-		// Per-PO details from the PO report
-		PONum1         string
-		OnPO1          int
-		PONum2         string
-		OnPO2          int
-		PONum3         string
-		OnPO3          int
-		OnSO           int
-		OnBO           int
-		TotalAvailable int
-		YTDSold        int
-		YTDIssued      int
-		SoldPY         int
-		IssuedPY       int
-		Foil           string
-		Occasion       string
-		Description    string
-		UPC            string
-	}
-
 	invMap := make(map[string]*entry)
-
-	// helper: convert column letter(s) to zero-based index (A -> 0, B -> 1, ...)
-	colToIndex := func(col string) int {
-		col = strings.ToUpper(col)
-		idx := 0
-		for i := 0; i < len(col); i++ {
-			idx *= 26
-			idx += int(col[i]-'A') + 1
-		}
-		return idx - 1
-	}
-
-	// parse numbers permissively
-	parseInt := func(s string) int {
-		s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
-		if s == "" {
-			return 0
-		}
-		// handle trailing dash like "-" meaning negative
-		if strings.HasSuffix(s, "-") {
-			s = "-" + strings.TrimSuffix(s, "-")
-		}
-		v, err := strconv.Atoi(s)
-		if err != nil {
-			f, err2 := strconv.ParseFloat(s, 64)
-			if err2 != nil {
-				return 0
-			}
-			return int(f)
-		}
-		return v
-	}
 
 	// Inventory report has no headers. Item codes start at B2 and repeat every 3 rows.
 	// Column-letter mapping for value row (2 rows below the SKU row)
@@ -138,31 +77,6 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	occasionIdx := colToIndex(occasionCol)
 	descIdx := colToIndex(descCol)
 	upcIdx := colToIndex(upcCol)
-
-	// helper to read a cell by 1-based row and column index
-	getCellAt := func(rows [][]string, rowNum int, colIdx int) string {
-		if rowNum-1 < 0 || rowNum-1 >= len(rows) {
-			return ""
-		}
-		row := rows[rowNum-1]
-		if colIdx < 0 || colIdx >= len(row) {
-			return ""
-		}
-		return strings.TrimSpace(row[colIdx])
-	}
-
-	// detect run-date row (examples like "4/6/2026  5:06:06 PM")
-	isRunDate := func(s string) bool {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			return false
-		}
-		// Consider it a run-date row if it contains either a slash or a colon
-		if strings.Contains(s, "/") || strings.Contains(s, ":") {
-			return true
-		}
-		return false
-	}
 
 	startRow := 2
 	for r := startRow; ; r += 3 {
@@ -224,37 +138,13 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				poNumCol2 := "H"
 				poNumCol3 := "J"
 
-				colToIndexPO := func(col string) int {
-					col = strings.ToUpper(col)
-					idx := 0
-					for i := 0; i < len(col); i++ {
-						idx *= 26
-						idx += int(col[i]-'A') + 1
-					}
-					return idx - 1
-				}
-
-				dataIdx := colToIndexPO(dataCol)
-				onPOIdx := colToIndexPO(onPOCol)
-				onPOBackIdx := colToIndexPO(onPOBackorderCol)
-				poStatusIdx := colToIndexPO(poStatusCol)
-				poNum1Idx := colToIndexPO(poNumCol1)
-				poNum2Idx := colToIndexPO(poNumCol2)
-				poNum3Idx := colToIndexPO(poNumCol3)
-
-				getRow := func(vloc int) []string {
-					if vloc-1 >= 0 && vloc-1 < len(poRows) {
-						return poRows[vloc-1]
-					}
-					return nil
-				}
-
-				getCell := func(r []string, idx int) string {
-					if r == nil || idx < 0 || idx >= len(r) {
-						return ""
-					}
-					return r[idx]
-				}
+				dataIdx := colToIndex(dataCol)
+				onPOIdx := colToIndex(onPOCol)
+				onPOBackIdx := colToIndex(onPOBackorderCol)
+				poStatusIdx := colToIndex(poStatusCol)
+				poNum1Idx := colToIndex(poNumCol1)
+				poNum2Idx := colToIndex(poNumCol2)
+				poNum3Idx := colToIndex(poNumCol3)
 
 				for rowNum := 1; rowNum < len(poRows)+1; rowNum++ {
 					row := poRows[rowNum-1]
@@ -266,38 +156,15 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 						continue
 					}
 
-					row1 := getRow(rowNum + 1)
-					row2 := getRow(rowNum + 2)
-					row3 := getRow(rowNum + 3)
+					row1 := getRow(poRows, rowNum+1)
+					row2 := getRow(poRows, rowNum+2)
+					row3 := getRow(poRows, rowNum+3)
 
 					// ensure entry exists
 					e, ok := invMap[sku]
 					if !ok {
 						e = &entry{SKU: sku}
 						invMap[sku] = e
-					}
-
-					assignPO := func(poNum string, qty int) {
-						if poNum == "" && qty == 0 {
-							return
-						}
-						if e.PONum1 == "" {
-							e.PONum1 = poNum
-							e.OnPO1 = qty
-							return
-						}
-						if e.PONum2 == "" {
-							e.PONum2 = poNum
-							e.OnPO2 = qty
-							return
-						}
-						if e.PONum3 == "" {
-							e.PONum3 = poNum
-							e.OnPO3 = qty
-							return
-						}
-						// fallback: accumulate into OnPO1
-						e.OnPO1 += qty
 					}
 
 					if row1 != nil {
@@ -309,7 +176,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 							qty = parseInt(getCell(row1, onPOIdx))
 						}
 						poNum := strings.TrimSpace(getCell(row1, poNum1Idx))
-						assignPO(poNum, qty)
+						assignPO(e, poNum, qty)
 					}
 					if row2 != nil {
 						status := strings.TrimSpace(getCell(row2, poStatusIdx))
@@ -320,7 +187,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 							qty = parseInt(getCell(row2, onPOIdx))
 						}
 						poNum := strings.TrimSpace(getCell(row2, poNum2Idx))
-						assignPO(poNum, qty)
+						assignPO(e, poNum, qty)
 					}
 					if row3 != nil {
 						status := strings.TrimSpace(getCell(row3, poStatusIdx))
@@ -331,7 +198,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 							qty = parseInt(getCell(row3, onPOIdx))
 						}
 						poNum := strings.TrimSpace(getCell(row3, poNum3Idx))
-						assignPO(poNum, qty)
+						assignPO(e, poNum, qty)
 					}
 				}
 			}
@@ -346,35 +213,6 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			pl = "UNKNOWN"
 		}
 		productGroups[pl] = append(productGroups[pl], e)
-	}
-
-	// prepare occasion token lists (uppercase)
-	everTokens := []string{"SYMPATHY", "PET SYMPATHY", "LOVE", "ENCOURAGEMENT", "THANK YOU", "BIRTHDAY", "BLANK", "BAPTISM-COMMUNION", "BABY", "CONGRATULATIONS", "NEW HOME", "CAMP", "CANCER", "THINKING OF YOU", "GET WELL", "KID BIRTHDAY", "ALL OCCASION", "FRIENDSHIP", "MENOPAUSE", "MISS YOU", "SORRY", "TEACHER APPRECIATION", "WEDDING ANNIVERSARY"}
-	winterTokens := []string{"CHRISTMAS", "HALLOWEEN", "THANKSGIVING", "VETERAN'S DAY", "VETERANS DAY"}
-	springTokens := []string{"EASTER", "FATHER'S DAY", "FATHERS DAY", "GRADUATION", "INDEPENDENCE DAY", "MOTHER'S DAY", "MOTHERS DAY", "ST. PATRICK'S DAY", "ST PATRICKS DAY", "VALENTINE'S DAY", "VALENTINES DAY"}
-
-	mapOccasion := func(occ string) string {
-		o := strings.ToUpper(strings.TrimSpace(occ))
-		if o == "" {
-			return "Everyday"
-		}
-		for _, t := range springTokens {
-			if strings.Contains(o, t) {
-				return "Spring"
-			}
-		}
-		for _, t := range winterTokens {
-			if strings.Contains(o, t) {
-				return "Winter"
-			}
-		}
-		// default/explicit everyday matches
-		for _, t := range everTokens {
-			if strings.Contains(o, t) {
-				return "Everyday"
-			}
-		}
-		return "Everyday"
 	}
 
 	headersOut := []string{"Item Code", "Product Line", "Class Description", "Status", "Quantity on Hand", "Quantity on Purchase Order", "PO Number 1", "Quantity on PO 1", "PO Number 2", "Quantity on PO 2", "PO Number 3", "Quantity on PO 3", "Quantity on Sales Order", "Quantity on Back Order", "Total Quantity Available", "Quantity Sold YTD", "Quantity Issued YTD", "Quantity Sold PY", "Quantity Issued PY", "Foil", "Occasion", "Description", "UPC"}

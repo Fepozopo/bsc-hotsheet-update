@@ -11,23 +11,23 @@ import (
 )
 
 type Update struct {
-	Hotsheet            string
-	Sheet               string
-	InventoryReport     string
-	POReport            string
-	UpcCol              string
-	SkuCol              string
-	OnHandCol           string
-	OnPOCol1            string
-	OnPOCol2            string
-	OnPOCol3            string
-	OnPOColTotal        string
-	OnSOBOCol           string
-	YtdSoldIssuedCol    string
-	PONumCol1           string
-	PONumCol2           string
-	PONumCol3           string
-	AverageMonthlyCol   string
+	Hotsheet          string
+	Sheet             string
+	InventoryReport   string
+	POReport          string
+	UpcCol            string
+	SkuCol            string
+	OnHandCol         string
+	OnPOCol1          string
+	OnPOCol2          string
+	OnPOCol3          string
+	OnPOColTotal      string
+	OnSOBOCol         string
+	YtdSoldIssuedCol  string
+	PONumCol1         string
+	PONumCol2         string
+	PONumCol3         string
+	AverageMonthlyCol string
 }
 
 // Update updates the hotsheet with stock and sales data from the report.
@@ -90,7 +90,6 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get rows from report file %s: %w", u.InventoryReport, err)
 	}
-
 
 	skuCol := "B"       // 'B' column index in wsReport
 	onHandCol := "B"    // 'B' column index in wsReport
@@ -208,7 +207,6 @@ func (u *Update) UpdateInventory(product, occasion string) error {
 			upc:       upcStr,
 		}
 	}
-
 
 	// Progress bar
 	var bar helpers.Bar

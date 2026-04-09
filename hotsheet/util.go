@@ -1,0 +1,160 @@
+package hotsheet
+
+import (
+	"strconv"
+	"strings"
+)
+
+// Token lists used by mapOccasion
+var (
+	everTokens = []string{"SYMPATHY", "PET SYMPATHY", "LOVE", "ENCOURAGEMENT", "THANK YOU", "BIRTHDAY", "BLANK", "BAPTISM-COMMUNION", "BABY", "CONGRATULATIONS", "NEW HOME", "CAMP", "CANCER", "THINKING OF YOU", "GET WELL", "KID BIRTHDAY", "ALL OCCASION", "FRIENDSHIP", "MENOPAUSE", "MISS YOU", "SORRY", "TEACHER APPRECIATION", "WEDDING ANNIVERSARY"}
+	winterTokens = []string{"CHRISTMAS", "HALLOWEEN", "THANKSGIVING", "VETERAN'S DAY", "VETERANS DAY"}
+	springTokens = []string{"EASTER", "FATHER'S DAY", "FATHERS DAY", "GRADUATION", "INDEPENDENCE DAY", "MOTHER'S DAY", "MOTHERS DAY", "ST. PATRICK'S DAY", "ST PATRICKS DAY", "VALENTINE'S DAY", "VALENTINES DAY"}
+)
+
+// entry represents a single inventory item (moved from CreateFromReports)
+type entry struct {
+	SKU         string
+	ProductLine string
+	ClassDesc   string
+	Status      string
+	OnHand      int
+	OnPO        int
+	// Per-PO details from the PO report
+	PONum1         string
+	OnPO1          int
+	PONum2         string
+	OnPO2          int
+	PONum3         string
+	OnPO3          int
+	OnSO           int
+	OnBO           int
+	TotalAvailable int
+	YTDSold        int
+	YTDIssued      int
+	SoldPY         int
+	IssuedPY       int
+	Foil           string
+	Occasion       string
+	Description    string
+	UPC            string
+}
+
+// colToIndex converts Excel column letters to zero-based index (A->0)
+func colToIndex(col string) int {
+	col = strings.ToUpper(col)
+	idx := 0
+	for i := 0; i < len(col); i++ {
+		idx *= 26
+		idx += int(col[i]-'A') + 1
+	}
+	return idx - 1
+}
+
+// parseInt parses numbers permissively (commas, floats fallback, trailing "-" interpreted as negative)
+func parseInt(s string) int {
+	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
+	if s == "" {
+		return 0
+	}
+	if strings.HasSuffix(s, "-") {
+		s = "-" + strings.TrimSuffix(s, "-")
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		f, err2 := strconv.ParseFloat(s, 64)
+		if err2 != nil {
+			return 0
+		}
+		return int(f)
+	}
+	return v
+}
+
+// getCellAt reads a cell from rows by 1-based row number and 0-based column index
+func getCellAt(rows [][]string, rowNum int, colIdx int) string {
+	if rowNum-1 < 0 || rowNum-1 >= len(rows) {
+		return ""
+	}
+	row := rows[rowNum-1]
+	if colIdx < 0 || colIdx >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[colIdx])
+}
+
+// isRunDate determines whether a cell looks like a run-date (contains slash or colon)
+func isRunDate(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "/") || strings.Contains(s, ":") {
+		return true
+	}
+	return false
+}
+
+// getRow returns the row at 1-based index vloc (or nil)
+func getRow(rows [][]string, vloc int) []string {
+	if vloc-1 >= 0 && vloc-1 < len(rows) {
+		return rows[vloc-1]
+	}
+	return nil
+}
+
+// getCell returns the string at index idx in row r (or empty string)
+func getCell(r []string, idx int) string {
+	if r == nil || idx < 0 || idx >= len(r) {
+		return ""
+	}
+	return r[idx]
+}
+
+// assignPO assigns a PO number and quantity into the first available PONum slot on the entry
+func assignPO(e *entry, poNum string, qty int) {
+	if poNum == "" && qty == 0 {
+		return
+	}
+	if e.PONum1 == "" {
+		e.PONum1 = poNum
+		e.OnPO1 = qty
+		return
+	}
+	if e.PONum2 == "" {
+		e.PONum2 = poNum
+		e.OnPO2 = qty
+		return
+	}
+	if e.PONum3 == "" {
+		e.PONum3 = poNum
+		e.OnPO3 = qty
+		return
+	}
+	// fallback: accumulate into OnPO1
+	e.OnPO1 += qty
+}
+
+// mapOccasion maps raw occasion text to one of: "Everyday", "Winter", "Spring"
+func mapOccasion(occ string) string {
+	o := strings.ToUpper(strings.TrimSpace(occ))
+	if o == "" {
+		return "Everyday"
+	}
+	for _, t := range springTokens {
+		if strings.Contains(o, t) {
+			return "Spring"
+		}
+	}
+	for _, t := range winterTokens {
+		if strings.Contains(o, t) {
+			return "Winter"
+		}
+	}
+	for _, t := range everTokens {
+		if strings.Contains(o, t) {
+			return "Everyday"
+		}
+	}
+	return "Everyday"
+}
