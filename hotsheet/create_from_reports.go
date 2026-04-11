@@ -213,7 +213,31 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		productGroups[pl] = append(productGroups[pl], e)
 	}
 
-	headersOut := []string{"Item Code", "Product Line", "Class Description", "Status", "Quantity on Hand", "Quantity on Purchase Order", "PO Number 1", "Quantity on PO 1", "PO Number 2", "Quantity on PO 2", "PO Number 3", "Quantity on PO 3", "Quantity on Sales Order", "Quantity on Back Order", "Total Quantity Available", "Quantity Sold YTD", "Quantity Issued YTD", "Quantity Sold PY", "Quantity Issued PY", "Foil", "Occasion", "Description", "UPC"}
+	headersOut := []string{
+		"Item Code",
+		"Product Line",
+		"Class Description",
+		"Status",
+		"Quantity on Hand",
+		"Quantity on Purchase Order",
+		"PO Number 1",
+		"Quantity on PO 1",
+		"PO Number 2",
+		"Quantity on PO 2",
+		"PO Number 3",
+		"Quantity on PO 3",
+		"Quantity on Sales Order",
+		"Quantity on Back Order",
+		"Total Quantity Available",
+		"Quantity Sold YTD",
+		"Quantity Issued YTD",
+		"Quantity Sold PY",
+		"Quantity Issued PY",
+		"Foil",
+		"Occasion",
+		"Description",
+		"UPC",
+	}
 
 	var outputs []string
 	dateStr := time.Now().Format("20060102")
@@ -229,7 +253,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		_, _ = f.NewSheet("Winter")
 		_, _ = f.NewSheet("Spring")
 		// delete default Sheet1 if still present
-		if idxSheet, _ := f.GetSheetIndex("Sheet1"); idxSheet != 0 {
+		if idxSheet, _ := f.GetSheetIndex("Sheet1"); idxSheet != -1 {
 			_ = f.DeleteSheet("Sheet1")
 		}
 
@@ -251,7 +275,31 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			onSOBO := e.OnSO + e.OnBO
 			totalAvail := e.OnHand + e.OnPO - onSOBO
 			// write row (include per-PO details)
-			vals := []interface{}{e.SKU, pl, e.ClassDesc, e.Status, e.OnHand, e.OnPO, e.PONum1, e.OnPO1, e.PONum2, e.OnPO2, e.PONum3, e.OnPO3, e.OnSO, e.OnBO, totalAvail, e.YTDSold, e.YTDIssued, e.SoldPY, e.IssuedPY, e.Foil, e.Occasion, e.Description, e.UPC}
+			vals := []interface{}{
+				e.SKU,
+				pl,
+				e.ClassDesc,
+				e.Status,
+				e.OnHand,
+				e.OnPO,
+				e.PONum1,
+				e.OnPO1,
+				e.PONum2,
+				e.OnPO2,
+				e.PONum3,
+				e.OnPO3,
+				e.OnSO,
+				e.OnBO,
+				totalAvail,
+				e.YTDSold,
+				e.YTDIssued,
+				e.SoldPY,
+				e.IssuedPY,
+				e.Foil,
+				e.Occasion,
+				e.Description,
+				e.UPC,
+			}
 			r := rowIdx[sh]
 			for c, v := range vals {
 				cell, _ := excelize.CoordinatesToCellName(c+1, r)
