@@ -270,8 +270,6 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 					},
 				})
 				f.SetCellStyle(sh, cell, cell, style)
-				// set column widths for better readability
-				f.SetColWidth(sh, cell[:1], cell[:1], float64(len(h))+5)
 			}
 		}
 
@@ -343,24 +341,86 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			for c, v := range vals {
 				cell, _ := excelize.CoordinatesToCellName(c+1, r)
 				f.SetCellValue(sh, cell, v)
-				// set borders for data cells
-				// center alignment for all cells except Description
-				align := "center"
-				if c == 15 { // Description column
-					align = "left"
+
+				fillColor := "#FFFFFF" // default white
+				// fill MTO columns based on thresholds: red if <=1 month, yellow if <=3 months, otherwise white
+				if (c == 9 || c == 10) && v != nil {
+					if c == 9 {
+						// MTO YTD: use lighter shades
+						if mtoYTD <= 1 {
+							fillColor = "#FFCCCC" // light red
+						} else if mtoYTD <= 3 {
+							fillColor = "#FFFFCC" // light yellow
+						} else {
+							fillColor = "#CCFFCC" // light greenn
+						}
+					} else {
+						// c == 10 -> MTO PY: use darker shades
+						if mtoPY <= 1 {
+							fillColor = "#FF6666" // darker red
+						} else if mtoPY <= 3 {
+							fillColor = "#FFCC33" // darker yellow
+						} else {
+							fillColor = "#66FF66" // darker green
+						}
+					}
 				}
+				// if status is rundown or discontinued, override fill with gray shades;
+				// otherwise preserve whatever fillColor was set above (MTO or default white)
+				switch e.Status {
+				case "Rundown":
+					fillColor = "#D3D3D3" // light gray
+				case "Discontinued":
+					fillColor = "#A9A9A9" // dark gray
+				}
+
 				style, _ := f.NewStyle(&excelize.Style{
-					Alignment: &excelize.Alignment{Horizontal: align, Vertical: "center"},
+					// center alignment for all cells except Description
+					Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+					// set borders for data cells
 					Border: []excelize.Border{
 						{Type: "left", Color: "000000", Style: 1},
 						{Type: "right", Color: "000000", Style: 1},
 						{Type: "top", Color: "000000", Style: 1},
 						{Type: "bottom", Color: "000000", Style: 1},
 					},
+					Fill: excelize.Fill{
+						Type:    "pattern",
+						Color:   []string{fillColor},
+						Pattern: 1,
+					},
 				})
 				f.SetCellStyle(sh, cell, cell, style)
 			}
 			rowIdx[sh] = r + 1
+		}
+
+		// set column widths for better readability
+		colWidths := map[string]float64{
+			"A": 15, // Item Code
+			"B": 12, // QTY on Hand
+			"C": 15, // Total QTY on PO
+			"D": 12, // PO Num 1
+			"E": 12, // QTY on PO 1
+			"F": 12, // PO Num 2
+			"G": 12, // QTY on PO 2
+			"H": 15, // QTY on SO/BO
+			"I": 15, // QTY Available
+			"J": 10, // MTO YTD
+			"K": 10, // MTO PY
+			"L": 18, // QTY Sold/Issued YTD
+			"M": 18, // QTY Sold/Issued PY
+			"N": 20, // Class
+			"O": 15, // Status
+			"P": 20, // Occasion
+			"Q": 40, // Description
+			"R": 15, // UPC
+			"S": 10, // Foil
+		}
+		for _, sh := range []string{"Everyday", "Winter", "Spring"} {
+			for col, width := range colWidths {
+				f.SetColWidth(sh, col, col, width)
+			}
 		}
 
 		// add autofilter to header row
