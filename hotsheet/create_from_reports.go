@@ -363,6 +363,12 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			rowIdx[sh] = r + 1
 		}
 
+		// add autofilter to header row
+		for _, sh := range []string{"Everyday", "Winter", "Spring"} {
+			lastCol, _ := excelize.ColumnNumberToName(len(headersOut))
+			f.AutoFilter(sh, fmt.Sprintf("A1:%s1", lastCol), nil)
+		}
+
 		// ensure output directory
 		outDir := outputDir
 		if outDir == "" {
