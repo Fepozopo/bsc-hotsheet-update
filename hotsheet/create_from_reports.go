@@ -163,8 +163,8 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 					}
 
 					// Walk subsequent rows until we hit a line that starts with "Item" (end of section)
-					// or we've collected up to three PO lines for this SKU.
-					maxPOs := 3
+					// or we've collected up to two PO lines for this SKU.
+					maxPOs := 2
 					poCount := 0
 					for r := rowNum + 1; r <= len(poRows) && poCount < maxPOs; r++ {
 						nextRow := getRow(poRows, r)
@@ -215,28 +215,24 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 
 	headersOut := []string{
 		"Item Code",
-		"Product Line",
-		"Class Description",
+		"QTY on Hand",
+		"Total QTY on PO",
+		"PO Num 1",
+		"QTY on PO 1",
+		"PO Num 2",
+		"QTY on PO 2",
+		"QTY on SO/BO",
+		"QTY Available",
+		"MTO YTD",
+		"MTO PY",
+		"QTY Sold/Issued YTD",
+		"QTY Sold/Issued PY",
+		"Class",
 		"Status",
-		"Quantity on Hand",
-		"Quantity on Purchase Order",
-		"PO Number 1",
-		"Quantity on PO 1",
-		"PO Number 2",
-		"Quantity on PO 2",
-		"PO Number 3",
-		"Quantity on PO 3",
-		"Quantity on Sales Order",
-		"Quantity on Back Order",
-		"Total Quantity Available",
-		"Quantity Sold YTD",
-		"Quantity Issued YTD",
-		"Quantity Sold PY",
-		"Quantity Issued PY",
-		"Foil",
 		"Occasion",
 		"Description",
 		"UPC",
+		"Foil",
 	}
 
 	var outputs []string
@@ -282,37 +278,66 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		// row counters per sheet
 		rowIdx := map[string]int{"Everyday": 2, "Winter": 2, "Spring": 2}
 
+		// compute months through the year for MTO calculation; use current date to determine fraction of month completed
+		now := time.Now()
+		year := now.Year()
+		month := now.Month()
+		// number of days in the current month
+		daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, now.Location()).Day()
+		// months completed plus fraction of current month (e.g., June 15 -> 5 + 15/30 = 5.5)
+		monthsThrough := float64(int(month)-1) + float64(now.Day())/float64(daysInMonth)
+		// guard against zero (shouldn't happen), fallback to 1 month
+		if monthsThrough <= 0 {
+			monthsThrough = 1
+		}
+
 		for _, e := range entries {
 			// determine sheet
 			sh := mapOccasion(e.Occasion)
+			// determine sales season
+			salesSeason := 12.0 // default to full year
+			switch sh {
+			case "Winter":
+				salesSeason = 6.0 // typically most sales occur in last 6 months of year
+			case "Spring":
+				salesSeason = 4.0 // typically most sales occur in first 4 months of year
+			default:
+				salesSeason = 12.0 // assume sales spread evenly across the year for Everyday
+			}
+
 			// compute derived fields
 			onSOBO := e.OnSO + e.OnBO
 			totalAvail := e.OnHand + e.OnPO - onSOBO
+			soldIssuedYTD := e.YTDSold + max(e.YTDIssued, 0)
+			soldIssuedPY := e.SoldPY + max(e.IssuedPY, 0)
+
+			// MTO = Months Till Out
+			siPerMonthYTD := float64(soldIssuedYTD) / monthsThrough
+			siPerMonthPY := float64(soldIssuedPY) / salesSeason
+			mtoYTD := float64(totalAvail) / (siPerMonthYTD + 1)
+			mtoPY := float64(totalAvail) / (siPerMonthPY + 1)
+
 			// write row (include per-PO details)
 			vals := []interface{}{
 				e.SKU,
-				pl,
-				e.ClassDesc,
-				e.Status,
 				e.OnHand,
 				e.OnPO,
 				e.PONum1,
 				e.OnPO1,
 				e.PONum2,
 				e.OnPO2,
-				e.PONum3,
-				e.OnPO3,
-				e.OnSO,
-				e.OnBO,
+				onSOBO,
 				totalAvail,
-				e.YTDSold,
-				e.YTDIssued,
-				e.SoldPY,
-				e.IssuedPY,
-				e.Foil,
+				mtoYTD,
+				mtoPY,
+				soldIssuedYTD,
+				soldIssuedPY,
+				e.ClassDesc,
+				e.Status,
 				e.Occasion,
 				e.Description,
 				e.UPC,
+				e.Foil,
 			}
 			r := rowIdx[sh]
 			for c, v := range vals {
