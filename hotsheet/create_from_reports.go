@@ -343,6 +343,22 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			for c, v := range vals {
 				cell, _ := excelize.CoordinatesToCellName(c+1, r)
 				f.SetCellValue(sh, cell, v)
+				// set borders for data cells
+				// center alignment for all cells except Description
+				align := "center"
+				if c == 15 { // Description column
+					align = "left"
+				}
+				style, _ := f.NewStyle(&excelize.Style{
+					Alignment: &excelize.Alignment{Horizontal: align, Vertical: "center"},
+					Border: []excelize.Border{
+						{Type: "left", Color: "000000", Style: 1},
+						{Type: "right", Color: "000000", Style: 1},
+						{Type: "top", Color: "000000", Style: 1},
+						{Type: "bottom", Color: "000000", Style: 1},
+					},
+				})
+				f.SetCellStyle(sh, cell, cell, style)
 			}
 			rowIdx[sh] = r + 1
 		}
