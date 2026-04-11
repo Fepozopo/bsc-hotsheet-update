@@ -262,6 +262,20 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			for c, h := range headersOut {
 				cell, _ := excelize.CoordinatesToCellName(c+1, 1)
 				f.SetCellValue(sh, cell, h)
+				// make header bold, centered, with borders
+				style, _ := f.NewStyle(&excelize.Style{
+					Font:      &excelize.Font{Bold: true},
+					Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+					Border: []excelize.Border{
+						{Type: "left", Color: "000000", Style: 1},
+						{Type: "right", Color: "000000", Style: 1},
+						{Type: "top", Color: "000000", Style: 1},
+						{Type: "bottom", Color: "000000", Style: 1},
+					},
+				})
+				f.SetCellStyle(sh, cell, cell, style)
+				// set column widths for better readability
+				f.SetColWidth(sh, cell[:1], cell[:1], float64(len(h))+5)
 			}
 		}
 
