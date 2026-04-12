@@ -138,11 +138,6 @@ func assignPO(e *entry, poNum string, qty int) {
 		e.OnPO2 = qty
 		return
 	}
-	if e.PONum3 == "" {
-		e.PONum3 = poNum
-		e.OnPO3 = qty
-		return
-	}
 	// fallback: accumulate into OnPO1
 	e.OnPO1 += qty
 }
