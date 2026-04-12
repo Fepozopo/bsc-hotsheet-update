@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"github.com/Fepozopo/bsc-hotsheet-update/hotsheet"
 	"github.com/Fepozopo/bsc-hotsheet-update/internal/version"
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
@@ -111,13 +112,14 @@ func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 	}()
 }
 
-// selectFiles creates a GUI window that asks for which hotsheet(s) to update first and then
-// asks for report files. The reports section only appears after the user selects a hotsheet file
-// and clicks Next. The Next button is enabled only when required hotsheet file(s) are filled.
+// selectFiles creates a GUI window that asks for the required reports and output directory,
+// but does the hotsheet generation itself. When generation finishes it opens a Fyne window
+// listing the created files. The main window is not closed after generation; instead the
+// inputs are cleared so the user can run another generation.
 func selectFiles(a fyne.App) (string, string, string) {
 	window := a.NewWindow("Hotsheet Generator")
 	checkForUpdates(window, false)
-	window.Resize(fyne.NewSize(700, 400))
+	window.Resize(fyne.NewSize(700, 420))
 
 	// Entries for reports and output
 	inventoryEntry := widget.NewEntry()
@@ -165,14 +167,71 @@ func selectFiles(a fyne.App) (string, string, string) {
 		})
 	})
 
-	submitBtn := widget.NewButton("Generate Hotsheets", func() {
+	// Generate handler - performs generation in background and shows outputs in a new window
+	generate := func() {
 		if strings.TrimSpace(inventoryEntry.Text) == "" {
 			dialog.ShowError(errors.New("Inventory report is required"), window)
 			return
 		}
-		// PO report is optional; allow proceeding without a PO file.
+
+		// Progress dialog while generating
+		progress := widget.NewProgressBarInfinite()
+		progressLabel := widget.NewLabel("Generating hotsheets...")
+		progressDialog := dialog.NewCustom("Generating Hotsheets", "Cancel", container.NewVBox(progressLabel, progress), window)
+		progressDialog.Show()
+
+		// Run generation in goroutine to avoid blocking UI
+		go func(inv, po, outdir string) {
+			outputs, err := hotsheet.CreateFromReports(inv, po, outdir)
+			// Must manipulate UI from main goroutine; schedule with fyne.CurrentApp().SendNotification isn't appropriate here,
+			// but dialog.Show* and window operations are safe to call from other goroutines in Fyne as they marshal to the main loop.
+			progressDialog.Hide()
+			if err != nil {
+				// Show error on main window
+				dialog.ShowError(err, window)
+				return
+			}
+
+			// Prepare outputs window
+			outWin := a.NewWindow("Created Hotsheets")
+			outWin.Resize(fyne.NewSize(600, 400))
+
+			list := widget.NewList(
+				func() int { return len(outputs) },
+				func() fyne.CanvasObject { return widget.NewLabel("") },
+				func(i widget.ListItemID, o fyne.CanvasObject) {
+					o.(*widget.Label).SetText(outputs[i])
+				},
+			)
+
+			// If there are no outputs, show a message
+			var content fyne.CanvasObject
+			if len(outputs) == 0 {
+				content = container.NewVBox(widget.NewLabel("No files were created."))
+			} else {
+				content = container.NewBorder(nil, nil, nil, nil, container.NewVBox(widget.NewLabel("Created files:"), list))
+			}
+
+			doneBtn := widget.NewButton("Done", func() {
+				outWin.Close()
+				// Clear the main window fields so nothing is selected
+				inventoryEntry.SetText("")
+				poEntry.SetText("")
+				outputEntry.SetText("")
+			})
+
+			outWin.SetContent(container.NewBorder(nil, doneBtn, nil, nil, content))
+			outWin.Show()
+		}(inventoryEntry.Text, poEntry.Text, outputEntry.Text)
+	}
+
+	// Buttons: Generate and Quit (Quit closes the main window)
+	submitBtn := widget.NewButton("Generate Hotsheets", generate)
+	quitBtn := widget.NewButton("Quit", func() {
 		window.Close()
 	})
+
+	buttons := container.NewHBox(layout.NewSpacer(), submitBtn, widget.NewLabel("   "), quitBtn)
 
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("Create Unified Hotsheets from Reports", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
@@ -186,11 +245,13 @@ func selectFiles(a fyne.App) (string, string, string) {
 		widget.NewLabelWithStyle("Output Directory (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewBorder(nil, nil, outBtn, nil, outputEntry),
 		layout.NewSpacer(),
-		submitBtn,
+		buttons,
 	)
 
 	window.SetContent(content)
 	window.ShowAndRun()
 
-	return inventoryEntry.Text, poEntry.Text, outputEntry.Text
+	// Return empty strings because the generation is handled inside this UI flow.
+	// This prevents the main() caller from trying to re-run generation.
+	return "", "", ""
 }
