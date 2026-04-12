@@ -21,14 +21,12 @@ type entry struct {
 	ClassDesc   string
 	Status      string
 	OnHand      int
-	OnPO        int
 	// Per-PO details from the PO report
 	PONum1         string
 	OnPO1          int
 	PONum2         string
 	OnPO2          int
-	PONum3         string
-	OnPO3          int
+	OnPO           int
 	OnSO           int
 	OnBO           int
 	TotalAvailable int
