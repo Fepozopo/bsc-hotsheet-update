@@ -209,7 +209,9 @@ func selectFiles(a fyne.App) (string, string, string) {
 			if len(outputs) == 0 {
 				content = container.NewVBox(widget.NewLabel("No files were created."))
 			} else {
-				content = container.NewBorder(nil, nil, nil, nil, container.NewVBox(widget.NewLabel("Created files:"), list))
+				// Put the label in the top border and make the list scrollable so it expands to fill available space.
+				// Using NewVScroll(list) allows the list to take the remaining height while the window expands.
+				content = container.NewBorder(widget.NewLabel("Created files:"), nil, nil, nil, container.NewVScroll(list))
 			}
 
 			doneBtn := widget.NewButton("Done", func() {
@@ -220,6 +222,7 @@ func selectFiles(a fyne.App) (string, string, string) {
 				outputEntry.SetText("")
 			})
 
+			// Use a border so the Done button stays at the bottom and the content fills the middle area.
 			outWin.SetContent(container.NewBorder(nil, doneBtn, nil, nil, content))
 			outWin.Show()
 		}(inventoryEntry.Text, poEntry.Text, outputEntry.Text)
