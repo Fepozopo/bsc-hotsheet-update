@@ -335,6 +335,50 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 
 			// write row (include per-PO details)
 			// Build row values dynamically to match headersOut (PO columns omitted if no PO report)
+			// Apply class-prefixing rules based on SKU and ProductLine, and default-hide non-"Bulk - " prefixed rows
+			classDesc := strings.TrimSpace(e.ClassDesc)
+			skuUpper := strings.ToUpper(strings.TrimSpace(e.SKU))
+			prefix := ""
+
+			// check longer / specific suffixes first
+			switch {
+			case strings.HasSuffix(skuUpper, "-LLB") || strings.HasSuffix(skuUpper, "LLB"):
+				prefix = "LLB - "
+			case strings.HasSuffix(skuUpper, "-TB") || strings.HasSuffix(skuUpper, "TB") || strings.HasPrefix(skuUpper, "TB"):
+				prefix = "TB - "
+			case strings.HasSuffix(skuUpper, "-WM") || strings.HasSuffix(skuUpper, "WM"):
+				prefix = "WM - "
+			case strings.HasSuffix(skuUpper, "-AN") || strings.HasSuffix(skuUpper, "AN"):
+				prefix = "AN - "
+			case strings.HasSuffix(skuUpper, "-BN") || strings.HasSuffix(skuUpper, "BN"):
+				prefix = "BN - "
+			case strings.HasSuffix(skuUpper, "BX"):
+				prefix = "BX - "
+			case strings.HasSuffix(skuUpper, "C"):
+				prefix = "Custom - "
+			}
+
+			// product-line specific rules for SKUs ending in "B"
+			if prefix == "" && strings.HasSuffix(skuUpper, "B") {
+				pl := strings.TrimSpace(e.ProductLine)
+				if pl == "2021" {
+					if strings.HasPrefix(strings.ToUpper(e.SKU), "FC") {
+						prefix = "Bulk - "
+					} else {
+						prefix = "BX - "
+					}
+				} else if pl == "BAS" {
+					// treat BAS B-items as bulk by default
+					prefix = "Bulk - "
+				}
+			}
+
+			// only add prefix if not already present
+			if prefix != "" && !strings.HasPrefix(classDesc, prefix) {
+				classDesc = prefix + classDesc
+			}
+			e.ClassDesc = classDesc
+
 			vals := []interface{}{
 				e.SKU,
 				e.OnHand,
@@ -372,7 +416,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 						} else if mtoYTD <= 3 {
 							fillColor = "#FFFFCC" // light yellow
 						} else {
-							fillColor = "#CCFFCC" // light greenn
+							fillColor = "#CCFFCC" // light green
 						}
 					} else {
 						// MTO PY column: use darker shades
@@ -461,7 +505,6 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			}
 		}
 
-		// add autofilter to header row
 		for _, sh := range []string{"Everyday", "Winter", "Spring"} {
 			lastCol, _ := excelize.ColumnNumberToName(len(headersOut))
 			f.AutoFilter(sh, fmt.Sprintf("A1:%s1", lastCol), nil)
