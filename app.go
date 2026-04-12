@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -112,6 +114,35 @@ func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 	}()
 }
 
+// fileLabel is a small helper type that embeds a widget.Label and supports double-tap
+// behavior so we can open a file when the user double-clicks it.
+type fileLabel struct {
+	widget.Label
+	path     string
+	onDouble func(string)
+}
+
+func (f *fileLabel) DoubleTapped(*fyne.PointEvent) {
+	if f.onDouble != nil {
+		f.onDouble(f.path)
+	}
+}
+
+// openPath opens a file or folder using the platform's default handler.
+func openPath(p string) {
+	if p == "" {
+		return
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		_ = exec.Command("open", p).Start()
+	case "windows":
+		_ = exec.Command("cmd", "/C", "start", "", p).Start()
+	default:
+		_ = exec.Command("xdg-open", p).Start()
+	}
+}
+
 // selectFiles creates a GUI window that asks for the required reports and output directory,
 // but does the hotsheet generation itself. When generation finishes it opens a Fyne window
 // listing the created files. The main window is not closed after generation; instead the
@@ -196,15 +227,35 @@ func selectFiles(a fyne.App) (string, string, string) {
 			outWin := a.NewWindow("Created Hotsheets")
 			outWin.Resize(fyne.NewSize(600, 400))
 
+			// helper state: selected index for Open Folder action
+			var selectedIndex int = -1
+
+			// Create a list whose items are of type fileLabel so we can respond to double-clicks.
 			list := widget.NewList(
 				func() int { return len(outputs) },
-				func() fyne.CanvasObject { return widget.NewLabel("") },
+				func() fyne.CanvasObject {
+					fl := &fileLabel{}
+					fl.ExtendBaseWidget(fl)
+					return fl
+				},
 				func(i widget.ListItemID, o fyne.CanvasObject) {
-					o.(*widget.Label).SetText(outputs[i])
+					fl := o.(*fileLabel)
+					fl.path = outputs[i]
+					fl.SetText(outputs[i])
+					fl.onDouble = func(p string) { openPath(p) }
 				},
 			)
 
-			// If there are no outputs, show a message
+			// track selection so Open Folder knows which file's folder to open
+			list.OnSelected = func(id widget.ListItemID) {
+				selectedIndex = int(id)
+			}
+			list.OnUnselected = func(id widget.ListItemID) {
+				selectedIndex = -1
+			}
+
+			// If there are no outputs, show a message; otherwise put the label in the top border
+			// and let the list fill the center so it expands to available space.
 			var content fyne.CanvasObject
 			if len(outputs) == 0 {
 				content = container.NewVBox(widget.NewLabel("No files were created."))
@@ -222,8 +273,22 @@ func selectFiles(a fyne.App) (string, string, string) {
 				outputEntry.SetText("")
 			})
 
-			// Use a border so the Done button stays at the bottom and the content fills the middle area.
-			outWin.SetContent(container.NewBorder(nil, doneBtn, nil, nil, content))
+			openFolderBtn := widget.NewButton("Open Folder", func() {
+				if selectedIndex >= 0 && selectedIndex < len(outputs) {
+					dir := filepath.Dir(outputs[selectedIndex])
+					openPath(dir)
+				} else if len(outputs) > 0 {
+					// fallback to first output's folder
+					dir := filepath.Dir(outputs[0])
+					openPath(dir)
+				}
+			})
+
+			// Place buttons at the bottom with spacer so they are right-aligned
+			buttons := container.NewHBox(layout.NewSpacer(), openFolderBtn, widget.NewLabel("   "), doneBtn)
+
+			// Use a border so the buttons stay at the bottom and the content fills the middle area.
+			outWin.SetContent(container.NewBorder(nil, buttons, nil, nil, content))
 			outWin.Show()
 		}(inventoryEntry.Text, poEntry.Text, outputEntry.Text)
 	}
