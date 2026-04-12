@@ -213,15 +213,23 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		productGroups[pl] = append(productGroups[pl], e)
 	}
 
+	// Build headers. If there's no PO report provided, omit per-PO and SO/BO columns.
+	hasPO := poPath != ""
 	headersOut := []string{
 		"Item Code",
 		"QTY on Hand",
 		"Total QTY on PO",
-		"PO Num 1",
-		"QTY on PO 1",
-		"PO Num 2",
-		"QTY on PO 2",
-		"QTY on SO/BO",
+	}
+	if hasPO {
+		headersOut = append(headersOut,
+			"PO Num 1",
+			"QTY on PO 1",
+			"PO Num 2",
+			"QTY on PO 2",
+			"QTY on SO/BO",
+		)
+	}
+	headersOut = append(headersOut,
 		"QTY Available",
 		"MTO YTD",
 		"MTO PY",
@@ -233,6 +241,16 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		"Description",
 		"UPC",
 		"Foil",
+	)
+	// determine the index positions of MTO columns so coloring logic below works regardless
+	mtoYtdIdx, mtoPyIdx := -1, -1
+	for i, h := range headersOut {
+		if h == "MTO YTD" {
+			mtoYtdIdx = i
+		}
+		if h == "MTO PY" {
+			mtoPyIdx = i
+		}
 	}
 
 	var outputs []string
@@ -316,15 +334,16 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			mtoPY := float64(totalAvail) / (siPerMonthPY + 1)
 
 			// write row (include per-PO details)
+			// Build row values dynamically to match headersOut (PO columns omitted if no PO report)
 			vals := []interface{}{
 				e.SKU,
 				e.OnHand,
 				e.OnPO,
-				e.PONum1,
-				e.OnPO1,
-				e.PONum2,
-				e.OnPO2,
-				onSOBO,
+			}
+			if hasPO {
+				vals = append(vals, e.PONum1, e.OnPO1, e.PONum2, e.OnPO2, onSOBO)
+			}
+			vals = append(vals,
 				totalAvail,
 				mtoYTD,
 				mtoPY,
@@ -336,7 +355,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				e.Description,
 				e.UPC,
 				e.Foil,
-			}
+			)
 			r := rowIdx[sh]
 			for c, v := range vals {
 				cell, _ := excelize.CoordinatesToCellName(c+1, r)
@@ -344,8 +363,8 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 
 				fillColor := "#FFFFFF" // default white
 				// fill MTO columns based on thresholds: red if <=1 month, yellow if <=3 months, otherwise white
-				if (c == 9 || c == 10) && v != nil {
-					if c == 9 {
+				if (c == mtoYtdIdx || c == mtoPyIdx) && v != nil {
+					if c == mtoYtdIdx {
 						// MTO YTD: use lighter shades
 						if mtoYTD <= 1 {
 							fillColor = "#FFCCCC" // light red
@@ -355,7 +374,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 							fillColor = "#CCFFCC" // light greenn
 						}
 					} else {
-						// c == 10 -> MTO PY: use darker shades
+						// MTO PY column: use darker shades
 						if mtoPY <= 1 {
 							fillColor = "#FF6666" // darker red
 						} else if mtoPY <= 3 {
@@ -396,26 +415,44 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		}
 
 		// set column widths for better readability
-		colWidths := map[string]float64{
-			"A": 15, // Item Code
-			"B": 12, // QTY on Hand
-			"C": 15, // Total QTY on PO
-			"D": 12, // PO Num 1
-			"E": 12, // QTY on PO 1
-			"F": 12, // PO Num 2
-			"G": 12, // QTY on PO 2
-			"H": 15, // QTY on SO/BO
-			"I": 15, // QTY Available
-			"J": 10, // MTO YTD
-			"K": 10, // MTO PY
-			"L": 18, // QTY Sold/Issued YTD
-			"M": 18, // QTY Sold/Issued PY
-			"N": 20, // Class
-			"O": 15, // Status
-			"P": 20, // Occasion
-			"Q": 40, // Description
-			"R": 15, // UPC
-			"S": 10, // Foil
+		// Build column widths based on the headers we actually wrote (handles both PO and non-PO variants)
+		colWidths := make(map[string]float64)
+		for i, h := range headersOut {
+			col, _ := excelize.ColumnNumberToName(i + 1)
+			switch h {
+			case "Item Code":
+				colWidths[col] = 15
+			case "QTY on Hand":
+				colWidths[col] = 12
+			case "Total QTY on PO":
+				colWidths[col] = 15
+			case "PO Num 1", "PO Num 2":
+				colWidths[col] = 12
+			case "QTY on PO 1", "QTY on PO 2":
+				colWidths[col] = 12
+			case "QTY on SO/BO":
+				colWidths[col] = 15
+			case "QTY Available":
+				colWidths[col] = 15
+			case "MTO YTD", "MTO PY":
+				colWidths[col] = 10
+			case "QTY Sold/Issued YTD", "QTY Sold/Issued PY":
+				colWidths[col] = 18
+			case "Class":
+				colWidths[col] = 20
+			case "Status":
+				colWidths[col] = 15
+			case "Occasion":
+				colWidths[col] = 20
+			case "Description":
+				colWidths[col] = 40
+			case "UPC":
+				colWidths[col] = 15
+			case "Foil":
+				colWidths[col] = 10
+			default:
+				colWidths[col] = 12
+			}
 		}
 		for _, sh := range []string{"Everyday", "Winter", "Spring"} {
 			for col, width := range colWidths {

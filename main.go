@@ -26,10 +26,13 @@ func main() {
 
 	inventoryReport, poReport, outputDir := selectFiles(myApp)
 
-	// If no reports are selected, exit
-	if inventoryReport == "" || poReport == "" {
-		logger.Printf("not all report files were selected")
+	// Inventory report is required; PO report is optional
+	if inventoryReport == "" {
+		logger.Printf("inventory report not selected")
 		return
+	}
+	if poReport == "" {
+		logger.Printf("PO report not selected; proceeding without PO data")
 	}
 
 	outputs, err := hotsheet.CreateFromReports(inventoryReport, poReport, outputDir)

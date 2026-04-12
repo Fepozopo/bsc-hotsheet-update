@@ -123,7 +123,7 @@ func selectFiles(a fyne.App) (string, string, string) {
 	inventoryEntry := widget.NewEntry()
 	inventoryEntry.SetPlaceHolder("Path to inventory report (xlsx)")
 	poEntry := widget.NewEntry()
-	poEntry.SetPlaceHolder("Path to PO report (xlsx)")
+	poEntry.SetPlaceHolder("Path to PO report (xlsx) (optional)")
 	outputEntry := widget.NewEntry()
 	outputEntry.SetPlaceHolder("Output directory (optional)")
 
@@ -170,10 +170,7 @@ func selectFiles(a fyne.App) (string, string, string) {
 			dialog.ShowError(errors.New("Inventory report is required"), window)
 			return
 		}
-		if strings.TrimSpace(poEntry.Text) == "" {
-			dialog.ShowError(errors.New("PO report is required"), window)
-			return
-		}
+		// PO report is optional; allow proceeding without a PO file.
 		window.Close()
 	})
 
@@ -183,7 +180,7 @@ func selectFiles(a fyne.App) (string, string, string) {
 		widget.NewLabelWithStyle("Inventory Report:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewBorder(nil, nil, invBtn, nil, inventoryEntry),
 		layout.NewSpacer(),
-		widget.NewLabelWithStyle("PO Report:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("PO Report (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewBorder(nil, nil, poBtn, nil, poEntry),
 		layout.NewSpacer(),
 		widget.NewLabelWithStyle("Output Directory (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
