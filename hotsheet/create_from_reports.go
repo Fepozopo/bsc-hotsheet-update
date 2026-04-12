@@ -370,6 +370,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				} else if pl == "BAS" {
 					// treat BAS B-items as bulk by default
 					prefix = "Bulk - "
+				} else if pl == "OAT" {
+					// treat OAT B-items as BX by default
+					prefix = "BX - "
 				}
 			}
 
