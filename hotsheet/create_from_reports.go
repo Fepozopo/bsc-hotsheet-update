@@ -218,7 +218,6 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	headersOut := []string{
 		"Item Code",
 		"QTY on Hand",
-		"Total QTY on PO",
 	}
 	if hasPO {
 		headersOut = append(headersOut,
@@ -226,10 +225,11 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			"QTY on PO 1",
 			"PO Num 2",
 			"QTY on PO 2",
-			"QTY on SO/BO",
 		)
 	}
 	headersOut = append(headersOut,
+		"Total QTY on PO",
+		"QTY on SO/BO",
 		"QTY Available",
 		"MTO YTD",
 		"MTO PY",
@@ -338,12 +338,13 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			vals := []interface{}{
 				e.SKU,
 				e.OnHand,
-				e.OnPO,
 			}
 			if hasPO {
-				vals = append(vals, e.PONum1, e.OnPO1, e.PONum2, e.OnPO2, onSOBO)
+				vals = append(vals, e.PONum1, e.OnPO1, e.PONum2, e.OnPO2)
 			}
 			vals = append(vals,
+				e.OnPO,
+				onSOBO,
 				totalAvail,
 				mtoYTD,
 				mtoPY,
@@ -424,12 +425,12 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				colWidths[col] = 15
 			case "QTY on Hand":
 				colWidths[col] = 12
-			case "Total QTY on PO":
-				colWidths[col] = 15
 			case "PO Num 1", "PO Num 2":
 				colWidths[col] = 12
 			case "QTY on PO 1", "QTY on PO 2":
 				colWidths[col] = 12
+			case "Total QTY on PO":
+				colWidths[col] = 15
 			case "QTY on SO/BO":
 				colWidths[col] = 15
 			case "QTY Available":
