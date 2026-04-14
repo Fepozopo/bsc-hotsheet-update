@@ -276,7 +276,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			for c, h := range headersOut {
 				cell, _ := excelize.CoordinatesToCellName(c+1, 1)
 				f.SetCellValue(sh, cell, h)
-				// make header bold, centered, with borders
+				// make header bold, centered, with borders and light purple fill
 				style, _ := f.NewStyle(&excelize.Style{
 					Font:      &excelize.Font{Bold: true},
 					Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
@@ -286,9 +286,31 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 						{Type: "top", Color: "000000", Style: 1},
 						{Type: "bottom", Color: "000000", Style: 1},
 					},
+					Fill: excelize.Fill{
+						Type:    "pattern",
+						Color:   []string{"#E6E6FA"},
+						Pattern: 1,
+					},
 				})
 				f.SetCellStyle(sh, cell, cell, style)
+
+				// Add explanatory comments to the MTO YTD and MTO PY headers so users know how they're calculated.
+				// MTO YTD uses year-to-date sold/issued scaled to months through the current year:
+				// MTO YTD = QTY Available / ((QTY Sold/Issued YTD) / monthsThrough + 1)
+				// where monthsThrough is the number of months completed in the current year (fractional).
+				// MTO PY uses prior-year sold/issued scaled to the season length:
+				// MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1)
+				// where salesSeason is: Winter=6, Spring=5, Everyday=12.
+				if h == "MTO YTD" {
+					c := excelize.Comment{Cell: cell, Author: "Shane DuPrey", Text: "MTO YTD = QTY Available / ((QTY Sold/Issued YTD) / monthsThrough + 1). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace."}
+					_ = f.AddComment(sh, c)
+				}
+				if h == "MTO PY" {
+					c := excelize.Comment{Cell: cell, Author: "Shane DuPrey", Text: "MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1). salesSeason used: Winter=6, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length."}
+					_ = f.AddComment(sh, c)
+				}
 			}
+
 		}
 
 		// row counters per sheet
