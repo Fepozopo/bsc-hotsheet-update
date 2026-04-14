@@ -316,7 +316,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			case "Winter":
 				salesSeason = 6.0 // typically most sales occur in last 6 months of year
 			case "Spring":
-				salesSeason = 4.0 // typically most sales occur in first 4 months of year
+				salesSeason = 5.0 // typically most sales occur in first 5 months of year
 			default:
 				salesSeason = 12.0 // assume sales spread evenly across the year for Everyday
 			}
