@@ -503,7 +503,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			col, _ := excelize.ColumnNumberToName(i + 1)
 			switch h {
 			case "Item Code":
-				colWidths[col] = 15
+				colWidths[col] = 20
 			case "QTY on Hand":
 				colWidths[col] = 12
 			case "PO Num 1", "PO Num 2":
@@ -519,7 +519,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			case "MTO YTD", "MTO PY":
 				colWidths[col] = 10
 			case "QTY Sold/Issued YTD", "QTY Sold/Issued PY":
-				colWidths[col] = 18
+				colWidths[col] = 20
 			case "Class":
 				colWidths[col] = 20
 			case "Status":
@@ -527,7 +527,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			case "Occasion":
 				colWidths[col] = 20
 			case "Description":
-				colWidths[col] = 40
+				colWidths[col] = 35
 			case "UPC":
 				colWidths[col] = 15
 			case "Foil":
