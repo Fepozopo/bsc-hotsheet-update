@@ -302,11 +302,23 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				// MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1)
 				// where salesSeason is: Winter=6, Spring=5, Everyday=12.
 				if h == "MTO YTD" {
-					c := excelize.Comment{Cell: cell, Author: "Shane DuPrey", Text: "MTO YTD = QTY Available / ((QTY Sold/Issued YTD) / monthsThrough + 1). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace."}
+					c := excelize.Comment{
+						Cell:   cell,
+						Author: "Shane DuPrey",
+						Text:   "MTO YTD = QTY Available / ((QTY Sold/Issued YTD) / monthsThrough + 1). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace.",
+						Height: 190,
+						Width:  200,
+					}
 					_ = f.AddComment(sh, c)
 				}
 				if h == "MTO PY" {
-					c := excelize.Comment{Cell: cell, Author: "Shane DuPrey", Text: "MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1). salesSeason used: Winter=6, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length."}
+					c := excelize.Comment{
+						Cell:   cell,
+						Author: "Shane DuPrey",
+						Text:   "MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1). salesSeason used: Winter=6, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length.",
+						Height: 180,
+						Width:  180,
+					}
 					_ = f.AddComment(sh, c)
 				}
 			}
