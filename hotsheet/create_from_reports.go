@@ -17,11 +17,14 @@ import (
 // Returns the list of generated file paths.
 func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error) {
 	// logger for the operation
-	logger, logFile, err := helpers.CreateLogger("create", "all", "", "INFO")
+	logger, logCloser, err := helpers.CreateSlogLogger("create", "all", "", "DEBUG")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
-	defer logFile.Close()
+	logger.Info("CreateFromReports started", "inventoryPath", inventoryPath, "poPath", poPath, "outputDir", outputDir)
+	defer func() {
+		_ = logCloser.Close()
+	}()
 
 	// Open inventory workbook
 	wbInv, err := excelize.OpenFile(inventoryPath)
@@ -87,12 +90,12 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		sku := getCellAt(invRows, r, skuIdx)
 		// skip empty SKU rows and continue scanning; do not break here because blank rows may appear
 		if sku == "" {
-			logger.Printf("Skipping empty SKU at inventory row %d", r)
+			logger.Info("Skipping empty SKU at inventory row", "row", r)
 			continue
 		}
 		// if the SKU cell looks like a run date, stop parsing
 		if isRunDate(sku) {
-			logger.Printf("Encountered run-date/footer '%s' at inventory row %d — stopping parse", sku, r)
+			logger.Info("Encountered run-date/footer, stopping parse", "value", sku, "row", r)
 			break
 		}
 
@@ -119,7 +122,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		e.Description = getCellAt(invRows, valRow, descIdx)
 		e.UPC = getCellAt(invRows, valRow, upcIdx)
 
-		logger.Printf("Inventory parse: SKU=%s skuRow=%d valRow=%d ProductLine=%s OnHand=%d OnPO=%d", e.SKU, r, valRow, e.ProductLine, e.OnHand, e.OnPO)
+		logger.Debug("Inventory parse", "SKU", e.SKU, "skuRow", r, "valRow", valRow, "ProductLine", e.ProductLine, "OnHand", e.OnHand, "OnPO", e.OnPO)
 
 		invMap[e.SKU] = e
 	}
@@ -128,12 +131,12 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	if poPath != "" {
 		wbPO, err := excelize.OpenFile(poPath)
 		if err != nil {
-			logger.Printf("failed to open PO report: %v", err)
+			logger.Error("failed to open PO report", "err", err)
 		} else {
 			defer wbPO.Close()
 			poRows, err := wbPO.GetRows("Sheet1")
 			if err != nil {
-				logger.Printf("failed to read PO sheet: %v", err)
+				logger.Error("failed to read PO sheet", "err", err)
 			} else if len(poRows) > 0 {
 				dataCol := "A"
 				onPOCol := "I"
@@ -158,7 +161,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 					// ensure inventory entry exists; skip PO-only SKUs (avoid creating UNKNOWN product-line groups)
 					e, ok := invMap[sku]
 					if !ok {
-						logger.Printf("Skipping PO-only SKU %s (not present in inventory)", sku)
+						logger.Info("Skipping PO-only SKU (not present in inventory)", "SKU", sku)
 						continue
 					}
 
@@ -207,7 +210,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		pl := strings.TrimSpace(e.ProductLine)
 		if pl == "" {
 			// skip entries without a ProductLine (likely discovered only from PO); this avoids many UNKNOWN files
-			logger.Printf("Skipping SKU %s with empty ProductLine (likely PO-only entry)", e.SKU)
+			logger.Info("Skipping SKU with empty ProductLine (likely PO-only entry)", "SKU", e.SKU)
 			continue
 		}
 		productGroups[pl] = append(productGroups[pl], e)
@@ -555,11 +558,12 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		fileName := fmt.Sprintf("%s_hotsheet_%s.xlsx", sanitizeFileName(pl), dateStr)
 		outPath := filepath.Join(outDir, fileName)
 		if err := f.SaveAs(outPath); err != nil {
-			logger.Printf("failed to save hotsheet for %s: %v", pl, err)
+			logger.Error("failed to save hotsheet for product line", "productLine", pl, "err", err)
 			return outputs, fmt.Errorf("failed to save hotsheet %s: %w", outPath, err)
 		}
 		outputs = append(outputs, outPath)
 	}
 
+	logger.Info("CreateFromReports completed", "filesCreated", len(outputs), "outputDir", outputDir)
 	return outputs, nil
 }

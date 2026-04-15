@@ -6,13 +6,15 @@ import (
 )
 
 func main() {
-	logger, logFile, err := helpers.CreateLogger("main", "", "", "ERROR")
+	logger, logCloser, err := helpers.CreateSlogLogger("main", "", "", "ERROR")
 	if err != nil {
 		// If we cannot create the logger, we cannot proceed reliably.
 		// Fail early; the UI flow depends on this logging setup.
 		return
 	}
-	defer logFile.Close()
+	defer func() {
+		_ = logCloser.Close()
+	}()
 
 	myApp := app.New()
 	defer myApp.Quit()
@@ -20,5 +22,5 @@ func main() {
 	// The UI-driven flow in selectFiles handles generation and result display.
 	selectFiles(myApp)
 
-	logger.Println("application exited")
+	logger.Info("application exited")
 }
