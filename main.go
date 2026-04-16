@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	logger, logCloser, err := helpers.CreateSlogLogger("main", "", "", "ERROR")
+	logger, logCloser, err := helpers.CreateSlogLogger("main", "", "", "DEBUG")
 	if err != nil {
 		// If we cannot create the logger, we cannot proceed reliably.
 		// Fail early; the UI flow depends on this logging setup.
