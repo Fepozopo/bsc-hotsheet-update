@@ -122,7 +122,27 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		e.Description = getCellAt(invRows, valRow, descIdx)
 		e.UPC = getCellAt(invRows, valRow, upcIdx)
 
-		logger.Debug("Inventory parse", "SKU", e.SKU, "skuRow", r, "valRow", valRow, "ProductLine", e.ProductLine, "OnHand", e.OnHand, "OnPO", e.OnPO)
+		logger.Debug("Inventory parse",
+			"SKU", e.SKU,
+			"skuRow", r,
+			"valRow", valRow,
+			"ProductLine", e.ProductLine,
+			"ClassDesc", e.ClassDesc,
+			"Status", e.Status,
+			"OnHand", e.OnHand,
+			"OnPO", e.OnPO,
+			"OnSO", e.OnSO,
+			"OnBO", e.OnBO,
+			"TotalAvailable", e.TotalAvailable,
+			"YTDSold", e.YTDSold,
+			"YTDIssued", e.YTDIssued,
+			"SoldPY", e.SoldPY,
+			"IssuedPY", e.IssuedPY,
+			"Foil", e.Foil,
+			"Occasion", e.Occasion,
+			"Description", e.Description,
+			"UPC", e.UPC,
+		)
 
 		invMap[e.SKU] = e
 	}
@@ -197,6 +217,15 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 							poNum = "0"
 						}
 						assignPO(e, poNum, qty)
+						logger.Debug("Individual PO parse",
+							"SKU", sku,
+							"skuRow", rowNum,
+							"poRow", r,
+							"PO Num", poNum,
+							"QTY", qty,
+							"PO Status", status,
+						)
+
 						poCount++
 					}
 				}
