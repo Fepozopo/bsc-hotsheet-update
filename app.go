@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"github.com/Fepozopo/bsc-hotsheet-update/hotsheet"
 	"github.com/Fepozopo/bsc-hotsheet-update/internal/version"
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
@@ -32,6 +36,20 @@ func openFileWindow(parent fyne.Window, callback func(filePath string, e error))
 		return
 	}
 	callback(filePath, nil)
+}
+
+// openDirWindow opens a native directory chooser and returns the chosen directory path
+func openDirWindow(parent fyne.Window, callback func(dirPath string, e error)) {
+	dirPath, err := osDialog.Directory().Browse()
+	if err != nil {
+		if err.Error() == "cancelled" {
+			callback("", errors.New("cancelled"))
+		} else {
+			callback("", err)
+		}
+		return
+	}
+	callback(dirPath, nil)
 }
 
 func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
@@ -96,302 +114,212 @@ func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 	}()
 }
 
-// selectFiles creates a GUI window that asks for which hotsheet(s) to update first and then
-// asks for report files. The reports section only appears after the user selects a hotsheet file
-// and clicks Next. The Next button is enabled only when required hotsheet file(s) are filled.
-func selectFiles(a fyne.App) (string, []string, string, string, string) {
-	window := a.NewWindow("Hotsheet Updater")
+// fileLabel is a small helper type that embeds a widget.Label and supports double-tap
+// behavior so we can open a file when the user double-clicks it.
+type fileLabel struct {
+	widget.Label
+	path     string
+	onDouble func(string)
+}
+
+func (f *fileLabel) DoubleTapped(*fyne.PointEvent) {
+	if f.onDouble != nil {
+		f.onDouble(f.path)
+	}
+}
+
+// openPath opens a file or folder using the platform's default handler.
+func openPath(p string) {
+	if p == "" {
+		return
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		_ = exec.Command("open", p).Start()
+	case "windows":
+		_ = exec.Command("cmd", "/C", "start", "", p).Start()
+	default:
+		_ = exec.Command("xdg-open", p).Start()
+	}
+}
+
+// selectFiles creates a GUI window that asks for the required reports and output directory,
+// but does the hotsheet generation itself. When generation finishes it opens a Fyne window
+// listing the created files. The main window is not closed after generation; instead the
+// inputs are cleared so the user can run another generation.
+func selectFiles(a fyne.App) (string, string, string) {
+	window := a.NewWindow("Hotsheet Generator")
 	checkForUpdates(window, false)
-	window.Resize(fyne.NewSize(900, 800))
+	window.Resize(fyne.NewSize(700, 420))
 
-	// 4 hotsheets + 3 reports
-	files := make([]*widget.Entry, 7)
-	buttons := make([]*widget.Button, 7)
+	// Entries for reports and output
+	inventoryEntry := widget.NewEntry()
+	inventoryEntry.SetPlaceHolder("Path to inventory report (xlsx)")
+	poEntry := widget.NewEntry()
+	poEntry.SetPlaceHolder("Path to PO report (xlsx) (optional)")
+	outputEntry := widget.NewEntry()
+	outputEntry.SetPlaceHolder("Output directory (optional)")
 
-	options := []string{"All", "21c", "BJP", "BSC", "SMD"}
-	list := widget.NewSelect(options, nil)
-
-	// create entries and browse buttons (capture index correctly)
-	for i := range files {
-		files[i] = widget.NewEntry()
-		idx := i
-		buttons[i] = widget.NewButton("Browse", func() {
-			openFileWindow(window, func(filePath string, e error) {
-				if e != nil {
-					if e.Error() == "cancelled" {
-						// user cancelled - do nothing
-						return
-					}
-					dialog.ShowError(e, window)
+	// Browse buttons
+	invBtn := widget.NewButton("Browse", func() {
+		openFileWindow(window, func(filePath string, e error) {
+			if e != nil {
+				if e.Error() == "cancelled" {
 					return
 				}
-				files[idx].SetText(filePath)
-				// Trigger OnChanged manually if present
-				if files[idx].OnChanged != nil {
-					files[idx].OnChanged(filePath)
-				}
-			})
+				dialog.ShowError(e, window)
+				return
+			}
+			inventoryEntry.SetText(filePath)
 		})
-	}
-
-	var selection string
-	var hotsheetPaths []string
-	var inventoryReportPath string
-	var poReportPath string
-	var bnReportPath string
-
-	hotsheetLabels := []string{"21c Hotsheet:", "BJP Hotsheet:", "BSC Hotsheet:", "SMD Hotsheet:"}
-
-	// Build hotsheet section objects
-	hotsheetSection := []fyne.CanvasObject{
-		widget.NewLabelWithStyle("Select Hotsheet(s):", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-	}
-	for i := 0; i < 4; i++ {
-		hotsheetSection = append(hotsheetSection,
-			widget.NewLabelWithStyle(hotsheetLabels[i], fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			files[i],
-			buttons[i],
-		)
-	}
-
-	// Report labels/controls (built separately and only added after Next)
-	reportHeader := widget.NewLabelWithStyle("(Inventory and PO required, BN optional):", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	inventoryLabel := widget.NewLabelWithStyle("Inventory Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	poLabel := widget.NewLabelWithStyle("PO Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	bnLabel := widget.NewLabelWithStyle("BN Report:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	bnCheck := widget.NewCheck("Include BN report (optional)", nil)
-
-	// Submit button (will be shown in reports view)
-	submitButton := widget.NewButton("Submit", func() {
-		selection = list.Selected
-		if selection == "All" {
-			// All updates except BJP as per previous behavior (21c index 0, BSC index 2, SMD index 3)
-			hotsheetPaths = []string{files[0].Text, files[2].Text, files[3].Text}
-		} else {
-			selectedIndex := -1
-			for idx, opt := range options {
-				if opt == selection {
-					selectedIndex = idx - 1 // because options has "All" at start
-					break
+	})
+	poBtn := widget.NewButton("Browse", func() {
+		openFileWindow(window, func(filePath string, e error) {
+			if e != nil {
+				if e.Error() == "cancelled" {
+					return
 				}
+				dialog.ShowError(e, window)
+				return
 			}
-			if selectedIndex >= 0 && selectedIndex < 4 {
-				hotsheetPaths = []string{files[selectedIndex].Text}
-			} else {
-				hotsheetPaths = []string{}
+			poEntry.SetText(filePath)
+		})
+	})
+	outBtn := widget.NewButton("Browse", func() {
+		openDirWindow(window, func(dirPath string, e error) {
+			if e != nil {
+				if e.Error() == "cancelled" {
+					return
+				}
+				dialog.ShowError(e, window)
+				return
 			}
-		}
+			outputEntry.SetText(dirPath)
+		})
+	})
 
-		inventoryReportPath = files[4].Text
-		poReportPath = files[5].Text
-		if bnCheck.Checked {
-			bnReportPath = files[6].Text
-		} else {
-			bnReportPath = ""
-		}
-
-		// Validation
-		if inventoryReportPath == "" {
+	// Generate handler - performs generation in background and shows outputs in a new window
+	generate := func() {
+		if strings.TrimSpace(inventoryEntry.Text) == "" {
 			dialog.ShowError(errors.New("Inventory report is required"), window)
 			return
 		}
-		if poReportPath == "" {
-			dialog.ShowError(errors.New("PO report is required"), window)
-			return
-		}
-		if bnCheck.Checked && bnReportPath == "" {
-			dialog.ShowError(errors.New("BN report selected to be included but no file chosen"), window)
-			return
-		}
 
-		window.Close()
-	})
+		// Progress dialog while generating
+		progress := widget.NewProgressBarInfinite()
+		progressLabel := widget.NewLabel("Generating hotsheets...")
+		progressDialog := dialog.NewCustom("Generating Hotsheets", "Cancel", container.NewVBox(progressLabel, progress), window)
+		progressDialog.Show()
 
-	// Build main content container (title + select)
-	content := container.NewVBox(
-		widget.NewLabelWithStyle("Which hotsheet would you like to update? (Select 'All' to update all (excluding BJP))", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		list,
-	)
-
-	// declare nextButton variable so addHotsheetRows can reference it before assignment below
-	var nextButton *widget.Button
-
-	// addHotsheetRows is used to append the appropriate hotsheet rows based on selection
-	addHotsheetRows := func(s string) {
-		// Ensure content only has header + select before adding
-		content.Objects = content.Objects[:2]
-		if s == "All" {
-			toShow := []int{0, 2, 3}
-			for _, i := range toShow {
-				content.Add(hotsheetSection[1+i*3])
-				content.Add(hotsheetSection[1+i*3+1])
-				content.Add(hotsheetSection[1+i*3+2])
+		// Run generation in goroutine to avoid blocking UI
+		go func(inv, po, outdir string) {
+			outputs, err := hotsheet.CreateFromReports(inv, po, outdir)
+			// Must manipulate UI from main goroutine; schedule with fyne.CurrentApp().SendNotification isn't appropriate here,
+			// but dialog.Show* and window operations are safe to call from other goroutines in Fyne as they marshal to the main loop.
+			progressDialog.Hide()
+			if err != nil {
+				// Show error on main window
+				dialog.ShowError(err, window)
+				return
 			}
-		} else if s != "" {
-			selectedIndex := -1
-			for idx, opt := range options {
-				if opt == s {
-					selectedIndex = idx - 1
-					break
-				}
+
+			// Prepare outputs window
+			outWin := a.NewWindow("Created Hotsheets")
+			outWin.Resize(fyne.NewSize(600, 400))
+
+			// helper state: selected index for Open Folder action
+			var selectedIndex int = -1
+
+			// Create a list whose items are of type fileLabel so we can respond to double-clicks.
+			list := widget.NewList(
+				func() int { return len(outputs) },
+				func() fyne.CanvasObject {
+					fl := &fileLabel{}
+					fl.ExtendBaseWidget(fl)
+					return fl
+				},
+				func(i widget.ListItemID, o fyne.CanvasObject) {
+					fl := o.(*fileLabel)
+					fl.path = outputs[i]
+					fl.SetText(outputs[i])
+					fl.onDouble = func(p string) { openPath(p) }
+				},
+			)
+
+			// track selection so Open Folder knows which file's folder to open
+			list.OnSelected = func(id widget.ListItemID) {
+				selectedIndex = int(id)
 			}
-			if selectedIndex >= 0 && selectedIndex < 4 {
-				content.Add(hotsheetSection[1+selectedIndex*3])
-				content.Add(hotsheetSection[1+selectedIndex*3+1])
-				content.Add(hotsheetSection[1+selectedIndex*3+2])
+			list.OnUnselected = func(id widget.ListItemID) {
+				selectedIndex = -1
 			}
-		}
-		// after showing hotsheet entries, show spacer and Next button (Next enabled only if required files filled)
-		if s != "" {
-			content.Add(layout.NewSpacer())
-			content.Add(nextButton)
-		}
-	}
 
-	// Next button: initially disabled until required hotsheet file(s) are filled for the selection
-	nextButton = widget.NewButton("Next: Reports", func() {
-		// When Next is pressed, hide the hotsheet selection rows and show a smaller title + the reports section
-		// Clear the existing content and show a compact Reports title to reduce clutter
-		content.Objects = content.Objects[:0]
-
-		// Smaller title replacing the original header and select
-		reportTitle := widget.NewLabelWithStyle("Select Report Files", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-		content.Add(reportTitle)
-		content.Add(reportHeader)
-		content.Add(layout.NewSpacer())
-
-		// Add reports section
-		content.Add(inventoryLabel)
-		content.Add(files[4])
-		content.Add(buttons[4])
-
-		content.Add(layout.NewSpacer())
-
-		content.Add(poLabel)
-		content.Add(files[5])
-		content.Add(buttons[5])
-
-		content.Add(layout.NewSpacer())
-
-		content.Add(bnCheck)
-		// If checkbox already checked (unlikely at this point) show BN inputs
-		if bnCheck.Checked {
-			content.Add(bnLabel)
-			content.Add(files[6])
-			content.Add(buttons[6])
-		}
-
-		content.Add(layout.NewSpacer())
-		content.Add(submitButton)
-		content.Refresh()
-	})
-	nextButton.Disable()
-
-	// Helper to check whether the required hotsheet file(s) are filled for the current selection
-	isHotsheetFilled := func(sel string) bool {
-		if sel == "" {
-			return false
-		}
-		if sel == "All" {
-			// required: files[0], files[2], files[3]
-			return files[0].Text != "" && files[2].Text != "" && files[3].Text != ""
-		}
-		// find selected index mapping to files[0..3]
-		selectedIndex := -1
-		for idx, opt := range options {
-			if opt == sel {
-				selectedIndex = idx - 1
-				break
-			}
-		}
-		if selectedIndex >= 0 && selectedIndex < 4 {
-			return files[selectedIndex].Text != ""
-		}
-		return false
-	}
-
-	// Add OnChanged handlers to hotsheet entries so that changes enable/disable Next appropriately.
-	// Add these now (after nextButton exists) so they can enable/disable the button.
-	for i := 0; i < 4; i++ {
-		idx := i
-		orig := files[idx].OnChanged
-		files[idx].OnChanged = func(s string) {
-			// call any existing handler
-			if orig != nil {
-				orig(s)
-			}
-			// enable Next if the selection's required entries are filled
-			if isHotsheetFilled(list.Selected) {
-				nextButton.Enable()
+			// If there are no outputs, show a message; otherwise put the label in the top border
+			// and let the list fill the center so it expands to available space.
+			var content fyne.CanvasObject
+			if len(outputs) == 0 {
+				content = container.NewVBox(widget.NewLabel("No files were created."))
 			} else {
-				nextButton.Disable()
+				// Put the label in the top border and make the list scrollable so it expands to fill available space.
+				// Using NewVScroll(list) allows the list to take the remaining height while the window expands.
+				content = container.NewBorder(widget.NewLabel("Created files:"), nil, nil, nil, container.NewVScroll(list))
 			}
-		}
-	}
 
-	// When the selection changes, show the relevant hotsheet rows and update Next enabled state
-	list.OnChanged = func(s string) {
-		// Reset content to header + select and add selected hotsheet rows
-		addHotsheetRows(s)
-		// Update Next enablement depending on current entries
-		if isHotsheetFilled(s) {
-			nextButton.Enable()
-		} else {
-			nextButton.Disable()
-		}
-		content.Refresh()
-	}
+			doneBtn := widget.NewButton("Done", func() {
+				outWin.Close()
+				// Clear the main window fields so nothing is selected
+				inventoryEntry.SetText("")
+				poEntry.SetText("")
+				outputEntry.SetText("")
+			})
 
-	// bnCheck toggles showing the BN file inputs when reports area is visible.
-	bnCheck.OnChanged = func(checked bool) {
-		// If reports haven't been added yet, nothing to do
-		hasReports := false
-		for _, obj := range content.Objects {
-			if obj == reportHeader {
-				hasReports = true
-				break
-			}
-		}
-		if !hasReports {
-			return
-		}
-		if checked {
-			// insert BN inputs after the checkbox
-			idx := -1
-			for i, obj := range content.Objects {
-				if obj == bnCheck {
-					idx = i
-					break
+			openFolderBtn := widget.NewButton("Open Folder", func() {
+				if selectedIndex >= 0 && selectedIndex < len(outputs) {
+					dir := filepath.Dir(outputs[selectedIndex])
+					openPath(dir)
+				} else if len(outputs) > 0 {
+					// fallback to first output's folder
+					dir := filepath.Dir(outputs[0])
+					openPath(dir)
 				}
-			}
-			if idx != -1 {
-				after := make([]fyne.CanvasObject, 0, len(content.Objects)+3)
-				after = append(after, content.Objects[:idx+1]...)
-				after = append(after, bnLabel, files[6], buttons[6])
-				after = append(after, content.Objects[idx+1:]...)
-				content.Objects = after
-			}
-		} else {
-			// remove BN inputs if present
-			newObjs := make([]fyne.CanvasObject, 0, len(content.Objects))
-			for _, obj := range content.Objects {
-				if obj == bnLabel || obj == files[6] || obj == buttons[6] {
-					continue
-				}
-				newObjs = append(newObjs, obj)
-			}
-			content.Objects = newObjs
-		}
-		content.Refresh()
+			})
+
+			// Place buttons at the bottom with spacer so they are right-aligned
+			buttons := container.NewHBox(layout.NewSpacer(), openFolderBtn, widget.NewLabel("   "), doneBtn)
+
+			// Use a border so the buttons stay at the bottom and the content fills the middle area.
+			outWin.SetContent(container.NewBorder(nil, buttons, nil, nil, content))
+			outWin.Show()
+		}(inventoryEntry.Text, poEntry.Text, outputEntry.Text)
 	}
 
-	// Ensure the window closes cleanly
-	window.SetCloseIntercept(func() {
+	// Buttons: Generate and Quit (Quit closes the main window)
+	submitBtn := widget.NewButton("Generate Hotsheets", generate)
+	quitBtn := widget.NewButton("Quit", func() {
 		window.Close()
 	})
+
+	buttons := container.NewHBox(layout.NewSpacer(), submitBtn, widget.NewLabel("   "), quitBtn)
+
+	content := container.NewVBox(
+		widget.NewLabelWithStyle("Create Unified Hotsheets from Reports", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		layout.NewSpacer(),
+		widget.NewLabelWithStyle("Inventory Report:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewBorder(nil, nil, invBtn, nil, inventoryEntry),
+		layout.NewSpacer(),
+		widget.NewLabelWithStyle("PO Report (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewBorder(nil, nil, poBtn, nil, poEntry),
+		layout.NewSpacer(),
+		widget.NewLabelWithStyle("Output Directory (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewBorder(nil, nil, outBtn, nil, outputEntry),
+		layout.NewSpacer(),
+		buttons,
+	)
 
 	window.SetContent(content)
 	window.ShowAndRun()
 
-	return selection, hotsheetPaths, inventoryReportPath, poReportPath, bnReportPath
+	// Return empty strings because the generation is handled inside this UI flow.
+	// This prevents the main() caller from trying to re-run generation.
+	return "", "", ""
 }

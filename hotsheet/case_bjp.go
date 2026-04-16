@@ -9,13 +9,12 @@ import (
 //
 // This function is called by the main function when the user selects 'BJP' as the product
 // line.
-func CaseBJP(fileHotsheetNew, inventoryReport, POReport, BNReport string) error {
+func CaseBJP(fileHotsheetNew, inventoryReport, POReport string) error {
 	everyday := Update{
 		Hotsheet:            fileHotsheetNew,
 		Sheet:               "Everyday",
 		InventoryReport:     inventoryReport,
 		POReport:            POReport,
-		BNReport:            BNReport,
 		SkuCol:              "C",
 		OnHandCol:           "D",
 		OnPOCol1:            "E",
@@ -28,8 +27,6 @@ func CaseBJP(fileHotsheetNew, inventoryReport, POReport, BNReport string) error 
 		PONumCol2:           "H",
 		PONumCol3:           "J",
 		AverageMonthlyCol:   "O",
-		BNYtdSoldCol:        "Q",
-		BNAverageMonthlyCol: "R",
 		UpcCol:              "U",
 	}
 

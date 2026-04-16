@@ -14,7 +14,7 @@ windows-amd64:
 	$(call MAKE_BIN_DIR)
 	@echo "Using zig cross compiler for Windows"
 	@echo "Building with CC="zig cc -target x86_64-windows""
-	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC="zig cc -target x86_64-windows" \
+	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC="zig cc -target x86_64-windows-gnu" \
 		go build -o bin/$(BINARY_BASE)-windows-amd64.exe .
 
 # Build for Windows (ARM64)
@@ -23,7 +23,7 @@ windows-arm64:
 	$(call MAKE_BIN_DIR)
 	@echo "Using zig cross compiler for Windows"
 	@echo "Building with CC="zig cc -target aarch64-windows""
-	CGO_ENABLED=1 GOOS=windows GOARCH=arm64 CC="zig cc -target aarch64-windows" \
+	CGO_ENABLED=1 GOOS=windows GOARCH=arm64 CC="zig cc -target aarch64-windows-gnu" \
 		go build -o bin/$(BINARY_BASE)-windows-arm64.exe .
 
 # Build for Linux (AMD64)
@@ -32,7 +32,7 @@ linux-amd64:
 	$(call MAKE_BIN_DIR)
 	@echo "Using gcc for Linux"
 	@echo "Building with CC="zig cc -target x86_64-linux""
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux" \
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux-gnu" \
 		go build -o bin/$(BINARY_BASE)-linux-amd64 .
 
 # Build for Linux (ARM64)
@@ -41,7 +41,7 @@ linux-arm64:
 	$(call MAKE_BIN_DIR)
 	@echo "Using gcc for Linux (ARM)"
 	@echo "Building with CC="zig cc -target aarch64-linux""
-	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux" \
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" \
 		go build -o bin/$(BINARY_BASE)-linux-arm64 .
 
 # Build for darwin (ARM64)
