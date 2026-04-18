@@ -427,16 +427,17 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			// product-line specific rules for SKUs ending in "B"
 			if prefix == "" && strings.HasSuffix(skuUpper, "B") {
 				pl := strings.TrimSpace(e.ProductLine)
-				if pl == "2021" {
+				switch pl {
+				case "2021":
 					if strings.HasPrefix(strings.ToUpper(e.SKU), "FC") {
 						prefix = "Bulk - "
 					} else {
 						prefix = "BX - "
 					}
-				} else if pl == "BAS" {
+				case "BAS":
 					// treat BAS B-items as bulk by default
 					prefix = "Bulk - "
-				} else if pl == "OAT" {
+				case "OAT":
 					// treat OAT B-items as BX by default
 					prefix = "BX - "
 				}
