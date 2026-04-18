@@ -82,6 +82,10 @@ type entry struct {
 	Occasion       string
 	Description    string
 	UPC            string
+	// Additional fields: royalty and dollar sales (added for new report columns)
+	RoyaltyCode   string
+	DollarSoldYTD float64
+	DollarSoldPY  float64
 }
 
 // colToIndex converts Excel column letters to zero-based index (A->0)
@@ -111,6 +115,23 @@ func parseInt(s string) int {
 			return 0
 		}
 		return int(f)
+	}
+	return v
+}
+
+// parseFloat parses numbers permissively (commas, trailing "-" interpreted as negative)
+// Returns a float64, or 0.0 on parse failure.
+func parseFloat(s string) float64 {
+	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
+	if s == "" {
+		return 0.0
+	}
+	if strings.HasSuffix(s, "-") {
+		s = "-" + strings.TrimSuffix(s, "-")
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0.0
 	}
 	return v
 }

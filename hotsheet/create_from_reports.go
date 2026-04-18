@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	occasionCol := "AB"
 	descCol := "AD"
 	upcCol := "AF"
+	royaltyCol := "AH"
+	dollarYtdCol := "AJ"
+	dollarPYCol := "AL"
 
 	skuIdx := colToIndex(skuCol)
 	plIdx := colToIndex(plCol)
@@ -80,6 +84,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	occasionIdx := colToIndex(occasionCol)
 	descIdx := colToIndex(descCol)
 	upcIdx := colToIndex(upcCol)
+	royaltyIdx := colToIndex(royaltyCol)
+	dollarYtdIdx := colToIndex(dollarYtdCol)
+	dollarPYIdx := colToIndex(dollarPYCol)
 
 	startRow := 2
 	for r := startRow; ; r += 3 {
@@ -121,6 +128,30 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		e.Occasion = getCellAt(invRows, valRow, occasionIdx)
 		e.Description = getCellAt(invRows, valRow, descIdx)
 		e.UPC = getCellAt(invRows, valRow, upcIdx)
+		e.RoyaltyCode = getCellAt(invRows, valRow, royaltyIdx)
+		// parse dollar fields permissively (strip $ and commas, handle parentheses)
+		dYTDs := strings.TrimSpace(getCellAt(invRows, valRow, dollarYtdIdx))
+		e.DollarSoldYTD = 0.0
+		if dYTDs != "" {
+			tmp := strings.ReplaceAll(dYTDs, "$", "")
+			tmp = strings.ReplaceAll(tmp, ",", "")
+			tmp = strings.ReplaceAll(tmp, "(", "-")
+			tmp = strings.ReplaceAll(tmp, ")", "")
+			if v, err := strconv.ParseFloat(tmp, 64); err == nil {
+				e.DollarSoldYTD = v
+			}
+		}
+		dPYs := strings.TrimSpace(getCellAt(invRows, valRow, dollarPYIdx))
+		e.DollarSoldPY = 0.0
+		if dPYs != "" {
+			tmp := strings.ReplaceAll(dPYs, "$", "")
+			tmp = strings.ReplaceAll(tmp, ",", "")
+			tmp = strings.ReplaceAll(tmp, "(", "-")
+			tmp = strings.ReplaceAll(tmp, ")", "")
+			if v, err := strconv.ParseFloat(tmp, 64); err == nil {
+				e.DollarSoldPY = v
+			}
+		}
 
 		logger.Debug("Inventory parse",
 			"SKU", e.SKU,
@@ -142,6 +173,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			"Occasion", e.Occasion,
 			"Description", e.Description,
 			"UPC", e.UPC,
+			"RoyaltyCode", e.RoyaltyCode,
+			"DollarSoldYTD", e.DollarSoldYTD,
+			"DollarSoldPY", e.DollarSoldPY,
 		)
 
 		invMap[e.SKU] = e
@@ -273,6 +307,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		"Description",
 		"UPC",
 		"Foil",
+		"Royalty Code",
+		"Dollar Sold YTD",
+		"Dollar Sold PY",
 	)
 	// determine the index positions of MTO columns so coloring logic below works regardless
 	mtoYtdIdx, mtoPyIdx := -1, -1
@@ -470,6 +507,9 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				e.Description,
 				e.UPC,
 				e.Foil,
+				e.RoyaltyCode,
+				e.DollarSoldYTD,
+				e.DollarSoldPY,
 			)
 			r := rowIdx[sh]
 			for c, v := range vals {
@@ -565,6 +605,10 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				colWidths[col] = 15
 			case "Foil":
 				colWidths[col] = 10
+			case "Royalty Code":
+				colWidths[col] = 15
+			case "Dollar Sold YTD", "Dollar Sold PY":
+				colWidths[col] = 18
 			default:
 				colWidths[col] = 12
 			}
