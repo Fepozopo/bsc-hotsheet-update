@@ -2,25 +2,20 @@
 
 ## Description
 
-This is a Go program with a small GUI (Fyne) that updates Excel hotsheets using data from an "Item Listing With Sales History" report pulled from Sage 100. It can update multiple product lines and their respective sheets in one run and automatically matches and updates PO numbers and quantities for each SKU. The program shows a GUI for selecting files and a console progress indicator during updates. Detailed logs are written to a `logs-bsc` folder inside the system temporary directory.
+Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three sheets (Everyday, Winter, Spring), includes per-PO details when available, and computes MTO (months-till-out) metrics.
 
 ## Motivation
 
-This tool replaces the manual process of copying PO and inventory values into hotsheets. It significantly reduces time and human error by automating:
-
-- Matching SKU rows,
-- Updating PO quantities and numbers,
-- Copying a source hotsheet and writing an updated file,
-- Writing detailed logs for troubleshooting.
+This tool automates the manual work of assembling hotsheets from inventory and PO reports, reducing errors and saving time.
 
 ## Requirements
 
-- Go 1.16+ (recommended latest stable Go)
+- Go 1.26.2
+- Fyne v2.5.3 and other Go module dependencies
 - A C compiler for CGO (Fyne requires C bindings):
-  - The Makefile uses `zig` for cross compilation targets. If you don't have zig, you can adjust the Makefile to use a local C compiler (e.g., `clang` or `gcc`).
-  - For macOS builds the provided target uses `clang`.
-- Fyne GUI dependencies are handled by Go modules in `go.mod`.
-- Internet access is required for the built-in auto-update check to contact GitHub releases.
+  - The Makefile uses `zig` for many cross-compilation targets; edit targets to use `clang`/`gcc` if preferred.
+  - The darwin (macOS) target uses `clang`.
+- Internet access is required for the built-in auto-update check (uses GitHub releases).
 
 ## Quick Start
 
@@ -31,75 +26,53 @@ This tool replaces the manual process of copying PO and inventory values into ho
    - `make linux-amd64`
    - `make linux-arm64`
    - `make darwin-arm64` (macOS ARM64)
-   - `make all` (builds all targets)
-   - `make clean` (removes the `bin` folder)
+   - `make all`
+   - `make clean` (removes `bin`)
 
-Built binaries are placed in the `bin` directory and are named like `hotsheet-windows-amd64.exe`, `hotsheet-linux-amd64`, `hotsheet-darwin-arm64`, etc.
-
-Notes about building:
-
-- The Makefile sets `CGO_ENABLED=1` and uses `zig cc` for cross compilation. If you prefer another toolchain, edit the corresponding target.
+Built binaries are written to the `bin/` directory. For local testing `go run .` launches the GUI directly.
 
 ## Usage (GUI)
 
-1. Run the built binary (or run `go run .` during development).
-2. The application window asks which hotsheet you want to update. Options include:
-   - All (updates 21c, BSC, SMD — BJP is excluded from the "All" option)
-   - 21c
-   - BJP
-   - BSC
-   - SMD
-3. Hotsheet file selection:
-   - If you choose a single product (e.g., `BSC`), only that product's hotsheet file selector is shown and is required.
-   - If you choose `All`, three hotsheet file entries are required (in the UI these correspond to the 21c, BSC, and SMD hotsheet selectors). You must fill all three when selecting `All`.
-   - The "Next" button (to select reports) is enabled only after the required hotsheet file(s) are chosen.
-4. Reports:
-   - Inventory report: required
-   - PO report: required
-5. Submit: After validation, the app copies the selected hotsheet(s) and performs updates using the selected reports. Progress is shown in the console and operations are logged.
+1. Run the binary. The main window titled "Hotsheet Generator" opens.
+2. Fill in:
+   - Inventory Report (required): path to the inventory XLSX produced by Sage 100.
+   - PO Report (optional): path to the PO XLSX (if omitted per-PO columns are not written).
+   - Output Directory (optional): where generated files will be written (defaults to the current working directory).
+3. Click "Generate Hotsheets". The app validates inputs, shows a progress dialog, and performs the generation.
+4. On success a "Created Hotsheets" window lists generated files. Double-click an entry to open it, or use "Open Folder" to reveal the containing folder. Click "Done" to close and clear inputs to run again.
 
-Important behaviors:
+Behavior notes
 
-- "All" maps to the following required hotsheet files: 21c, BSC, SMD (in that order). The program will attempt to update these three product lines in that order.
-- If you want to update BJP, choose it explicitly (do not use "All" — BJP is not included in "All").
+- Inventory report is required; PO report is optional. When no PO report is supplied the output omits PO columns.
+- The PO parser captures up to two PO lines per SKU; additional quantities are accumulated into the first PO slot.
+- PO-only SKUs (SKUs present in PO but not in inventory) are skipped to avoid creating "UNKNOWN" product-line files.
+- Output file naming: `{ProductLine}_hotsheet_YYYYMMDD.xlsx` (e.g., `BAS_hotsheet_20260423.xlsx`).
+- Each output file contains three sheets: "Everyday", "Winter", and "Spring". Header comments explain the MTO calculations.
 
 ## Logs
 
-Logs are written to a `logs-bsc` directory inside the OS temporary directory. The logger creates files with a timestamped name and includes product/occasion information when available. Example file name patterns:
+The application writes JSON-formatted logs into a `logs-bsc` directory inside the OS temporary directory (os.TempDir()). Filenames include a timestamp and the logical logger name, with optional product/occasion suffixes. Example patterns produced by the logger:
 
-- `YYYY-MM-DD_HHMMSS.sssssss_NAME.log`
-- `YYYY-MM-DD_HHMMSS.sssssss_NAME-PRODUCT-OCCASION.log`
+- `2006-01-02_150405.000000000_name.log`
+- `2006-01-02_150405.000000000_name-product-occasion.log`
 
-The logger implementation lives in `helpers/create_logger.go`.
+Logger implementation: `helpers/slog_logger.go`. Callers must close the returned io.Closer to flush buffered entries (the code already defers Close()).
 
 ## Auto-update
 
-The GUI performs a GitHub release check (using `go-github-selfupdate`) on startup:
+On startup the GUI checks GitHub releases (uses `rhysd/go-github-selfupdate`). If a newer release is detected the app prompts the user. If the update is accepted the app downloads the release asset, replaces the running executable, and restarts the new binary. If the update is declined the app will exit. Update errors are shown in an error dialog.
 
-- If a newer release is found, the user is prompted to update.
-- When an update is accepted the app downloads the new asset, attempts to replace the executable, and restarts the new binary.
-- If update checks fail, an error dialog is shown.
+## Implementation details
 
-## Example: Update struct usage
-
-You can still configure which columns and sheets to update via the `Update{...}` struct usage in code. An example snippet used in the codebase (this is illustrative; edit code in `hotsheet` package where needed):
-`Update{ Hotsheet: fileHotsheetNew, Sheet: "EVERYDAY", SkuCol: "C", OnHandCol: "D", ... }`
-
-(See `hotsheet/update.go` and the various `case_*.go` files for concrete examples.)
-
-## Files of interest
-
-- `main.go` — app entry; orchestrates file selection and per-product updating.
-- `app.go` — GUI logic, file selection, validation, and update checks.
-- `hotsheet/` — core logic for copying and updating hotsheet Excel files:
-  - `case_21c.go`, `case_bsc.go`, `case_bjp.go`, `case_smd.go`
-  - `copy_hotsheet.go`, `update.go`
-- `helpers/` — logger and progress bar helpers.
-- `internal/version/version.go` — application version string (update before releases).
-- `Makefile` — build targets and instructions.
+- Entry point: `main.go` sets up logging and launches the GUI flow (`selectFiles`).
+- GUI & update-checks: `app.go` contains the UI, input validation, progress dialogs, and the auto-update check.
+- Hotsheet generation: `hotsheet/create_from_reports.go` parses the inventory and optional PO reports and writes XLSX files; `hotsheet/copy_hotsheet.go` contains a simple copy helper; `hotsheet/util.go` includes parsing and mapping helpers.
+- Logging: `helpers/slog_logger.go` creates buffered JSON writers into `logs-bsc` under the system temp directory.
+- Version: `internal/version/version.go` currently holds the app version (v2.1.1).
+- Build: `Makefile` provides cross-compile targets (uses CGO and `zig` by default).
 
 ## Troubleshooting
 
-- If the GUI reports the auto-update failed, check internet connectivity and permissions to replace the executable.
-- If logs are missing, check your OS temp directory for `logs-bsc` and verify the process has permission to write to it.
-- If a build fails due to missing `zig`, either install `zig` (recommended for cross-compiles) or edit the Makefile to use another CC for your environment.
+- Auto-update failed: ensure internet connectivity and that the app has permission to replace the executable.
+- No logs: check your OS temp directory for a `logs-bsc` folder and file permissions.
+- Build failures due to missing `zig`: either install `zig` (recommended for cross-compiles) or edit the `Makefile` targets to use your local `clang`/`gcc` toolchain.
