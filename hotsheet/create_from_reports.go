@@ -427,14 +427,14 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 			// compute derived fields
 			onSOBO := e.OnSO + e.OnBO
 			totalAvail := e.OnHand + e.OnPO - onSOBO
-			soldIssuedYTD := e.YTDSold + max(e.YTDIssued, 0)
-			soldIssuedPY := e.SoldPY + max(e.IssuedPY, 0)
+			totalSoldYTD := e.YTDSold + max(e.YTDIssued, 0)
+			totalSoldPY := e.SoldPY + max(e.IssuedPY, 0)
 
 			// MTO = Months Till Out
-			siPerMonthYTD := float64(soldIssuedYTD) / monthsThrough
-			siPerMonthPY := float64(soldIssuedPY) / salesSeason
-			mtoYTD := float64(totalAvail) / (siPerMonthYTD + 1)
-			mtoPY := float64(totalAvail) / (siPerMonthPY + 1)
+			soldPerMonthYTD := float64(totalSoldYTD) / monthsThrough
+			soldPerMonthPY := float64(totalSoldPY) / salesSeason
+			mtoYTD := float64(totalAvail) / (soldPerMonthYTD + 1)
+			mtoPY := float64(totalAvail) / (soldPerMonthPY + 1)
 
 			// write row (include per-PO details)
 			// Build row values dynamically to match headersOut (PO columns omitted if no PO report)
@@ -499,8 +499,8 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				totalAvail,
 				mtoYTD,
 				mtoPY,
-				soldIssuedYTD,
-				soldIssuedPY,
+				totalSoldYTD,
+				totalSoldPY,
 				e.ClassDesc,
 				e.Status,
 				e.Occasion,
