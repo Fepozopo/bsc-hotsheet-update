@@ -279,7 +279,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		productGroups[pl] = append(productGroups[pl], e)
 	}
 
-	// Build headers. If there's no PO report provided, omit per-PO and SO/BO columns.
+	// Build headers. If there's no PO report provided, omit per-PO and SO+BO columns.
 	hasPO := poPath != ""
 	headersOut := []string{
 		"Item Code",
@@ -295,12 +295,12 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	}
 	headersOut = append(headersOut,
 		"Total QTY on PO",
-		"QTY on SO/BO",
+		"QTY on SO+BO",
 		"QTY Available",
 		"MTO YTD",
 		"MTO PY",
-		"QTY Sold/Issued YTD",
-		"QTY Sold/Issued PY",
+		"QTY Sold+Issued YTD",
+		"QTY Sold+Issued PY",
 		"Class",
 		"Status",
 		"Occasion",
@@ -364,17 +364,17 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				f.SetCellStyle(sh, cell, cell, style)
 
 				// Add explanatory comments to the MTO YTD and MTO PY headers so users know how they're calculated.
-				// MTO YTD uses year-to-date sold/issued scaled to months through the current year:
-				// MTO YTD = QTY Available / ((QTY Sold/Issued YTD) / monthsThrough + 1)
+				// MTO YTD uses year-to-date sold+issued scaled to months through the current year:
+				// MTO YTD = QTY Available / ((QTY Sold+Issued YTD) / (monthsThrough + 1))
 				// where monthsThrough is the number of months completed in the current year (fractional).
-				// MTO PY uses prior-year sold/issued scaled to the season length:
-				// MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1)
+				// MTO PY uses prior-year sold+issued scaled to the season length:
+				// MTO PY = QTY Available / ((QTY Sold+Issued PY) / salesSeason + 1)
 				// where salesSeason is: Winter=6, Spring=5, Everyday=12.
 				if h == "MTO YTD" {
 					c := excelize.Comment{
 						Cell:   cell,
 						Author: "Shane DuPrey",
-						Text:   "MTO YTD = QTY Available / ((QTY Sold/Issued YTD) / monthsThrough + 1). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace.",
+						Text:   "MTO YTD + QTY Available / ((QTY Sold+Issued YTD) / (monthsThrough + 1)). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace.",
 						Height: 190,
 						Width:  200,
 					}
@@ -384,7 +384,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 					c := excelize.Comment{
 						Cell:   cell,
 						Author: "Shane DuPrey",
-						Text:   "MTO PY = QTY Available / ((QTY Sold/Issued PY) / salesSeason + 1). salesSeason used: Winter=6, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length.",
+						Text:   "MTO PY = QTY Available / ((QTY Sold+Issued PY) / (salesSeason + 1)). salesSeason used: Winter=6, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length.",
 						Height: 180,
 						Width:  180,
 					}
@@ -585,13 +585,13 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 				colWidths[col] = 12
 			case "Total QTY on PO":
 				colWidths[col] = 15
-			case "QTY on SO/BO":
+			case "QTY on SO+BO":
 				colWidths[col] = 15
 			case "QTY Available":
 				colWidths[col] = 15
 			case "MTO YTD", "MTO PY":
 				colWidths[col] = 10
-			case "QTY Sold/Issued YTD", "QTY Sold/Issued PY":
+			case "QTY Sold+Issued YTD", "QTY Sold+Issued PY":
 				colWidths[col] = 20
 			case "Class":
 				colWidths[col] = 20
