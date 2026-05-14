@@ -11,13 +11,14 @@ import (
 )
 
 type dataInsightsRow struct {
-	Occasion     string
-	Date         string
-	YTDSales     int
-	PYSales      int
-	Final        string
-	sortKey      int
-	sortOccasion string
+	Occasion        string
+	Date            string
+	DollarSoldYTD   float64
+	DollarSoldPY    float64
+	ProjectedDollar float64
+	Final           string
+	sortKey         int
+	sortOccasion    string
 }
 
 type dataInsightsGroup struct {
@@ -27,8 +28,8 @@ type dataInsightsGroup struct {
 	sortKey             int
 	complete            bool
 	TargetMonthsThrough float64
-	YTDSales            int
-	PYSales             int
+	DollarSoldYTD       float64
+	DollarSoldPY        float64
 }
 
 type occasionDateInfo struct {
@@ -121,6 +122,16 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to create data style: %w", err)
 	}
 
+	currencyFormat := "$#,##0.00;[Red]($#,##0.00)"
+	currencyDataStyle, err := f.NewStyle(&excelize.Style{
+		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:       []excelize.Border{{Type: "left", Color: "000000", Style: 1}, {Type: "right", Color: "000000", Style: 1}, {Type: "top", Color: "000000", Style: 1}, {Type: "bottom", Color: "000000", Style: 1}},
+		CustomNumFmt: &currencyFormat,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create currency data style: %w", err)
+	}
+
 	totalStyle, err := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
@@ -134,6 +145,17 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create total style: %w", err)
+	}
+
+	currencyTotalStyle, err := f.NewStyle(&excelize.Style{
+		Font:         &excelize.Font{Bold: true},
+		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:       []excelize.Border{{Type: "left", Color: "000000", Style: 1}, {Type: "right", Color: "000000", Style: 1}, {Type: "top", Color: "000000", Style: 1}, {Type: "bottom", Color: "000000", Style: 1}},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{"#F2F2F2"}, Pattern: 1},
+		CustomNumFmt: &currencyFormat,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create currency total style: %w", err)
 	}
 
 	columnWidths := map[string]float64{
@@ -199,10 +221,12 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		rowNum++
 
 		sectionRows := rowsBySection[section.name]
-		totalYTD := 0
-		totalPY := 0
+		totalYTD := 0.0
+		totalPY := 0.0
+		totalProjectedSales := 0.0
+		sectionComplete := true
 		for _, row := range sectionRows {
-			values := []interface{}{row.Occasion, row.Date, row.YTDSales, row.PYSales, row.Final}
+			values := []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			for colIdx, value := range values {
 				cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowNum)
 				if err := f.SetCellValue(sheetName, cell, value); err != nil {
@@ -212,14 +236,24 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			if err := f.SetCellStyle(sheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("E%d", rowNum), dataStyle); err != nil {
 				return fmt.Errorf("failed to style %s data row: %w", section.name, err)
 			}
-			totalYTD += row.YTDSales
-			totalPY += row.PYSales
+			if err := f.SetCellStyle(sheetName, fmt.Sprintf("C%d", rowNum), fmt.Sprintf("D%d", rowNum), currencyDataStyle); err != nil {
+				return fmt.Errorf("failed to style %s currency cells: %w", section.name, err)
+			}
+			totalYTD += row.DollarSoldYTD
+			totalPY += row.DollarSoldPY
+			totalProjectedSales += row.ProjectedDollar
+			if strings.HasPrefix(row.Final, "IN PROGRESS:") {
+				sectionComplete = false
+			}
 			rowNum++
 		}
 
 		totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, ""}
+		if section.name == "Spring" || section.name == "Winter" {
+			totalRowValues[4] = formatSeasonStatusYoY(totalProjectedSales, totalPY, sectionComplete)
+		}
 		if section.name == "Everyday" {
-			totalRowValues[4] = formatProjectedYoY(totalYTD, totalPY, currentMonthsThrough, 12.0)
+			totalRowValues[4] = formatProjectedYoY(totalProjectedSales, totalPY)
 		}
 		for colIdx, value := range totalRowValues {
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowNum)
@@ -229,6 +263,9 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		}
 		if err := f.SetCellStyle(sheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("E%d", rowNum), totalStyle); err != nil {
 			return fmt.Errorf("failed to style total row for %s: %w", section.name, err)
+		}
+		if err := f.SetCellStyle(sheetName, fmt.Sprintf("C%d", rowNum), fmt.Sprintf("D%d", rowNum), currencyTotalStyle); err != nil {
+			return fmt.Errorf("failed to style %s total currency cells: %w", section.name, err)
 		}
 		rowNum++
 	}
@@ -262,8 +299,8 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 			groups[groupKey] = group
 		}
 
-		group.YTDSales += e.YTDSold + max(e.YTDIssued, 0)
-		group.PYSales += e.SoldPY + max(e.IssuedPY, 0)
+		group.DollarSoldYTD += e.DollarSoldYTD
+		group.DollarSoldPY += e.DollarSoldPY
 	}
 
 	rowsBySection := map[string][]dataInsightsRow{
@@ -274,18 +311,24 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 
 	for _, group := range groups {
 		row := dataInsightsRow{
-			Occasion:     group.Occasion,
-			Date:         group.Date,
-			YTDSales:     group.YTDSales,
-			PYSales:      group.PYSales,
-			sortKey:      group.sortKey,
-			sortOccasion: strings.ToUpper(group.Occasion),
+			Occasion:      group.Occasion,
+			Date:          group.Date,
+			DollarSoldYTD: group.DollarSoldYTD,
+			DollarSoldPY:  group.DollarSoldPY,
+			sortKey:       group.sortKey,
+			sortOccasion:  strings.ToUpper(group.Occasion),
 		}
 		if group.Section == "Spring" || group.Section == "Winter" {
-			row.Final = formatSeasonStatusYoY(group.YTDSales, group.PYSales, currentMonthsThrough, group.TargetMonthsThrough, group.complete)
+			if group.complete {
+				row.ProjectedDollar = group.DollarSoldYTD
+			} else {
+				row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentMonthsThrough)
+			}
+			row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
 		} else {
 			row.Date = "N/A"
-			row.Final = formatProjectedYoY(group.YTDSales, group.PYSales, currentMonthsThrough, 12.0)
+			row.ProjectedDollar = group.DollarSoldYTD * (12.0 / currentMonthsThrough)
+			row.Final = formatProjectedYoY(row.ProjectedDollar, group.DollarSoldPY)
 		}
 
 		if group.Section == "Spring" {
@@ -351,11 +394,11 @@ func dataInsightDateInfo(section, occasion string) occasionDateInfo {
 	return info
 }
 
-func formatSeasonStatusYoY(ytdSales, pySales int, currentMonthsThrough, targetMonthsThrough float64, complete bool) string {
+func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete bool) string {
 	if complete {
-		return fmt.Sprintf("COMPLETE: %s YoY", formatYoYPercent(ytdSales, pySales))
+		return fmt.Sprintf("COMPLETE: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
 	}
-	return fmt.Sprintf("IN PROGRESS: %s YoY", formatProjectedYoYPercent(ytdSales, pySales, currentMonthsThrough, targetMonthsThrough))
+	return fmt.Sprintf("IN PROGRESS: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
 }
 
 func currentMonthsThrough() float64 {
@@ -379,16 +422,15 @@ func monthsThroughForDate(year int, month time.Month, day int, loc *time.Locatio
 	return monthsThrough
 }
 
-func formatProjectedYoY(ytdSales, pySales int, currentMonthsThrough, targetMonthsThrough float64) string {
-	return formatProjectedYoYPercent(ytdSales, pySales, currentMonthsThrough, targetMonthsThrough)
+func formatProjectedYoY(projectedSales float64, pySales float64) string {
+	return formatYoYFromProjectedSales(projectedSales, pySales)
 }
 
-func formatProjectedYoYPercent(ytdSales, pySales int, currentMonthsThrough, targetMonthsThrough float64) string {
-	if pySales == 0 || currentMonthsThrough <= 0 || targetMonthsThrough <= 0 {
+func formatYoYFromProjectedSales(projectedSales float64, pySales float64) string {
+	if pySales == 0 {
 		return "N/A"
 	}
-	projectedSales := float64(ytdSales) * (targetMonthsThrough / currentMonthsThrough)
-	pct := math.Round(((projectedSales - float64(pySales)) / float64(pySales)) * 100)
+	pct := math.Round(((projectedSales - pySales) / pySales) * 100)
 	return fmt.Sprintf("%+.0f%%", pct)
 }
 
