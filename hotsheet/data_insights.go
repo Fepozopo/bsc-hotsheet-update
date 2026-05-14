@@ -187,6 +187,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to style title row: %w", err)
 	}
 
+	// Leave a blank row between the title and the first section for readability.
 	rowNum := 3
 	// Spring and Winter use completion-aware status text. Everyday uses a straight projected YoY value.
 	sections := []struct {
@@ -250,6 +251,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			totalYTD += row.DollarSoldYTD
 			totalPY += row.DollarSoldPY
 			totalProjectedSales += row.ProjectedDollar
+			// If any row is still in progress, the section total should use the same wording.
 			if strings.HasPrefix(row.Final, "IN PROGRESS:") {
 				sectionComplete = false
 			}
@@ -296,6 +298,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		occasion := normalizeDataInsightsOccasion(e.Occasion)
 		section := mapOccasion(occasion)
 		dateInfo := dataInsightDateInfo(section, occasion)
+		// Use the normalized occasion plus section so variants collapse into one rollup bucket.
 		groupKey := section + "|" + strings.ToUpper(occasion)
 
 		group, ok := groups[groupKey]
@@ -315,6 +318,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		group.DollarSoldPY += e.DollarSoldPY
 	}
 
+	// Pre-create all sections so the sheet still renders empty categories consistently.
 	rowsBySection := map[string][]dataInsightsRow{
 		"Spring":   {},
 		"Winter":   {},
@@ -407,6 +411,7 @@ func dataInsightDateInfo(section, occasion string) occasionDateInfo {
 	}
 
 	now := time.Now()
+	// Treat the occasion as complete for the whole event day, not just after midnight.
 	eventDate := time.Date(now.Year(), info.Month, info.Day, 23, 59, 59, 0, now.Location())
 	info.Complete = !now.Before(eventDate)
 	info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
@@ -430,6 +435,7 @@ func currentMonthsThrough() float64 {
 	daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, now.Location()).Day()
 	monthsThrough := float64(int(month)-1) + float64(now.Day())/float64(daysInMonth)
 	if monthsThrough <= 0 {
+		// Clamp to 1 so early-month dates and unexpected time values still produce usable projections.
 		monthsThrough = 1
 	}
 	return monthsThrough
@@ -440,6 +446,7 @@ func monthsThroughForDate(year int, month time.Month, day int, loc *time.Locatio
 	daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, loc).Day()
 	monthsThrough := float64(int(month)-1) + float64(day)/float64(daysInMonth)
 	if monthsThrough <= 0 {
+		// Clamp to 1 so the projection math never divides by zero.
 		monthsThrough = 1
 	}
 	return monthsThrough
@@ -447,6 +454,7 @@ func monthsThroughForDate(year int, month time.Month, day int, loc *time.Locatio
 
 // formatYoYFromProjectedSales calculates and formats the YoY percentage from projected and prior-year sales.
 func formatYoYFromProjectedSales(projectedSales float64, pySales float64) string {
+	// Avoid divide-by-zero when there is no prior-year baseline to compare against.
 	if pySales == 0 {
 		return "N/A"
 	}
