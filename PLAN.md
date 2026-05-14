@@ -63,17 +63,18 @@ For all three tables, the left-to-right column order should be:
 - Everyday total rows should show a total projected percentage in the final column
 - The projected percentage total for Everyday should be calculated from the summed YTD and PY totals
 
-## How the inventory map works
+## How the inventory data flows
 
-The current implementation builds an inventory map before it generates each workbook:
+The current implementation builds an inventory map before it generates each workbook, then `CreateFromReports()` materializes those rows into the populated `vals` data used for reporting:
 
 - `invMap` is a `map[string]*entry`
 - The key is the SKU
 - Each value is a pointer to an `entry` struct that stores the parsed inventory row
+- `vals` is the reporting-ready row set derived from those entries and updated with PO data
 
 ### What gets stored in each `entry`
 
-The inventory row parser fills in fields like:
+The inventory row parser fills in fields like these, and those fields are then carried forward into `vals`, which is what the reporting logic should read from:
 
 - `SKU`
 - `ProductLine`
@@ -94,13 +95,24 @@ The inventory row parser fills in fields like:
 - Each SKU row is parsed into an `entry`
 - That `entry` is stored in `invMap` by SKU
 - The PO workbook is then read, and matching SKUs in `invMap` are updated with PO information
-- PO-only SKUs are skipped so the code does not invent inventory rows that were not present in the inventory report
+- `CreateFromReports()` then uses those enriched entries to build `vals` for downstream reporting
 
 ### Why this matters for `Data Insights`
 
-For the new sheet, the inventory map is the source of truth for occasion-level data:
+For the new sheet, `invMap` is the underlying inventory store, but `CreateFromReports()` should be treated as the place where those entries are materialized into the fully populated `vals` data used for reporting.
 
-- read entries from `invMap`
+That means the new sheet should use the populated row values from `vals` so each item has the correct:
+
+- class description
+- PO values
+- sales order values
+- total available
+- MTO values
+- other fields already assembled from the inventory and PO data
+
+The implementation should then:
+
+- start from the populated `vals` rows
 - filter to exact `Counter Cards` rows
 - group rows by occasion
 - derive the section using the existing occasion mapping logic
@@ -122,10 +134,10 @@ For the new sheet, we will still use that same section grouping, but we will har
 
 ### Phase 1: Data modeling
 
-- Identify the data needed to populate the new sheet
+- Identify the data needed from the populated `vals` rows to populate the new sheet
 - Define a clear structure for a row in the insights tables
 - Determine how to group the rows into spring, winter, and everyday sections
-- Filter source data so the sheet only includes products in the exact `Counter Cards` category
+- Filter `vals` rows so the sheet only includes products in the exact `Counter Cards` category
 
 ### Phase 2: Sheet generation helper
 
@@ -145,7 +157,7 @@ For the new sheet, we will still use that same section grouping, but we will har
 
 - Confirm the sheet is added to the workbook
 - Confirm rows appear in the intended order
-- Confirm totals match the source data
+- Confirm totals match the populated `vals` rows
 - Confirm no symbols or emoji are present in the output
 
 ## Suggested function responsibilities
@@ -164,8 +176,8 @@ A new function should probably be responsible for:
 
 The current workbook creation flow should probably remain responsible for:
 
-- Gathering report data
-- Calling the new `Data Insights` sheet builder
+- Gathering report data and building `vals`
+- Calling the new `Data Insights` sheet builder with the populated rows
 - Preserving current workbook generation behavior
 
 ## Potential data structure
@@ -205,10 +217,10 @@ This would make it easier to reuse the inventory or report breakdown elsewhere l
 
 ### Data preparation
 
-- [ ] Confirm the `invMap` entries are the source of truth for occasion-level rows
-- [ ] Filter inventory entries to exact `Counter Cards` category matches only
+- [ ] Confirm the populated `vals` rows from `CreateFromReports()` are the source of truth for occasion-level rows, with `invMap` as the input data source
+- [ ] Filter `vals` rows to exact `Counter Cards` category matches only
 - [ ] Normalize missing occasions to `NO OCCASION`
-- [ ] Group entries so there is exactly one output row per occasion
+- [ ] Group `vals` rows so there is exactly one output row per occasion
 - [ ] Split grouped rows into `Spring`, `Winter`, and `Everyday` buckets using the existing occasion mapping logic
 
 ### Occasion and date handling
@@ -235,7 +247,7 @@ This would make it easier to reuse the inventory or report breakdown elsewhere l
 
 ### Row calculations
 
-- [ ] Calculate one row per occasion
+- [ ] Calculate one row per occasion from the populated `vals` rows
 - [ ] Sum YTD sales per occasion
 - [ ] Sum PY sales per occasion
 - [ ] Sum projected values per occasion where applicable

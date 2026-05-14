@@ -272,7 +272,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 	for _, e := range invMap {
 		pl := strings.TrimSpace(e.ProductLine)
 		if pl == "" {
-			// skip entries without a ProductLine (likely discovered only from PO); this avoids many UNKNOWN files
+			// skip entries without a ProductLine this avoids many UNKNOWN files
 			logger.Info("Skipping SKU with empty ProductLine (likely PO-only entry)", "SKU", e.SKU)
 			continue
 		}
