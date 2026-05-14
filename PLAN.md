@@ -264,6 +264,97 @@ The intended flow after the refactor should look like this:
      - `writeDataInsightsSheet()`
      - `saveWorkbook()`
 
+## Step-by-step implementation order
+
+Use this order to keep the refactor safe and easy to verify:
+
+### Step 1: Extract inventory loading first
+
+Start by moving the inventory workbook open/read/parse work into `loadInventoryEntries()` and `parseInventoryEntry()`.
+
+Why first:
+
+- it is the foundation for everything else
+- it does not change workbook output yet
+- it makes later extraction steps easier because the parsed inventory data is isolated
+
+### Step 2: Extract PO merging next
+
+Move the optional PO workbook parsing and merge logic into `mergePOData()` and, if helpful, `applyPOToEntry()`.
+
+Why second:
+
+- it builds directly on the inventory map from Step 1
+- it keeps PO behavior isolated before workbook generation is touched
+- it reduces the amount of logic left inside `CreateFromReports()` early
+
+### Step 3: Extract product-line grouping
+
+Move product-line grouping into `groupEntriesByProductLine()` and any stable sorting into `sortEntriesForProductLine()`.
+
+Why third:
+
+- grouping is independent of workbook styling
+- it defines the unit of work for the workbook builder
+- it makes the next step cleaner because each group is already prepared
+
+### Step 4: Extract workbook creation per product line
+
+Create `buildProductLineWorkbook()` and, if needed, `newProductLineWorkbook()` so workbook setup is isolated from orchestration.
+
+Why fourth:
+
+- it establishes a single place to build and save a workbook
+- it sets the stage for moving sheet-writing logic out of `CreateFromReports()`
+- it makes the top-level function much smaller once wired in
+
+### Step 5: Extract standard sheet writing
+
+Move the existing Everyday, Winter, and Spring sheet writing logic into `writeStandardSheets()` and smaller helpers such as:
+
+- `writeStandardSheetHeaders()`
+- `writeStandardSheetRows()`
+- `applyStandardSheetWidths()`
+- `applyStandardSheetFilters()`
+
+Why fifth:
+
+- the standard sheets are the largest remaining body of workbook logic
+- splitting them after workbook setup keeps the new structure easier to follow
+- this step should preserve the current sheet output while reducing duplication risk
+
+### Step 6: Reuse the existing `Data Insights` builder
+
+Keep `writeDataInsightsSheet()` as the dedicated helper and call it from the workbook builder.
+
+Why sixth:
+
+- it already exists and should not be reworked unless needed
+- it should fit naturally once workbook creation is isolated
+- it avoids mixing new refactor work with an already working helper
+
+### Step 7: Reduce `CreateFromReports()` to orchestration only
+
+Once the helpers exist, trim `CreateFromReports()` down to the pipeline that wires the helpers together.
+
+Why seventh:
+
+- by this point the lower-level behavior is already extracted
+- the remaining function should be easy to read and review
+- any final cleanup here is mainly about clarity, not behavior
+
+### Step 8: Verify after each major extraction
+
+Run validation as the refactor progresses, not only at the end.
+
+Recommended checkpoints:
+
+- after inventory extraction
+- after PO extraction
+- after workbook builder extraction
+- after standard sheet extraction
+- after the final orchestration cleanup
+
 ## What should stay the same
 
 The refactor should not change the observable behavior unless it is clearly part of cleanup:
