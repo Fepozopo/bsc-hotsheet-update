@@ -2,284 +2,238 @@
 
 ## Goal
 
-Add a new workbook sheet called `Data Insights` that summarizes sales by occasion for:
+Refactor `CreateFromReports()` into smaller, focused functions so the workbook generation flow is easier to maintain and easier to reuse in future features.
 
-- Spring occasions
-- Winter occasions
-- Everyday products
+This refactor should preserve the current behavior of the application, including:
 
-The sheet should be designed as a reusable reporting output so we can later add more insights without rewriting the workbook generation flow.
+- inventory parsing
+- optional PO parsing
+- product-line workbook generation
+- existing sheet output, including `Data Insights`
+- current workbook styling and file naming behavior
 
-## What this sheet should do
+## Why this refactor matters
 
-- Create one row per occasion
-- Split the rows into three tables:
-  1. Spring
-  2. Winter
-  3. Everyday products
-- Only include products whose category matches `Counter Cards` using exact text matching
-- Use `NO OCCASION` when an occasion is missing
-- Add a total row at the bottom of each table
+`CreateFromReports()` currently does too many things in one place:
 
-### Final columns
+- opens and reads source workbooks
+- parses inventory rows into entries
+- merges PO data
+- groups rows by product line
+- computes derived values
+- builds workbook sheets
+- applies styles and formatting
+- writes files to disk
 
-For all three tables, the left-to-right column order should be:
+Breaking this into smaller functions should make the code:
 
-1. Occasion
-2. Date
-3. YTD Sales
-4. PY Sales
-5. Final status column
+- easier to read
+- easier to test
+- easier to reuse in future reports
+- safer to modify without accidentally affecting unrelated behavior
 
-### Final status column by section
+## Desired structure
 
-- **Spring**: `Status / YoY`
-- **Winter**: `Status / YoY`
-- **Everyday products**: `Projected YoY`
+The refactor should separate the work into clear stages, roughly like this:
 
-### Table behavior by section
+1. Load inventory rows
+2. Build the inventory entry map
+3. Load and merge PO rows when provided
+4. Materialize report-ready entries
+5. Group entries by product line
+6. Build a workbook for each product line
+7. Write all sheets and save the file
 
-- **Spring and Winter**
-  - The final column should show a status plus YoY context
-  - The status should be either `COMPLETE` or `IN PROGRESS`
-  - Sort rows by date
-- **Everyday products**
-  - The final column should show a projected YoY percentage
-  - `NO OCCASION` rows belong here
-  - Sort rows alphabetically because these rows do not have dates
-  - Use `N/A` in the Date column for these rows
+## Proposed function responsibilities
 
-### Date formatting
+### Inventory loading helpers
 
-- Use a full month/day format like `February 14`
-- `Graduation` should use month-only formatting
-- The only month-only value requested so far is `June`
-- Everyday rows should use `N/A` in the Date column
+These helpers should be responsible for:
 
-### Totals
+- opening the inventory workbook
+- reading the inventory sheet rows
+- parsing inventory rows into `entry` values
+- storing parsed entries in `invMap`
 
-- Sum the YTD, PY, and projected columns as needed
-- Spring and Winter total rows should leave the status column blank
-- Everyday total rows should show a total projected percentage in the final column
-- The projected percentage total for Everyday should be calculated from the summed YTD and PY totals
+### PO loading helpers
 
-## How the inventory data flows
+These helpers should be responsible for:
 
-The current implementation builds an inventory map before it generates each workbook, then `CreateFromReports()` materializes those rows into the populated `vals` data used for reporting:
+- opening the optional PO workbook
+- reading the PO sheet rows
+- applying PO quantities to matching inventory entries
+- skipping PO-only SKUs as today
 
-- `invMap` is a `map[string]*entry`
-- The key is the SKU
-- Each value is a pointer to an `entry` struct that stores the parsed inventory row
-- `vals` is the reporting-ready row set derived from those entries and updated with PO data
+### Row materialization helpers
 
-### What gets stored in each `entry`
+These helpers should be responsible for:
 
-The inventory row parser fills in fields like these, and those fields are then carried forward into `vals`, which is what the reporting logic should read from:
+- converting enriched entries into the reporting-ready slice used downstream
+- preserving existing derived values and class-prefix rules
+- keeping the workbook-writing layer separate from parsing
 
-- `SKU`
-- `ProductLine`
-- `ClassDesc`
-- `Status`
-- inventory quantities such as on-hand, on PO, on SO, on BO
-- year-to-date and previous-year sales values
-- `Foil`
-- `Occasion`
-- `Description`
-- `UPC`
-- `RoyaltyCode`
-- dollar sales fields
+### Grouping helpers
 
-### How the map is populated
+These helpers should be responsible for:
 
-- The inventory workbook is read first
-- Each SKU row is parsed into an `entry`
-- That `entry` is stored in `invMap` by SKU
-- The PO workbook is then read, and matching SKUs in `invMap` are updated with PO information
-- `CreateFromReports()` then uses those enriched entries to build `vals` for downstream reporting
+- grouping entries by product line
+- preparing each product line’s data set for workbook generation
+- keeping the grouping logic isolated from file I/O and formatting
 
-### Why this matters for `Data Insights`
+### Workbook helpers
 
-For the new sheet, `invMap` is the underlying inventory store, but `CreateFromReports()` should be treated as the place where those entries are materialized into the fully populated `vals` data used for reporting.
+These helpers should be responsible for:
 
-That means the new sheet should use the populated row values from `vals` so each item has the correct:
+- creating a new workbook for a product line
+- writing the standard sheets
+- writing the `Data Insights` sheet
+- applying styles, widths, filters, and comments
+- saving the workbook to disk
 
-- class description
-- PO values
-- sales order values
-- total available
-- MTO values
-- other fields already assembled from the inventory and PO data
+## Suggested decomposition targets
 
-The implementation should then:
+The refactor will likely benefit from extracting functions similar to these:
 
-- start from the populated `vals` rows
-- filter to exact `Counter Cards` rows
-- group rows by occasion
-- derive the section using the existing occasion mapping logic
-- build one summary row per occasion
+- `loadInventoryEntries(...)`
+- `mergePOData(...)`
+- `buildProductLineGroups(...)`
+- `buildProductLineWorkbook(...)`
+- `writeStandardSheets(...)`
+- `writeDataInsightsSheet(...)` already exists and should be reused as-is if possible
+- `saveWorkbook(...)`
 
-### Occasion grouping logic already in the code
+The exact names can change, but the responsibilities should stay separated.
 
-The helper `mapOccasion` currently maps raw occasion text into one of three sections:
+## What should stay the same
 
-- `Spring`
-- `Winter`
-- `Everyday`
+The refactor should not change the observable behavior unless it is clearly part of cleanup:
 
-It does this by checking the occasion text against token lists.
-
-For the new sheet, we will still use that same section grouping, but we will hard-code a date map for each Spring and Winter occasion so the output date is controlled explicitly.
+- workbook output should still be generated per product line
+- existing sheet contents should remain the same
+- `Data Insights` should still be included
+- PO-only SKUs should still be skipped
+- file naming should stay the same
+- style and layout behavior should remain compatible with current output
 
 ## Proposed implementation approach
 
-### Phase 1: Data modeling
+### Phase 1: Map the current flow
 
-- Identify the data needed from the populated `vals` rows to populate the new sheet
-- Define a clear structure for a row in the insights tables
-- Determine how to group the rows into spring, winter, and everyday sections
-- Filter `vals` rows so the sheet only includes products in the exact `Counter Cards` category
+- Identify the major sections inside `CreateFromReports()`
+- Group related logic into cohesive responsibilities
+- Identify what data needs to move between helper functions
 
-### Phase 2: Sheet generation helper
+### Phase 2: Extract parsing helpers
 
-- Add a dedicated function for building the `Data Insights` sheet
-- Keep the function focused on workbook output only
-- Reuse existing style helpers if they already exist
+- Move inventory parsing into a dedicated helper
+- Move PO parsing into a dedicated helper
+- Keep the same parsing behavior while reducing function size
 
-### Phase 3: Table layout
+### Phase 3: Extract workbook-building helpers
 
-- Create a title row for the sheet
-- Render the spring table
-- Render the winter table
-- Render the everyday products table
-- Add a total row to each table
+- Move sheet creation and styling into workbook-specific helpers
+- Keep workbook generation separate from data parsing
+- Reuse the existing `Data Insights` sheet builder during the split
 
-### Phase 4: Verification
+### Phase 4: Preserve behavior
 
-- Confirm the sheet is added to the workbook
-- Confirm rows appear in the intended order
-- Confirm totals match the populated `vals` rows
-- Confirm no symbols or emoji are present in the output
+- Confirm generated files still match current expectations
+- Confirm the refactor does not change sheet order, file names, or key calculations
+- Confirm error handling remains clear and actionable
 
-## Suggested function responsibilities
+### Phase 5: Optional cleanup
 
-### New helper function
+- If common workbook formatting logic emerges, extract shared helpers
+- If repeated style setup appears, centralize it
+- If data transformations repeat, isolate them into reusable functions
 
-A new function should probably be responsible for:
+## Potential helper categories
 
-- Creating the sheet
-- Writing section headers
-- Writing rows for each table
-- Writing total rows
-- Applying any formatting needed for headers and totals
+### Parsing helpers
 
-### Existing orchestration function
+- read workbook rows
+- parse inventory row values
+- parse PO row values
+- normalize text and numbers
 
-The current workbook creation flow should probably remain responsible for:
+### Transformation helpers
 
-- Gathering report data and building `vals`
-- Calling the new `Data Insights` sheet builder with the populated rows
-- Preserving current workbook generation behavior
+- merge PO values into entries
+- compute derived values
+- group entries by product line
+- prepare report rows for sheet generation
 
-## Potential data structure
+### Workbook helpers
 
-We may want a reusable row model that contains:
-
-- Occasion or category label
-- Date
-- YTD sales
-- PY sales
-- Projected sales
-- Status or YoY text
-- Section name
-
-This would make it easier to reuse the inventory or report breakdown elsewhere later.
+- create workbook and sheets
+- write headers
+- apply styles
+- set widths and filters
+- save output file
 
 ## Acceptance criteria
 
-- A new sheet named `Data Insights` is created in the workbook
-- The sheet contains three distinct tables
-- Each table has a total row
-- Spring, winter, and everyday items are all represented
-- The date column replaces the peak season concept
-- No symbols or emoji are used in the sheet
-- The implementation only includes products in the exact `Counter Cards` category
-- The implementation is modular enough to reuse the underlying data later
-
-## Open implementation notes
-
-- The Spring and Winter `Status / YoY` examples should follow the pattern `COMPLETE: -77% YoY` or `IN PROGRESS: +2% so far`
-- Everyday rows should use `N/A` in the Date column
-- The total projected percentage for Everyday rows should be calculated directly from summed YTD and PY totals
-- The Spring and Winter occasion dates should come from a hard-coded date map
-- We should confirm whether the sheet layout should mirror the screenshot closely, or only follow the same general structure
+- `CreateFromReports()` is reduced to an orchestration function
+- inventory parsing is split into smaller helpers
+- PO parsing is split into smaller helpers
+- workbook creation is split into smaller helpers
+- `Data Insights` remains supported
+- the refactor preserves current output behavior
+- the refactor makes future reuse of parsing or workbook logic easier
 
 ## Concrete build checklist
 
-### Data preparation
+### Flow decomposition
 
-- [x] Confirm the populated `vals` rows from `CreateFromReports()` are the source of truth for occasion-level rows, with `invMap` as the input data source
-- [x] Filter `vals` rows to exact `Counter Cards` category matches only
-- [x] Normalize missing occasions to `NO OCCASION`
-- [x] Group `vals` rows so there is exactly one output row per occasion
-- [x] Split grouped rows into `Spring`, `Winter`, and `Everyday` buckets using the existing occasion mapping logic
+- [ ] Identify the distinct responsibilities currently handled inside `CreateFromReports()`
+- [ ] Define the helper boundaries before editing code
+- [ ] Decide which parts should become parsing helpers versus workbook helpers
+- [ ] Confirm the existing `Data Insights` builder can be reused without redesign
 
-### Occasion and date handling
+### Inventory parsing extraction
 
-- [x] Add a hard-coded date map for each Spring and Winter occasion
-- [x] Use full month/day values for Spring and Winter dates, except `Graduation`
-- [x] Use `June` for `Graduation`
-- [x] Use `N/A` in the Date column for all Everyday rows
-- [x] Confirm Everyday rows with `NO OCCASION` remain in the Everyday table
+- [ ] Move inventory workbook opening and row reading into a helper
+- [ ] Move inventory row parsing into a helper that returns `entry` values
+- [ ] Keep the current inventory parsing behavior unchanged
+- [ ] Preserve logging behavior around inventory parsing
 
-### Sorting
+### PO parsing extraction
 
-- [x] Sort Spring rows by date
-- [x] Sort Winter rows by date
-- [x] Sort Everyday rows alphabetically by occasion
-- [x] Make sure sorting is done after grouping and before writing rows
+- [ ] Move optional PO workbook opening and row reading into a helper
+- [ ] Move PO matching and merge logic into a helper
+- [ ] Preserve the existing PO-only SKU skip behavior
+- [ ] Preserve the current per-SKU PO assignment behavior
 
-### Column layout
+### Grouping and preparation extraction
 
-- [x] Keep the final sheet column order as: Occasion, Date, YTD Sales, PY Sales, final status column
-- [x] Use `Status / YoY` as the final column name for Spring and Winter tables
-- [x] Use `Projected YoY` as the final column name for the Everyday table
-- [x] Ensure the final column contains percentages where required
+- [ ] Move product-line grouping into a helper
+- [ ] Move report-ready row preparation into a helper
+- [ ] Keep the current derived-value calculations intact
+- [ ] Preserve the current class-prefix behavior
 
-### Row calculations
+### Workbook generation extraction
 
-- [x] Calculate one row per occasion from the populated `vals` rows
-- [x] Sum YTD sales per occasion
-- [x] Sum PY sales per occasion
-- [x] Sum projected values per occasion where applicable
-- [x] For Spring and Winter rows, format the final column as `COMPLETE: -77% YoY` or `IN PROGRESS: +2% so far`
-- [x] For Everyday rows, format the final column as a projected YoY percentage
+- [ ] Extract workbook creation into a helper
+- [ ] Extract standard sheet writing into a helper
+- [ ] Keep `Data Insights` writing reusable from the workbook layer
+- [ ] Keep styles, widths, filters, and comments in workbook-specific helpers
 
-### Total row logic
+### Orchestration cleanup
 
-- [x] Add a total row at the bottom of each table
-- [x] Leave the Spring and Winter status cells blank in total rows
-- [x] Calculate the Everyday total projected percentage from summed YTD and PY totals
-- [x] Put the Everyday total projected percentage in the final column of the total row
-
-### Workbook creation
-
-- [x] Add a new helper function to create the `Data Insights` sheet
-- [x] Insert the sheet at the end of the workbook
-- [x] Write the sheet title and section headers
-- [x] Render the Spring, Winter, and Everyday tables in order
-- [x] Apply the existing workbook styling conventions where practical
-- [x] Avoid symbols and emoji in the new sheet
+- [ ] Reduce `CreateFromReports()` to a readable top-level pipeline
+- [ ] Keep error handling meaningful at each stage
+- [ ] Keep the function easy to scan from top to bottom
+- [ ] Avoid changing behavior while restructuring
 
 ### Verification
 
-- [x] Confirm the sheet is added as `Data Insights`
-- [x] Confirm there is one row per occasion
-- [x] Confirm `Counter Cards` is matched with exact text
-- [x] Confirm `Graduation` shows `June`
-- [x] Confirm `NO OCCASION` appears only in the Everyday table
-- [x] Confirm the total rows are present and values are correct
-- [x] Confirm the final column text matches the requested formats
+- [ ] Confirm generated files still build successfully
+- [ ] Confirm the output workbook structure is unchanged
+- [ ] Confirm `Data Insights` still appears in each generated workbook
+- [ ] Confirm PO parsing still behaves the same
+- [ ] Confirm file naming and save behavior are unchanged
+- [ ] Confirm the refactor improves readability without adding unnecessary complexity
 
 ## Status
 
-Implemented the new helper function and wired it into the workbook generation flow.
+Planning only. `CreateFromReports()` has not been refactored yet.
