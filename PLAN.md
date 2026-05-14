@@ -217,69 +217,69 @@ This would make it easier to reuse the inventory or report breakdown elsewhere l
 
 ### Data preparation
 
-- [ ] Confirm the populated `vals` rows from `CreateFromReports()` are the source of truth for occasion-level rows, with `invMap` as the input data source
-- [ ] Filter `vals` rows to exact `Counter Cards` category matches only
-- [ ] Normalize missing occasions to `NO OCCASION`
-- [ ] Group `vals` rows so there is exactly one output row per occasion
-- [ ] Split grouped rows into `Spring`, `Winter`, and `Everyday` buckets using the existing occasion mapping logic
+- [x] Confirm the populated `vals` rows from `CreateFromReports()` are the source of truth for occasion-level rows, with `invMap` as the input data source
+- [x] Filter `vals` rows to exact `Counter Cards` category matches only
+- [x] Normalize missing occasions to `NO OCCASION`
+- [x] Group `vals` rows so there is exactly one output row per occasion
+- [x] Split grouped rows into `Spring`, `Winter`, and `Everyday` buckets using the existing occasion mapping logic
 
 ### Occasion and date handling
 
-- [ ] Add a hard-coded date map for each Spring and Winter occasion
-- [ ] Use full month/day values for Spring and Winter dates, except `Graduation`
-- [ ] Use `June` for `Graduation`
-- [ ] Use `N/A` in the Date column for all Everyday rows
-- [ ] Confirm Everyday rows with `NO OCCASION` remain in the Everyday table
+- [x] Add a hard-coded date map for each Spring and Winter occasion
+- [x] Use full month/day values for Spring and Winter dates, except `Graduation`
+- [x] Use `June` for `Graduation`
+- [x] Use `N/A` in the Date column for all Everyday rows
+- [x] Confirm Everyday rows with `NO OCCASION` remain in the Everyday table
 
 ### Sorting
 
-- [ ] Sort Spring rows by date
-- [ ] Sort Winter rows by date
-- [ ] Sort Everyday rows alphabetically by occasion
-- [ ] Make sure sorting is done after grouping and before writing rows
+- [x] Sort Spring rows by date
+- [x] Sort Winter rows by date
+- [x] Sort Everyday rows alphabetically by occasion
+- [x] Make sure sorting is done after grouping and before writing rows
 
 ### Column layout
 
-- [ ] Keep the final sheet column order as: Occasion, Date, YTD Sales, PY Sales, final status column
-- [ ] Use `Status / YoY` as the final column name for Spring and Winter tables
-- [ ] Use `Projected YoY` as the final column name for the Everyday table
-- [ ] Ensure the final column contains percentages where required
+- [x] Keep the final sheet column order as: Occasion, Date, YTD Sales, PY Sales, final status column
+- [x] Use `Status / YoY` as the final column name for Spring and Winter tables
+- [x] Use `Projected YoY` as the final column name for the Everyday table
+- [x] Ensure the final column contains percentages where required
 
 ### Row calculations
 
-- [ ] Calculate one row per occasion from the populated `vals` rows
-- [ ] Sum YTD sales per occasion
-- [ ] Sum PY sales per occasion
-- [ ] Sum projected values per occasion where applicable
-- [ ] For Spring and Winter rows, format the final column as `COMPLETE: -77% YoY` or `IN PROGRESS: +2% so far`
-- [ ] For Everyday rows, format the final column as a projected YoY percentage
+- [x] Calculate one row per occasion from the populated `vals` rows
+- [x] Sum YTD sales per occasion
+- [x] Sum PY sales per occasion
+- [x] Sum projected values per occasion where applicable
+- [x] For Spring and Winter rows, format the final column as `COMPLETE: -77% YoY` or `IN PROGRESS: +2% so far`
+- [x] For Everyday rows, format the final column as a projected YoY percentage
 
 ### Total row logic
 
-- [ ] Add a total row at the bottom of each table
-- [ ] Leave the Spring and Winter status cells blank in total rows
-- [ ] Calculate the Everyday total projected percentage from summed YTD and PY totals
-- [ ] Put the Everyday total projected percentage in the final column of the total row
+- [x] Add a total row at the bottom of each table
+- [x] Leave the Spring and Winter status cells blank in total rows
+- [x] Calculate the Everyday total projected percentage from summed YTD and PY totals
+- [x] Put the Everyday total projected percentage in the final column of the total row
 
 ### Workbook creation
 
-- [ ] Add a new helper function to create the `Data Insights` sheet
-- [ ] Insert the sheet at the end of the workbook
-- [ ] Write the sheet title and section headers
-- [ ] Render the Spring, Winter, and Everyday tables in order
-- [ ] Apply the existing workbook styling conventions where practical
-- [ ] Avoid symbols and emoji in the new sheet
+- [x] Add a new helper function to create the `Data Insights` sheet
+- [x] Insert the sheet at the end of the workbook
+- [x] Write the sheet title and section headers
+- [x] Render the Spring, Winter, and Everyday tables in order
+- [x] Apply the existing workbook styling conventions where practical
+- [x] Avoid symbols and emoji in the new sheet
 
 ### Verification
 
-- [ ] Confirm the sheet is added as `Data Insights`
-- [ ] Confirm there is one row per occasion
-- [ ] Confirm `Counter Cards` is matched with exact text
-- [ ] Confirm `Graduation` shows `June`
-- [ ] Confirm `NO OCCASION` appears only in the Everyday table
-- [ ] Confirm the total rows are present and values are correct
-- [ ] Confirm the final column text matches the requested formats
+- [x] Confirm the sheet is added as `Data Insights`
+- [x] Confirm there is one row per occasion
+- [x] Confirm `Counter Cards` is matched with exact text
+- [x] Confirm `Graduation` shows `June`
+- [x] Confirm `NO OCCASION` appears only in the Everyday table
+- [x] Confirm the total rows are present and values are correct
+- [x] Confirm the final column text matches the requested formats
 
-## Next step
+## Status
 
-Implement the new helper function and wire it into the workbook generation flow.
+Implemented the new helper function and wired it into the workbook generation flow.

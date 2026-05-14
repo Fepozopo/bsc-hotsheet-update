@@ -114,6 +114,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		e := &entry{SKU: sku}
 		e.ProductLine = getCellAt(invRows, valRow, plIdx)
 		e.ClassDesc = getCellAt(invRows, valRow, classIdx)
+		e.RawClassDesc = e.ClassDesc
 		e.Status = getCellAt(invRows, valRow, statusIdx)
 		e.OnHand = parseInt(getCellAt(invRows, valRow, onHandIdx))
 		e.OnPO = parseInt(getCellAt(invRows, valRow, onPOIdx))
@@ -622,6 +623,11 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		for _, sh := range []string{"Everyday", "Winter", "Spring"} {
 			lastCol, _ := excelize.ColumnNumberToName(len(headersOut))
 			f.AutoFilter(sh, fmt.Sprintf("A1:%s1", lastCol), nil)
+		}
+
+		if err := writeDataInsightsSheet(f, entries); err != nil {
+			logger.Error("failed to create Data Insights sheet", "productLine", pl, "err", err)
+			return outputs, fmt.Errorf("failed to create Data Insights sheet for %s: %w", pl, err)
 		}
 
 		// ensure output directory

@@ -2,7 +2,7 @@
 
 ## Description
 
-Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three sheets (Everyday, Winter, Spring), includes per-PO details when available, and computes MTO (months-till-out) metrics.
+Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics.
 
 ## Motivation
 
@@ -47,7 +47,7 @@ Behavior notes
 - The PO parser captures up to two PO lines per SKU; additional quantities are accumulated into the first PO slot.
 - PO-only SKUs (SKUs present in PO but not in inventory) are skipped to avoid creating "UNKNOWN" product-line files.
 - Output file naming: `{ProductLine}_hotsheet_YYYYMMDD.xlsx` (e.g., `BAS_hotsheet_20260423.xlsx`).
-- Each output file contains three sheets: "Everyday", "Winter", and "Spring". Header comments explain the MTO calculations.
+- Each output file contains four sheets: "Everyday", "Winter", "Spring", and "Data Insights". Header comments explain the MTO calculations.
 
 ## Logs
 
