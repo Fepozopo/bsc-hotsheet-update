@@ -44,65 +44,225 @@ The refactor should separate the work into clear stages, roughly like this:
 6. Build a workbook for each product line
 7. Write all sheets and save the file
 
-## Proposed function responsibilities
+## Concrete function breakdown
 
-### Inventory loading helpers
+This is the recommended helper breakdown for the refactor. The exact names can change, but the responsibilities should stay close to this split.
 
-These helpers should be responsible for:
+### 1. Top-level orchestration
 
-- opening the inventory workbook
-- reading the inventory sheet rows
-- parsing inventory rows into `entry` values
-- storing parsed entries in `invMap`
+#### `CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error)`
 
-### PO loading helpers
+Keep this function as the orchestration layer only. It should:
 
-These helpers should be responsible for:
+- create the logger
+- load inventory entries
+- merge PO data when provided
+- group entries by product line
+- loop through each product line
+- call the workbook builder for each group
+- collect output file paths
+- return the final list of generated files
 
-- opening the optional PO workbook
-- reading the PO sheet rows
-- applying PO quantities to matching inventory entries
-- skipping PO-only SKUs as today
+It should no longer contain the detailed parsing or workbook-writing logic directly.
 
-### Row materialization helpers
+---
 
-These helpers should be responsible for:
+### 2. Inventory loading
 
-- converting enriched entries into the reporting-ready slice used downstream
-- preserving existing derived values and class-prefix rules
-- keeping the workbook-writing layer separate from parsing
+#### `loadInventoryEntries(inventoryPath string, logger *slog.Logger) (map[string]*entry, error)`
 
-### Grouping helpers
+Responsibilities:
 
-These helpers should be responsible for:
+- open the inventory workbook
+- read the inventory sheet rows
+- parse each inventory item into an `entry`
+- populate `invMap` by SKU
+- preserve the current empty-row and run-date stop logic
+- preserve existing inventory parsing behavior
 
-- grouping entries by product line
-- preparing each product line’s data set for workbook generation
-- keeping the grouping logic isolated from file I/O and formatting
+This helper should return the populated inventory map only.
 
-### Workbook helpers
+#### `parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*entry, bool)`
 
-These helpers should be responsible for:
+Responsibilities:
 
-- creating a new workbook for a product line
-- writing the standard sheets
-- writing the `Data Insights` sheet
-- applying styles, widths, filters, and comments
-- saving the workbook to disk
+- parse one inventory item from the inventory worksheet rows
+- return the parsed `entry`
+- return a boolean indicating whether the row should stop parsing or be skipped
 
-## Suggested decomposition targets
+This keeps the row-parsing logic separate from file opening and loop control.
 
-The refactor will likely benefit from extracting functions similar to these:
+---
 
-- `loadInventoryEntries(...)`
-- `mergePOData(...)`
-- `buildProductLineGroups(...)`
-- `buildProductLineWorkbook(...)`
-- `writeStandardSheets(...)`
-- `writeDataInsightsSheet(...)` already exists and should be reused as-is if possible
-- `saveWorkbook(...)`
+### 3. PO merging
 
-The exact names can change, but the responsibilities should stay separated.
+#### `mergePOData(poPath string, invMap map[string]*entry, logger *slog.Logger) error`
+
+Responsibilities:
+
+- open the optional PO workbook
+- read PO rows
+- match PO rows to inventory entries by SKU
+- apply PO quantities to matching entries
+- preserve the current rule that skips PO-only SKUs
+- preserve the current behavior of collecting up to two PO lines per SKU
+
+This helper should only modify the provided `invMap`.
+
+#### `applyPOToEntry(e *entry, poRow []string, ...)`
+
+Optional smaller helper if the PO logic still feels too dense after extraction.
+
+Responsibilities:
+
+- normalize the PO number
+- choose the correct quantity column based on status
+- assign the PO to the first available slot on the entry
+
+---
+
+### 4. Product-line grouping
+
+#### `groupEntriesByProductLine(invMap map[string]*entry, logger *slog.Logger) map[string][]*entry`
+
+Responsibilities:
+
+- iterate the populated inventory map
+- skip entries with empty product lines when appropriate
+- group entries by `ProductLine`
+- return a map of product line to entries
+
+This should stay focused on grouping only.
+
+#### `sortEntriesForProductLine(entries []*entry)`
+
+Responsibilities:
+
+- sort entries into a stable order before workbook generation
+- preserve the current ordering behavior used for each product line
+
+If sorting rules become more complex later, this can be expanded or split further.
+
+---
+
+### 5. Product-line workbook builder
+
+#### `buildProductLineWorkbook(productLine string, entries []*entry, outputDir, dateStr string, logger *slog.Logger) (string, error)`
+
+Responsibilities:
+
+- create the workbook for one product line
+- write all standard report sheets
+- write the `Data Insights` sheet
+- apply sheet-level widths, filters, and comments
+- save the workbook to disk
+- return the output file path
+
+This is the main workbook-level helper that `CreateFromReports()` should call for each product line.
+
+#### `newProductLineWorkbook() *excelize.File`
+
+Optional helper if workbook initialization needs to be isolated.
+
+Responsibilities:
+
+- create the workbook
+- create the standard sheets
+- delete the default sheet
+- set the active sheet
+
+---
+
+### 6. Standard sheet writing
+
+#### `writeStandardSheets(f *excelize.File, entries []*entry, hasPO bool) error`
+
+Responsibilities:
+
+- write the existing `Everyday`, `Winter`, and `Spring` sheets
+- write headers
+- write data rows
+- apply MTO calculations
+- apply row styles
+- preserve current workbook behavior for the standard sheets
+
+This should be the main helper for the existing three worksheet tabs.
+
+#### `writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []string, hasPO bool) error`
+
+Responsibilities:
+
+- write the header row for one sheet
+- apply the current header formatting
+- add MTO header comments where needed
+
+#### `writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry, hasPO bool, monthsThrough float64) error`
+
+Responsibilities:
+
+- compute row values for each entry
+- calculate MTO values
+- write row values
+- apply per-row formatting
+- preserve current class-prefix logic and status coloring behavior
+
+#### `applyStandardSheetWidths(f *excelize.File, hasPO bool) error`
+
+Responsibilities:
+
+- set column widths for the standard sheets
+- keep the current readability settings consistent
+
+#### `applyStandardSheetFilters(f *excelize.File) error`
+
+Responsibilities:
+
+- apply autofilter to the standard sheets
+- keep the current filter range and behavior the same
+
+---
+
+### 7. `Data Insights` sheet reuse
+
+#### `writeDataInsightsSheet(f *excelize.File, entries []*entry) error`
+
+This helper already exists and should remain the dedicated builder for the `Data Insights` tab.
+
+In the refactor, `buildProductLineWorkbook(...)` should call it rather than duplicating any of its logic.
+
+---
+
+### 8. File output
+
+#### `saveWorkbook(f *excelize.File, outputDir, productLine, dateStr string) (string, error)`
+
+Responsibilities:
+
+- build the final output file path
+- sanitize the product line name
+- save the workbook
+- return the generated path
+
+This keeps file naming and disk output separate from workbook construction.
+
+## Proposed call flow
+
+The intended flow after the refactor should look like this:
+
+1. `CreateFromReports()`
+2. `loadInventoryEntries()`
+3. `mergePOData()` if a PO report was supplied
+4. `groupEntriesByProductLine()`
+5. for each product line:
+   - `sortEntriesForProductLine()`
+   - `buildProductLineWorkbook()`
+     - `writeStandardSheets()`
+       - `writeStandardSheetHeaders()`
+       - `writeStandardSheetRows()`
+       - `applyStandardSheetWidths()`
+       - `applyStandardSheetFilters()`
+     - `writeDataInsightsSheet()`
+     - `saveWorkbook()`
 
 ## What should stay the same
 
