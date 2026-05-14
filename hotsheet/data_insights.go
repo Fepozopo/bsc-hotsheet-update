@@ -10,6 +10,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// dataInsightsRow represents one output row in the Data Insights sheet.
 type dataInsightsRow struct {
 	Occasion        string
 	Date            string
@@ -21,6 +22,7 @@ type dataInsightsRow struct {
 	sortOccasion    string
 }
 
+// dataInsightsGroup aggregates sales for a single normalized occasion within a section.
 type dataInsightsGroup struct {
 	Section             string
 	Occasion            string
@@ -32,6 +34,7 @@ type dataInsightsGroup struct {
 	DollarSoldPY        float64
 }
 
+// occasionDateInfo captures how an occasion should be displayed, ordered, and projected.
 type occasionDateInfo struct {
 	Display             string
 	Month               time.Month
@@ -41,6 +44,7 @@ type occasionDateInfo struct {
 	TargetMonthsThrough float64
 }
 
+// dataInsightDateMap maps normalized occasion names to their display text and calendar metadata.
 var dataInsightDateMap = map[string]occasionDateInfo{
 	"VALENTINE'S DAY":   {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
 	"VALENTINES DAY":    {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
@@ -62,8 +66,10 @@ var dataInsightDateMap = map[string]occasionDateInfo{
 	"CHRISTMAS":         {Display: "December 25", Month: time.December, Day: 25, SortKey: 1225},
 }
 
+// writeDataInsightsSheet creates the "Data Insights" worksheet and populates it with grouped sales data.
 func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 	currentMonthsThrough := currentMonthsThrough()
+	// Use the current month progress to annualize in-progress rows.
 	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough)
 
 	sheetName := "Data Insights"
@@ -182,6 +188,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 	}
 
 	rowNum := 3
+	// Spring and Winter use completion-aware status text. Everyday uses a straight projected YoY value.
 	sections := []struct {
 		name    string
 		headers []string
@@ -224,6 +231,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		totalYTD := 0.0
 		totalPY := 0.0
 		totalProjectedSales := 0.0
+		// A section is considered complete only when none of its rows are still in progress.
 		sectionComplete := true
 		for _, row := range sectionRows {
 			values := []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
@@ -249,11 +257,12 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		}
 
 		totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, ""}
+		// Totals preserve the same YoY wording style used by the section's detailed rows.
 		if section.name == "Spring" || section.name == "Winter" {
 			totalRowValues[4] = formatSeasonStatusYoY(totalProjectedSales, totalPY, sectionComplete)
 		}
 		if section.name == "Everyday" {
-			totalRowValues[4] = formatProjectedYoY(totalProjectedSales, totalPY)
+			totalRowValues[4] = formatYoYFromProjectedSales(totalProjectedSales, totalPY)
 		}
 		for colIdx, value := range totalRowValues {
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowNum)
@@ -273,14 +282,17 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 	return nil
 }
 
+// buildDataInsightsRows groups qualifying entries into the rows used by the Data Insights sheet.
 func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
+		// This sheet only tracks exact Counter Cards entries.
 		if !isExactCounterCards(e) {
 			continue
 		}
 
+		// Normalize occasion names so common variants collapse into the same grouped row.
 		occasion := normalizeDataInsightsOccasion(e.Occasion)
 		section := mapOccasion(occasion)
 		dateInfo := dataInsightDateInfo(section, occasion)
@@ -319,6 +331,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 			sortOccasion:  strings.ToUpper(group.Occasion),
 		}
 		if group.Section == "Spring" || group.Section == "Winter" {
+			// Seasonal items are projected only up to their typical selling window.
 			if group.complete {
 				row.ProjectedDollar = group.DollarSoldYTD
 			} else {
@@ -326,9 +339,10 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 			}
 			row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
 		} else {
+			// Everyday items do not have a calendar cutover, so they project across the full year.
 			row.Date = "N/A"
 			row.ProjectedDollar = group.DollarSoldYTD * (12.0 / currentMonthsThrough)
-			row.Final = formatProjectedYoY(row.ProjectedDollar, group.DollarSoldPY)
+			row.Final = formatYoYFromProjectedSales(row.ProjectedDollar, group.DollarSoldPY)
 		}
 
 		if group.Section == "Spring" {
@@ -342,6 +356,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		rowsBySection["Everyday"] = append(rowsBySection["Everyday"], row)
 	}
 
+	// Sort seasonal rows by calendar order first, then alphabetically for stable ties.
 	sort.Slice(rowsBySection["Spring"], func(i, j int) bool {
 		if rowsBySection["Spring"][i].sortKey == rowsBySection["Spring"][j].sortKey {
 			return rowsBySection["Spring"][i].sortOccasion < rowsBySection["Spring"][j].sortOccasion
@@ -361,6 +376,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 	return rowsBySection
 }
 
+// isExactCounterCards reports whether the entry belongs to the exact "Counter Cards" class.
 func isExactCounterCards(e *entry) bool {
 	category := strings.TrimSpace(e.RawClassDesc)
 	if category == "" {
@@ -369,6 +385,7 @@ func isExactCounterCards(e *entry) bool {
 	return category == "Counter Cards"
 }
 
+// normalizeDataInsightsOccasion trims the occasion name and provides a fallback for empty values.
 func normalizeDataInsightsOccasion(occ string) string {
 	trimmed := strings.TrimSpace(occ)
 	if trimmed == "" {
@@ -377,11 +394,13 @@ func normalizeDataInsightsOccasion(occ string) string {
 	return trimmed
 }
 
+// dataInsightDateInfo returns the display and projection metadata for a data-insight occasion.
 func dataInsightDateInfo(section, occasion string) occasionDateInfo {
 	if section == "Everyday" {
 		return occasionDateInfo{Display: "N/A", SortKey: 999999, TargetMonthsThrough: 12.0}
 	}
 
+	// Unknown seasonal occasions fall back to a neutral display and sort after known holidays.
 	info, ok := dataInsightDateMap[strings.ToUpper(strings.TrimSpace(occasion))]
 	if !ok {
 		return occasionDateInfo{Display: "N/A", SortKey: 999999, TargetMonthsThrough: 12.0}
@@ -394,6 +413,7 @@ func dataInsightDateInfo(section, occasion string) occasionDateInfo {
 	return info
 }
 
+// formatSeasonStatusYoY formats the season status text with a YoY comparison.
 func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete bool) string {
 	if complete {
 		return fmt.Sprintf("COMPLETE: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
@@ -401,8 +421,10 @@ func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete boo
 	return fmt.Sprintf("IN PROGRESS: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
 }
 
+// currentMonthsThrough returns the current year-to-date month progress as a fractional month count.
 func currentMonthsThrough() float64 {
 	now := time.Now()
+	// Use the day-of-month as a fraction so projections move smoothly within the current month.
 	year := now.Year()
 	month := now.Month()
 	daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, now.Location()).Day()
@@ -413,6 +435,7 @@ func currentMonthsThrough() float64 {
 	return monthsThrough
 }
 
+// monthsThroughForDate returns the month progress for a specific calendar date.
 func monthsThroughForDate(year int, month time.Month, day int, loc *time.Location) float64 {
 	daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, loc).Day()
 	monthsThrough := float64(int(month)-1) + float64(day)/float64(daysInMonth)
@@ -422,22 +445,11 @@ func monthsThroughForDate(year int, month time.Month, day int, loc *time.Locatio
 	return monthsThrough
 }
 
-func formatProjectedYoY(projectedSales float64, pySales float64) string {
-	return formatYoYFromProjectedSales(projectedSales, pySales)
-}
-
+// formatYoYFromProjectedSales calculates and formats the YoY percentage from projected and prior-year sales.
 func formatYoYFromProjectedSales(projectedSales float64, pySales float64) string {
 	if pySales == 0 {
 		return "N/A"
 	}
 	pct := math.Round(((projectedSales - pySales) / pySales) * 100)
-	return fmt.Sprintf("%+.0f%%", pct)
-}
-
-func formatYoYPercent(ytdSales, pySales int) string {
-	if pySales == 0 {
-		return "N/A"
-	}
-	pct := math.Round((float64(ytdSales-pySales) / float64(pySales)) * 100)
 	return fmt.Sprintf("%+.0f%%", pct)
 }
