@@ -2,8 +2,14 @@ package hotsheet
 
 import "github.com/xuri/excelize/v2"
 
-// currencyFormat is the shared Excel number format used for dollar-value columns.
-const currencyFormat = "$#,##0.00;[Red]($#,##0.00)"
+const (
+	// currencyFormat is the shared Excel number format used for dollar-value columns.
+	currencyFormat = "$#,##0.00;[Red]($#,##0.00)"
+	// Shared fill colors keep the workbook styling consistent across sheets.
+	dataInsightsSectionFill = "#D9EAF7"
+	standardHeaderFill      = "#E6E6FA"
+	standardTotalFill       = "#F2F2F2"
+)
 
 // currencyNumFmt returns a pointer suitable for excelize.Style.CustomNumFmt.
 func currencyNumFmt() *string {
@@ -11,17 +17,30 @@ func currencyNumFmt() *string {
 	return &format
 }
 
-// centeredBorderStyle returns the standard centered style with thin black borders.
-func centeredBorderStyle() *excelize.Style {
+// centeredAlignmentStyle returns the standard centered alignment with no border.
+func centeredAlignmentStyle() *excelize.Style {
 	return &excelize.Style{
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
 	}
+}
+
+// centeredBorderStyle returns the standard centered style with thin black borders.
+func centeredBorderStyle() *excelize.Style {
+	style := centeredAlignmentStyle()
+	style.Border = []excelize.Border{
+		{Type: "left", Color: "000000", Style: 1},
+		{Type: "right", Color: "000000", Style: 1},
+		{Type: "top", Color: "000000", Style: 1},
+		{Type: "bottom", Color: "000000", Style: 1},
+	}
+	return style
+}
+
+// centeredFontStyle returns the standard centered style with the provided font.
+func centeredFontStyle(font *excelize.Font) *excelize.Style {
+	style := centeredAlignmentStyle()
+	style.Font = font
+	return style
 }
 
 // centeredFillStyle returns the standard centered style with a patterned fill.

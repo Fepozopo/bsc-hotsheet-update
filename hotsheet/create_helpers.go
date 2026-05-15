@@ -425,7 +425,7 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []string, hasPO bool) error {
 	_ = hasPO // The header layout already captures whether PO columns should be present.
 
-	headerStyle, err := f.NewStyle(centeredFillFontStyle("#E6E6FA", &excelize.Font{Bold: true}))
+	headerStyle, err := f.NewStyle(centeredFillFontStyle(standardHeaderFill, &excelize.Font{Bold: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create standard header style: %w", err)
 	}
