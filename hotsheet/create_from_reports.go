@@ -8,10 +8,10 @@ import (
 	"github.com/Fepozopo/bsc-hotsheet-update/helpers"
 )
 
-// CreateFromReports exists as the orchestration layer for the report pipeline. It loads the
+// CreateHotsheet exists as the orchestration layer for the report pipeline. It loads the
 // source data, merges optional PO information, groups entries by product line, and delegates
 // workbook generation to focused helpers.
-func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error) {
+func CreateHotsheet(inventoryPath, poPath, outputDir string) ([]string, error) {
 	logger, logCloser, err := createReportLogger()
 	if err != nil {
 		return nil, err
@@ -20,7 +20,7 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		_ = logCloser.Close()
 	}()
 
-	logger.Info("CreateFromReports started", "inventoryPath", inventoryPath, "poPath", poPath, "outputDir", outputDir)
+	logger.Info("CreateHotsheet started", "inventoryPath", inventoryPath, "poPath", poPath, "outputDir", outputDir)
 
 	invMap, err := loadInventoryEntries(inventoryPath, logger)
 	if err != nil {
@@ -48,11 +48,11 @@ func CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error
 		outputs = append(outputs, outPath)
 	}
 
-	logger.Info("CreateFromReports completed", "filesCreated", len(outputs), "outputDir", outputDir)
+	logger.Info("CreateHotsheet completed", "filesCreated", len(outputs), "outputDir", outputDir)
 	return outputs, nil
 }
 
-// createReportLogger constructs the logger used by CreateFromReports so the orchestration layer
+// createReportLogger constructs the logger used by CreateHotsheet so the orchestration layer
 // stays focused on the report pipeline itself.
 func createReportLogger() (*slog.Logger, interface{ Close() error }, error) {
 	logger, logCloser, err := helpers.CreateSlogLogger("create", "all", "", "DEBUG")

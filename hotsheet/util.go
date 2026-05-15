@@ -58,7 +58,7 @@ var (
 	}
 )
 
-// entry represents a single inventory item (moved from CreateFromReports)
+// entry represents a single inventory item (moved from CreateHotsheet).
 type entry struct {
 	SKU         string
 	ProductLine string

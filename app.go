@@ -213,7 +213,7 @@ func selectFiles(a fyne.App) (string, string, string) {
 
 		// Run generation in goroutine to avoid blocking UI
 		go func(inv, po, outdir string) {
-			outputs, err := hotsheet.CreateFromReports(inv, po, outdir)
+			outputs, err := hotsheet.CreateHotsheet(inv, po, outdir)
 			// Must manipulate UI from main goroutine; schedule with fyne.CurrentApp().SendNotification isn't appropriate here,
 			// but dialog.Show* and window operations are safe to call from other goroutines in Fyne as they marshal to the main loop.
 			progressDialog.Hide()

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Refactor `CreateFromReports()` into smaller, focused functions so the workbook generation flow is easier to maintain and easier to reuse in future features.
+Refactor `CreateHotsheet()` into smaller, focused functions so the workbook generation flow is easier to maintain and easier to reuse in future features.
 
 This refactor should preserve the current behavior of the application, including:
 
@@ -14,7 +14,7 @@ This refactor should preserve the current behavior of the application, including
 
 ## Why this refactor matters
 
-`CreateFromReports()` currently does too many things in one place:
+`CreateHotsheet()` currently does too many things in one place:
 
 - opens and reads source workbooks
 - parses inventory rows into entries
@@ -50,7 +50,7 @@ This is the recommended helper breakdown for the refactor. The exact names can c
 
 ### 1. Top-level orchestration
 
-#### `CreateFromReports(inventoryPath, poPath, outputDir string) ([]string, error)`
+#### `CreateHotsheet(inventoryPath, poPath, outputDir string) ([]string, error)`
 
 Keep this function as the orchestration layer only. It should:
 
@@ -158,7 +158,7 @@ Responsibilities:
 - save the workbook to disk
 - return the output file path
 
-This is the main workbook-level helper that `CreateFromReports()` should call for each product line.
+This is the main workbook-level helper that `CreateHotsheet()` should call for each product line.
 
 #### `newProductLineWorkbook() *excelize.File`
 
@@ -249,7 +249,7 @@ This keeps file naming and disk output separate from workbook construction.
 
 The intended flow after the refactor should look like this:
 
-1. `CreateFromReports()`
+1. `CreateHotsheet()`
 2. `loadInventoryEntries()`
 3. `mergePOData()` if a PO report was supplied
 4. `groupEntriesByProductLine()`
@@ -286,7 +286,7 @@ Why second:
 
 - it builds directly on the inventory map from Step 1
 - it keeps PO behavior isolated before workbook generation is touched
-- it reduces the amount of logic left inside `CreateFromReports()` early
+- it reduces the amount of logic left inside `CreateHotsheet()` early
 
 ### Step 3: Extract product-line grouping
 
@@ -305,7 +305,7 @@ Create `buildProductLineWorkbook()` and, if needed, `newProductLineWorkbook()` s
 Why fourth:
 
 - it establishes a single place to build and save a workbook
-- it sets the stage for moving sheet-writing logic out of `CreateFromReports()`
+- it sets the stage for moving sheet-writing logic out of `CreateHotsheet()`
 - it makes the top-level function much smaller once wired in
 
 ### Step 5: Extract standard sheet writing
@@ -333,9 +333,9 @@ Why sixth:
 - it should fit naturally once workbook creation is isolated
 - it avoids mixing new refactor work with an already working helper
 
-### Step 7: Reduce `CreateFromReports()` to orchestration only
+### Step 7: Reduce `CreateHotsheet()` to orchestration only
 
-Once the helpers exist, trim `CreateFromReports()` down to the pipeline that wires the helpers together.
+Once the helpers exist, trim `CreateHotsheet()` down to the pipeline that wires the helpers together.
 
 Why seventh:
 
@@ -370,7 +370,7 @@ The refactor should not change the observable behavior unless it is clearly part
 
 ### Phase 1: Map the current flow
 
-- Identify the major sections inside `CreateFromReports()`
+- Identify the major sections inside `CreateHotsheet()`
 - Group related logic into cohesive responsibilities
 - Identify what data needs to move between helper functions
 
@@ -424,7 +424,7 @@ The refactor should not change the observable behavior unless it is clearly part
 
 ## Acceptance criteria
 
-- `CreateFromReports()` is reduced to an orchestration function
+- `CreateHotsheet()` is reduced to an orchestration function
 - inventory parsing is split into smaller helpers
 - PO parsing is split into smaller helpers
 - workbook creation is split into smaller helpers
@@ -436,7 +436,7 @@ The refactor should not change the observable behavior unless it is clearly part
 
 ### Flow decomposition
 
-- [ ] Identify the distinct responsibilities currently handled inside `CreateFromReports()`
+- [ ] Identify the distinct responsibilities currently handled inside `CreateHotsheet()`
 - [ ] Define the helper boundaries before editing code
 - [ ] Decide which parts should become parsing helpers versus workbook helpers
 - [ ] Confirm the existing `Data Insights` builder can be reused without redesign
@@ -471,7 +471,7 @@ The refactor should not change the observable behavior unless it is clearly part
 
 ### Orchestration cleanup
 
-- [ ] Reduce `CreateFromReports()` to a readable top-level pipeline
+- [ ] Reduce `CreateHotsheet()` to a readable top-level pipeline
 - [ ] Keep error handling meaningful at each stage
 - [ ] Keep the function easy to scan from top to bottom
 - [ ] Avoid changing behavior while restructuring
@@ -487,4 +487,4 @@ The refactor should not change the observable behavior unless it is clearly part
 
 ## Status
 
-Planning only. `CreateFromReports()` has not been refactored yet.
+Planning only. `CreateHotsheet()` has not been refactored yet.
