@@ -425,17 +425,7 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []string, hasPO bool) error {
 	_ = hasPO // The header layout already captures whether PO columns should be present.
 
-	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"#E6E6FA"}, Pattern: 1},
-	})
+	headerStyle, err := f.NewStyle(centeredFillFontStyle("#E6E6FA", &excelize.Font{Bold: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create standard header style: %w", err)
 	}
@@ -534,7 +524,6 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 			e.DollarSoldPY,
 		)
 
-		currencyFormat := "$#,##0.00;[Red]($#,##0.00)"
 		dollarYTDCol := len(vals) - 2
 		dollarPYCol := len(vals) - 1
 
@@ -545,18 +534,9 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 			}
 
 			fillColor := standardSheetCellFillColor(e.Status, c, mtoYtdIdx, mtoPyIdx, mtoYTD, mtoPY, v)
-			styleDef := &excelize.Style{
-				Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-				Border: []excelize.Border{
-					{Type: "left", Color: "000000", Style: 1},
-					{Type: "right", Color: "000000", Style: 1},
-					{Type: "top", Color: "000000", Style: 1},
-					{Type: "bottom", Color: "000000", Style: 1},
-				},
-				Fill: excelize.Fill{Type: "pattern", Color: []string{fillColor}, Pattern: 1},
-			}
+			styleDef := centeredFillStyle(fillColor)
 			if c == dollarYTDCol || c == dollarPYCol {
-				styleDef.CustomNumFmt = &currencyFormat
+				styleDef = centeredFillNumFmtStyle(fillColor, currencyNumFmt())
 			}
 			style, err := f.NewStyle(styleDef)
 			if err != nil {

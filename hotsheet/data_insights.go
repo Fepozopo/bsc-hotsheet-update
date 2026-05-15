@@ -85,81 +85,32 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to create title style: %w", err)
 	}
 
-	sectionStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#D9EAF7"}, Pattern: 1},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-	})
+	sectionStyle, err := f.NewStyle(centeredFillFontStyle("#D9EAF7", &excelize.Font{Bold: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create section style: %w", err)
 	}
 
-	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"#E6E6FA"}, Pattern: 1},
-	})
+	headerStyle, err := f.NewStyle(centeredFillFontStyle("#E6E6FA", &excelize.Font{Bold: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create header style: %w", err)
 	}
 
-	dataStyle, err := f.NewStyle(&excelize.Style{
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-	})
+	dataStyle, err := f.NewStyle(centeredBorderStyle())
 	if err != nil {
 		return fmt.Errorf("failed to create data style: %w", err)
 	}
 
-	currencyFormat := "$#,##0.00;[Red]($#,##0.00)"
-	currencyDataStyle, err := f.NewStyle(&excelize.Style{
-		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border:       []excelize.Border{{Type: "left", Color: "000000", Style: 1}, {Type: "right", Color: "000000", Style: 1}, {Type: "top", Color: "000000", Style: 1}, {Type: "bottom", Color: "000000", Style: 1}},
-		CustomNumFmt: &currencyFormat,
-	})
+	currencyDataStyle, err := f.NewStyle(centeredNumFmtStyle(currencyNumFmt()))
 	if err != nil {
 		return fmt.Errorf("failed to create currency data style: %w", err)
 	}
 
-	totalStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"#F2F2F2"}, Pattern: 1},
-	})
+	totalStyle, err := f.NewStyle(centeredFillFontStyle("#F2F2F2", &excelize.Font{Bold: true}))
 	if err != nil {
 		return fmt.Errorf("failed to create total style: %w", err)
 	}
 
-	currencyTotalStyle, err := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Bold: true},
-		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border:       []excelize.Border{{Type: "left", Color: "000000", Style: 1}, {Type: "right", Color: "000000", Style: 1}, {Type: "top", Color: "000000", Style: 1}, {Type: "bottom", Color: "000000", Style: 1}},
-		Fill:         excelize.Fill{Type: "pattern", Color: []string{"#F2F2F2"}, Pattern: 1},
-		CustomNumFmt: &currencyFormat,
-	})
+	currencyTotalStyle, err := f.NewStyle(centeredFillFontNumFmtStyle("#F2F2F2", &excelize.Font{Bold: true}, currencyNumFmt()))
 	if err != nil {
 		return fmt.Errorf("failed to create currency total style: %w", err)
 	}
