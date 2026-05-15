@@ -55,7 +55,7 @@ func CreateHotsheet(inventoryPath, poPath, outputDir string) ([]string, error) {
 // createReportLogger constructs the logger used by CreateHotsheet so the orchestration layer
 // stays focused on the report pipeline itself.
 func createReportLogger() (*slog.Logger, interface{ Close() error }, error) {
-	logger, logCloser, err := helpers.CreateSlogLogger("create", "all", "", "DEBUG")
+	logger, logCloser, err := helpers.CreateSlogLogger("create", "DEBUG")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
 	}
