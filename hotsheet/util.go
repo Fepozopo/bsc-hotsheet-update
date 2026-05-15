@@ -58,13 +58,15 @@ var (
 	}
 )
 
-// entry represents a single inventory item (moved from CreateFromReports)
+// entry represents a single inventory item (moved from CreateHotsheet).
 type entry struct {
 	SKU         string
 	ProductLine string
 	ClassDesc   string
-	Status      string
-	OnHand      int
+	// RawClassDesc preserves the original inventory category before any display-time prefixing.
+	RawClassDesc string
+	Status       string
+	OnHand       int
 	// Per-PO details from the PO report
 	PONum1         string
 	OnPO1          int

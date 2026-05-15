@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,23 +55,87 @@ func openDirWindow(parent fyne.Window, callback func(dirPath string, e error)) {
 	callback(dirPath, nil)
 }
 
+type githubRelease struct {
+	TagName string               `json:"tag_name"`
+	Assets  []githubReleaseAsset `json:"assets"`
+}
+
+type githubReleaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+func currentReleaseAssetName() string {
+	base := "hotsheet"
+	switch runtime.GOOS {
+	case "windows":
+		return fmt.Sprintf("%s-%s-%s.exe", base, runtime.GOOS, runtime.GOARCH)
+	default:
+		return fmt.Sprintf("%s-%s-%s", base, runtime.GOOS, runtime.GOARCH)
+	}
+}
+
+func detectLatestRelease(repo string) (semver.Version, string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return semver.Version{}, "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "bsc-hotsheet-update")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return semver.Version{}, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return semver.Version{}, "", fmt.Errorf("GitHub releases API returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return semver.Version{}, "", fmt.Errorf("could not decode GitHub release response: %w", err)
+	}
+
+	latestVersion, err := semver.Parse(strings.TrimPrefix(release.TagName, "v"))
+	if err != nil {
+		return semver.Version{}, "", fmt.Errorf("could not parse release tag %q: %w", release.TagName, err)
+	}
+
+	expectedAsset := currentReleaseAssetName()
+	for _, asset := range release.Assets {
+		if asset.Name == expectedAsset {
+			if asset.BrowserDownloadURL == "" {
+				return semver.Version{}, "", fmt.Errorf("release asset %q is missing a download URL", expectedAsset)
+			}
+			return latestVersion, asset.BrowserDownloadURL, nil
+		}
+	}
+
+	return semver.Version{}, "", fmt.Errorf("release %q does not include asset %q", release.TagName, expectedAsset)
+}
+
 func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 	go func() {
 		const repo = "Fepozopo/bsc-hotsheet-update"
-		latest, found, err := selfupdate.DetectLatest(repo)
+		latestVersion, latestAssetURL, err := detectLatestRelease(repo)
 		if err != nil {
 			dialog.ShowError(fmt.Errorf("update check failed: %w", err), w)
 			return
 		}
 
 		currentVer, _ := semver.Parse(version.Version)
-		if !found || latest.Version.Equals(currentVer) {
+		if !latestVersion.GT(currentVer) {
 			if showNoUpdatesDialog {
 				dialog.ShowInformation("No Updates", "You are already running the latest version.", w)
 			}
 			return
 		}
-		updateMsg := fmt.Sprintf("A new version (%s) is available. You must update to continue using the application.", latest.Version)
+		updateMsg := fmt.Sprintf("A new version (%s) is available. You must update to continue using the application.", latestVersion)
 		dialog.NewCustomConfirm(
 			"Update Required",
 			"Update",
@@ -89,7 +156,7 @@ func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 					progressDialog.Show()
 
 					go func() {
-						err = selfupdate.UpdateTo(latest.AssetURL, exe)
+						err = selfupdate.UpdateTo(latestAssetURL, exe)
 						progressDialog.Hide()
 						if err != nil {
 							dialog.ShowError(fmt.Errorf("update failed: %w", err), w)
@@ -213,7 +280,7 @@ func selectFiles(a fyne.App) (string, string, string) {
 
 		// Run generation in goroutine to avoid blocking UI
 		go func(inv, po, outdir string) {
-			outputs, err := hotsheet.CreateFromReports(inv, po, outdir)
+			outputs, err := hotsheet.CreateHotsheet(inv, po, outdir)
 			// Must manipulate UI from main goroutine; schedule with fyne.CurrentApp().SendNotification isn't appropriate here,
 			// but dialog.Show* and window operations are safe to call from other goroutines in Fyne as they marshal to the main loop.
 			progressDialog.Hide()

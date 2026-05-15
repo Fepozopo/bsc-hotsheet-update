@@ -12,19 +12,18 @@ import (
 )
 
 // CreateSlogLogger creates a buffered slog-based logger that writes JSON entries to a
-// timestamped log file inside the system temp directory under "logs-bsc"
-// It returns the created *slog.Logger and an io.Closer
-// that must be called on shutdown to flush the buffer, sync and close the underlying file.
+// timestamped log file inside the system temp directory under "logs-bsc".
+// It returns the created *slog.Logger and an io.Closer that must be called on shutdown
+// to flush the buffer, sync, and close the underlying file.
 //
 //   - name: logical name of the operation (e.g. "create", "main").
-//   - product, occasion: optional components that are appended to the filename if provided.
 //   - level: textual log level ("DEBUG", "INFO", "WARN", "ERROR") - case-insensitive.
 //     Unrecognized values fall back to INFO.
 //
 // Important: callers must call Close() on the returned io.Closer (or otherwise ensure
 // the buffer is flushed and the file closed) to avoid losing recently-buffered log entries.
-func CreateSlogLogger(name, product, occasion, level string) (*slog.Logger, io.Closer, error) {
-	// Timestamped filename
+func CreateSlogLogger(name, level string) (*slog.Logger, io.Closer, error) {
+	// Timestamped filename.
 	currentDate := time.Now().Format("2006-01-02_150405.000000000")
 
 	tempDir := os.TempDir()
@@ -34,18 +33,8 @@ func CreateSlogLogger(name, product, occasion, level string) (*slog.Logger, io.C
 		return nil, nil, fmt.Errorf("error creating logs directory: %w", err)
 	}
 
-	var logFilePath string
-	// Build filename components to avoid empty placeholder segments.
-	base := fmt.Sprintf("%s_%s", currentDate, name)
-	parts := []string{base}
-	if product != "" {
-		parts = append(parts, product)
-	}
-	if occasion != "" {
-		parts = append(parts, occasion)
-	}
-	filename := strings.Join(parts, "-") + ".log"
-	logFilePath = filepath.Join(logDir, filename)
+	filename := fmt.Sprintf("%s_%s.log", currentDate, name)
+	logFilePath := filepath.Join(logDir, filename)
 
 	f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
