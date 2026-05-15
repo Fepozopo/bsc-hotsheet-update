@@ -2,7 +2,7 @@
 
 ## Description
 
-Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics.
+Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics. The `Data Insights` sheet now shows `Counter Cards` and `Other Products` side-by-side.
 
 ## Motivation
 
@@ -15,7 +15,7 @@ This tool automates the manual work of assembling hotsheets from inventory and P
 - A C compiler for CGO (Fyne requires C bindings):
   - The Makefile uses `zig` for many cross-compilation targets; edit targets to use `clang`/`gcc` if preferred.
   - The darwin (macOS) target uses `clang`.
-- Internet access is required for the built-in auto-update check (uses GitHub releases).
+- Internet access is required for the built-in auto-update check (reads the public GitHub releases API).
 
 ## Quick Start
 
@@ -48,6 +48,7 @@ Behavior notes
 - PO-only SKUs (SKUs present in PO but not in inventory) are skipped to avoid creating "UNKNOWN" product-line files.
 - Output file naming: `{ProductLine}_hotsheet_YYYYMMDD.xlsx` (e.g., `BAS_hotsheet_20260423.xlsx`).
 - Each output file contains four sheets: "Everyday", "Winter", "Spring", and "Data Insights". Header comments explain the MTO calculations.
+- The `Data Insights` sheet now has two side-by-side tables: `Counter Cards` on the left and `Other Products` on the right.
 
 ## Logs
 
@@ -65,15 +66,14 @@ On startup the GUI checks the public GitHub releases API for the latest version.
 ## Implementation details
 
 - Entry point: `main.go` sets up logging and launches the GUI flow (`selectFiles`).
-- GUI & update-checks: `app.go` contains the UI, input validation, progress dialogs, and the auto-update check.
-- Hotsheet generation: `hotsheet/create_from_reports.go` parses the inventory and optional PO reports and writes XLSX files; `hotsheet/copy_hotsheet.go` contains a simple copy helper; `hotsheet/util.go` includes parsing and mapping helpers.
+- GUI & update-checks: `app.go` contains the UI, input validation, progress dialogs, and the auto-update flow. The app checks the public GitHub releases API and downloads the release asset for the selected platform.
+- Hotsheet generation: `hotsheet/create.go` orchestrates the report pipeline; `hotsheet/create_helpers.go` loads and merges inventory/PO data and writes workbooks; `hotsheet/data_insights.go` builds the `Data Insights` worksheet; `hotsheet/format_helpers.go` centralizes workbook styles; `hotsheet/util.go` includes parsing and mapping helpers.
 - Logging: `helpers/slog_logger.go` creates buffered JSON writers into `logs-bsc` under the system temp directory.
-- Version: `internal/version/version.go` currently holds the app version (v2.1.1).
+- Version: `internal/version/version.go`..
 - Build: `Makefile` provides cross-compile targets (uses CGO and `zig` by default).
 
 ## Troubleshooting
 
 - Auto-update failed: ensure internet connectivity and that the app has permission to replace the executable.
-- If you see `401 Bad credentials`, check whether `GITHUB_TOKEN` or a GitHub token in `gitconfig` is set incorrectly in your shell/environment.
 - No logs: check your OS temp directory for a `logs-bsc` folder and file permissions.
 - Build failures due to missing `zig`: either install `zig` (recommended for cross-compiles) or edit the `Makefile` targets to use your local `clang`/`gcc` toolchain.
