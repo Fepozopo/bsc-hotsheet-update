@@ -60,7 +60,7 @@ Logger implementation: `helpers/slog_logger.go`. Callers must close the returned
 
 ## Auto-update
 
-On startup the GUI checks GitHub releases (uses `rhysd/go-github-selfupdate`). If a newer release is detected the app prompts the user. If the update is accepted the app downloads the release asset, replaces the running executable, and restarts the new binary. If the update is declined the app will exit. Update errors are shown in an error dialog.
+On startup the GUI checks the public GitHub releases API for the latest version. If a newer release is detected the app prompts the user. If the update is accepted the app downloads the release asset, replaces the running executable, and restarts the new binary. If the update is declined the app will exit. Update errors are shown in an error dialog.
 
 ## Implementation details
 
@@ -74,5 +74,6 @@ On startup the GUI checks GitHub releases (uses `rhysd/go-github-selfupdate`). I
 ## Troubleshooting
 
 - Auto-update failed: ensure internet connectivity and that the app has permission to replace the executable.
+- If you see `401 Bad credentials`, check whether `GITHUB_TOKEN` or a GitHub token in `gitconfig` is set incorrectly in your shell/environment.
 - No logs: check your OS temp directory for a `logs-bsc` folder and file permissions.
 - Build failures due to missing `zig`: either install `zig` (recommended for cross-compiles) or edit the `Makefile` targets to use your local `clang`/`gcc` toolchain.
