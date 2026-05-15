@@ -534,6 +534,10 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 			e.DollarSoldPY,
 		)
 
+		currencyFormat := "$#,##0.00;[Red]($#,##0.00)"
+		dollarYTDCol := len(vals) - 2
+		dollarPYCol := len(vals) - 1
+
 		for c, v := range vals {
 			cell, _ := excelize.CoordinatesToCellName(c+1, rowIdx)
 			if err := f.SetCellValue(sheetName, cell, v); err != nil {
@@ -541,7 +545,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 			}
 
 			fillColor := standardSheetCellFillColor(e.Status, c, mtoYtdIdx, mtoPyIdx, mtoYTD, mtoPY, v)
-			style, err := f.NewStyle(&excelize.Style{
+			styleDef := &excelize.Style{
 				Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 				Border: []excelize.Border{
 					{Type: "left", Color: "000000", Style: 1},
@@ -550,7 +554,11 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 					{Type: "bottom", Color: "000000", Style: 1},
 				},
 				Fill: excelize.Fill{Type: "pattern", Color: []string{fillColor}, Pattern: 1},
-			})
+			}
+			if c == dollarYTDCol || c == dollarPYCol {
+				styleDef.CustomNumFmt = &currencyFormat
+			}
+			style, err := f.NewStyle(styleDef)
 			if err != nil {
 				return fmt.Errorf("failed to create %s cell style for %s: %w", sheetName, cell, err)
 			}
