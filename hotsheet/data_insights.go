@@ -71,6 +71,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 	currentMonthsThrough := currentMonthsThrough()
 	// Use the current month progress to annualize in-progress rows.
 	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough)
+	otherRows := buildOtherProductDataInsightsRows(entries, currentMonthsThrough)
 
 	sheetName := "Data Insights"
 	if _, err := f.NewSheet(sheetName); err != nil {
@@ -143,31 +144,57 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to create currency total style: %w", err)
 	}
 
-	columnWidths := map[string]float64{
-		"A": 26,
-		"B": 16,
-		"C": 14,
-		"D": 14,
-		"E": 34,
+	if err := setDataInsightsTableWidths(f, sheetName, "A"); err != nil {
+		return err
 	}
-	for col, width := range columnWidths {
-		if err := f.SetColWidth(sheetName, col, col, width); err != nil {
-			return fmt.Errorf("failed to set width for column %s: %w", col, err)
-		}
+	if err := setDataInsightsTableWidths(f, sheetName, "G"); err != nil {
+		return err
 	}
 
+	titleCols, err := dataInsightsTableColumns("G")
+	if err != nil {
+		return err
+	}
+
+	// The title spans the full width of both tables to stay visually centered on the sheet
 	if err := f.SetCellValue(sheetName, "A1", "Data Insights"); err != nil {
 		return fmt.Errorf("failed to set sheet title: %w", err)
 	}
-	if err := f.MergeCell(sheetName, "A1", "E1"); err != nil {
+	if err := f.MergeCell(sheetName, "A1", titleCols[4]+"1"); err != nil {
 		return fmt.Errorf("failed to merge title cells: %w", err)
 	}
-	if err := f.SetCellStyle(sheetName, "A1", "E1", titleStyle); err != nil {
+	if err := f.SetCellStyle(sheetName, "A1", titleCols[4]+"1", titleStyle); err != nil {
 		return fmt.Errorf("failed to style title row: %w", err)
 	}
 
-	// Leave a blank row between the title and the first section for readability.
-	rowNum := 3
+	leftCols, err := dataInsightsTableColumns("A")
+	if err != nil {
+		return err
+	}
+	// The "Counter Cards" subtitle for the left-side table
+	if err := f.SetCellValue(sheetName, "A3", "Counter Cards"); err != nil {
+		return fmt.Errorf("failed to set counter cards subtitle: %w", err)
+	}
+	if err := f.MergeCell(sheetName, "A3", leftCols[4]+"3"); err != nil {
+		return fmt.Errorf("failed to merge counter cards subtitle: %w", err)
+	}
+	if err := f.SetCellStyle(sheetName, "A3", leftCols[4]+"3", sectionStyle); err != nil {
+		return fmt.Errorf("failed to style counter cards subtitle: %w", err)
+	}
+
+	// The "Other Products" subtitle for the right side table
+	if err := f.SetCellValue(sheetName, "G3", "Other Products"); err != nil {
+		return fmt.Errorf("failed to set other products subtitle: %w", err)
+	}
+	if err := f.MergeCell(sheetName, "G3", titleCols[4]+"3"); err != nil {
+		return fmt.Errorf("failed to merge other products subtitle: %w", err)
+	}
+	if err := f.SetCellStyle(sheetName, "G3", titleCols[4]+"3", sectionStyle); err != nil {
+		return fmt.Errorf("failed to style other products subtitle: %w", err)
+	}
+
+	// Leave a blank row between the subtitles and the tables for readability.
+	rowNum := 5
 	// Spring and Winter use completion-aware status text. Everyday uses a straight projected YoY value.
 	sections := []struct {
 		name    string
@@ -258,6 +285,10 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			return fmt.Errorf("failed to style %s total currency cells: %w", section.name, err)
 		}
 		rowNum++
+	}
+
+	if err := writeOtherProductsTable(f, sheetName, "G", 5, otherRows, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle); err != nil {
+		return err
 	}
 
 	return nil
@@ -357,6 +388,173 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 	})
 
 	return rowsBySection
+}
+
+// dataInsightsClassRow represents one output row in the Other Products table.
+type dataInsightsClassRow struct {
+	Class           string
+	Date            string
+	DollarSoldYTD   float64
+	DollarSoldPY    float64
+	ProjectedDollar float64
+	Final           string
+}
+
+// dataInsightsClassGroup aggregates sales for a single non-counter-card class description.
+type dataInsightsClassGroup struct {
+	Class         string
+	DollarSoldYTD float64
+	DollarSoldPY  float64
+}
+
+// buildOtherProductDataInsightsRows groups all non-counter-card entries by class description.
+func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough float64) []dataInsightsClassRow {
+	groups := make(map[string]*dataInsightsClassGroup)
+
+	for _, e := range entries {
+		if isExactCounterCards(e) {
+			continue
+		}
+
+		classDesc := normalizeDataInsightsClassDescription(e)
+		groupKey := strings.ToUpper(classDesc)
+
+		group, ok := groups[groupKey]
+		if !ok {
+			group = &dataInsightsClassGroup{Class: classDesc}
+			groups[groupKey] = group
+		}
+
+		group.DollarSoldYTD += e.DollarSoldYTD
+		group.DollarSoldPY += e.DollarSoldPY
+	}
+
+	rows := make([]dataInsightsClassRow, 0, len(groups))
+	for _, group := range groups {
+		projected := group.DollarSoldYTD * (12.0 / currentMonthsThrough)
+		rows = append(rows, dataInsightsClassRow{
+			Class:           group.Class,
+			Date:            "N/A",
+			DollarSoldYTD:   group.DollarSoldYTD,
+			DollarSoldPY:    group.DollarSoldPY,
+			ProjectedDollar: projected,
+			Final:           formatYoYFromProjectedSales(projected, group.DollarSoldPY),
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return strings.ToUpper(rows[i].Class) < strings.ToUpper(rows[j].Class)
+	})
+
+	return rows
+}
+
+// normalizeDataInsightsClassDescription trims the class description and provides a fallback for empty values.
+func normalizeDataInsightsClassDescription(e *entry) string {
+	category := strings.TrimSpace(e.RawClassDesc)
+	if category == "" {
+		category = strings.TrimSpace(e.ClassDesc)
+	}
+	if category == "" {
+		return "UNCLASSIFIED"
+	}
+	return category
+}
+
+// setDataInsightsTableWidths applies the shared 5-column width pattern starting at the given column.
+func setDataInsightsTableWidths(f *excelize.File, sheetName, startCol string) error {
+	cols, err := dataInsightsTableColumns(startCol)
+	if err != nil {
+		return err
+	}
+
+	widths := []float64{26, 16, 14, 14, 34}
+	for idx, col := range cols {
+		if err := f.SetColWidth(sheetName, col, col, widths[idx]); err != nil {
+			return fmt.Errorf("failed to set width for column %s: %w", col, err)
+		}
+	}
+
+	return nil
+}
+
+// dataInsightsTableColumns returns the 5 consecutive columns starting at startCol.
+func dataInsightsTableColumns(startCol string) ([]string, error) {
+	startIdx, err := excelize.ColumnNameToNumber(startCol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve column %s: %w", startCol, err)
+	}
+
+	cols := make([]string, 5)
+	for i := 0; i < len(cols); i++ {
+		col, err := excelize.ColumnNumberToName(startIdx + i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve column %d: %w", startIdx+i, err)
+		}
+		cols[i] = col
+	}
+
+	return cols, nil
+}
+
+// writeOtherProductsTable writes the right-side Other Products table.
+func writeOtherProductsTable(f *excelize.File, sheetName, startCol string, startRow int, rows []dataInsightsClassRow, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle int) error {
+	cols, err := dataInsightsTableColumns(startCol)
+	if err != nil {
+		return err
+	}
+
+	headers := []string{"Class", "Date", "YTD Sales", "PY Sales", "Projected YoY"}
+	for idx, header := range headers {
+		cell := fmt.Sprintf("%s%d", cols[idx], startRow)
+		if err := f.SetCellValue(sheetName, cell, header); err != nil {
+			return fmt.Errorf("failed to set other products header %s: %w", header, err)
+		}
+	}
+	if err := f.SetCellStyle(sheetName, fmt.Sprintf("%s%d", cols[0], startRow), fmt.Sprintf("%s%d", cols[4], startRow), headerStyle); err != nil {
+		return fmt.Errorf("failed to style other products header row: %w", err)
+	}
+
+	rowNum := startRow + 1
+	totalYTD := 0.0
+	totalPY := 0.0
+	totalProjectedSales := 0.0
+	for _, row := range rows {
+		values := []interface{}{row.Class, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+		for idx, value := range values {
+			cell := fmt.Sprintf("%s%d", cols[idx], rowNum)
+			if err := f.SetCellValue(sheetName, cell, value); err != nil {
+				return fmt.Errorf("failed to write other products row cell %s: %w", cell, err)
+			}
+		}
+		if err := f.SetCellStyle(sheetName, fmt.Sprintf("%s%d", cols[0], rowNum), fmt.Sprintf("%s%d", cols[4], rowNum), dataStyle); err != nil {
+			return fmt.Errorf("failed to style other products data row: %w", err)
+		}
+		if err := f.SetCellStyle(sheetName, fmt.Sprintf("%s%d", cols[2], rowNum), fmt.Sprintf("%s%d", cols[3], rowNum), currencyDataStyle); err != nil {
+			return fmt.Errorf("failed to style other products currency cells: %w", err)
+		}
+
+		totalYTD += row.DollarSoldYTD
+		totalPY += row.DollarSoldPY
+		totalProjectedSales += row.ProjectedDollar
+		rowNum++
+	}
+
+	totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjectedSales, totalPY)}
+	for idx, value := range totalRowValues {
+		cell := fmt.Sprintf("%s%d", cols[idx], rowNum)
+		if err := f.SetCellValue(sheetName, cell, value); err != nil {
+			return fmt.Errorf("failed to write other products total row cell %s: %w", cell, err)
+		}
+	}
+	if err := f.SetCellStyle(sheetName, fmt.Sprintf("%s%d", cols[0], rowNum), fmt.Sprintf("%s%d", cols[4], rowNum), totalStyle); err != nil {
+		return fmt.Errorf("failed to style other products total row: %w", err)
+	}
+	if err := f.SetCellStyle(sheetName, fmt.Sprintf("%s%d", cols[2], rowNum), fmt.Sprintf("%s%d", cols[3], rowNum), currencyTotalStyle); err != nil {
+		return fmt.Errorf("failed to style other products total currency cells: %w", err)
+	}
+
+	return nil
 }
 
 // isExactCounterCards reports whether the entry belongs to the exact "Counter Cards" class.
