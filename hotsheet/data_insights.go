@@ -77,37 +77,68 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to create %s sheet: %w", sheetName, err)
 	}
 
-	titleStyle, err := f.NewStyle(centeredFontStyle(&excelize.Font{Bold: true, Size: 14}))
+	titleStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: centeredAlignment(),
+		Font:      boldFont(14),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create title style: %w", err)
 	}
 
-	sectionStyle, err := f.NewStyle(centeredFillFontStyle(dataInsightsSectionFill, &excelize.Font{Bold: true}))
+	sectionStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: centeredAlignment(),
+		Border:    thinBlackBorder(),
+		Fill:      patternFill(dataInsightsSectionFill),
+		Font:      boldFont(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create section style: %w", err)
 	}
 
-	headerStyle, err := f.NewStyle(centeredFillFontStyle(standardHeaderFill, &excelize.Font{Bold: true}))
+	headerStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: centeredAlignment(),
+		Border:    thinBlackBorder(),
+		Fill:      patternFill(standardHeaderFill),
+		Font:      boldFont(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create header style: %w", err)
 	}
 
-	dataStyle, err := f.NewStyle(centeredBorderStyle())
+	dataStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: centeredAlignment(),
+		Border:    thinBlackBorder(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create data style: %w", err)
 	}
 
-	currencyDataStyle, err := f.NewStyle(centeredNumFmtStyle(currencyNumFmt()))
+	currencyDataStyle, err := f.NewStyle(&excelize.Style{
+		Alignment:    centeredAlignment(),
+		Border:       thinBlackBorder(),
+		CustomNumFmt: currencyNumFmt(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create currency data style: %w", err)
 	}
 
-	totalStyle, err := f.NewStyle(centeredFillFontStyle(standardTotalFill, &excelize.Font{Bold: true}))
+	totalStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: centeredAlignment(),
+		Border:    thinBlackBorder(),
+		Fill:      patternFill(standardTotalFill),
+		Font:      boldFont(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create total style: %w", err)
 	}
 
-	currencyTotalStyle, err := f.NewStyle(centeredFillFontNumFmtStyle(standardTotalFill, &excelize.Font{Bold: true}, currencyNumFmt()))
+	currencyTotalStyle, err := f.NewStyle(&excelize.Style{
+		Alignment:    centeredAlignment(),
+		Border:       thinBlackBorder(),
+		Fill:         patternFill(standardTotalFill),
+		Font:         boldFont(),
+		CustomNumFmt: currencyNumFmt(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create currency total style: %w", err)
 	}

@@ -425,7 +425,12 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []string, hasPO bool) error {
 	_ = hasPO // The header layout already captures whether PO columns should be present.
 
-	headerStyle, err := f.NewStyle(centeredFillFontStyle(standardHeaderFill, &excelize.Font{Bold: true}))
+	headerStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: centeredAlignment(),
+		Border:    thinBlackBorder(),
+		Fill:      patternFill(standardHeaderFill),
+		Font:      boldFont(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create standard header style: %w", err)
 	}
@@ -534,9 +539,13 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 			}
 
 			fillColor := standardSheetCellFillColor(e.Status, c, mtoYtdIdx, mtoPyIdx, mtoYTD, mtoPY, v)
-			styleDef := centeredFillStyle(fillColor)
+			styleDef := &excelize.Style{
+				Alignment: centeredAlignment(),
+				Border:    thinBlackBorder(),
+				Fill:      patternFill(fillColor),
+			}
 			if c == dollarYTDCol || c == dollarPYCol {
-				styleDef = centeredFillNumFmtStyle(fillColor, currencyNumFmt())
+				styleDef.CustomNumFmt = currencyNumFmt()
 			}
 			style, err := f.NewStyle(styleDef)
 			if err != nil {
