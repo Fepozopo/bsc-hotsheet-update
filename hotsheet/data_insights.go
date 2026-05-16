@@ -317,7 +317,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		// Totals preserve the same status wording used by the section's detailed rows.
 		if section.name == "Spring" || section.name == "Winter" {
 			if !sectionStarted {
-				totalRowValues[dataInsightsColumnFinal] = "NOT STARTED"
+				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, false, false)
 			} else {
 				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, true, sectionComplete)
 			}
@@ -745,7 +745,7 @@ func monthsThroughSinceDate(year int, startMonth time.Month, startDay int, endMo
 // formatSeasonStatusYoY formats the season status text with a YoY comparison.
 func formatSeasonStatusYoY(projectedSales float64, pySales float64, started bool, complete bool) string {
 	if !started {
-		return "NOT STARTED"
+		return fmt.Sprintf("NOT STARTED: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
 	}
 	if complete {
 		return fmt.Sprintf("COMPLETE: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))

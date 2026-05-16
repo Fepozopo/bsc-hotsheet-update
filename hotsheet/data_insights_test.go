@@ -132,8 +132,11 @@ func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
 		t.Fatalf("expected winter projection to stay at YTD before July 1, got %.9f", row.ProjectedDollar)
 	}
-	if row.Final != "NOT STARTED" {
+	if !strings.HasPrefix(row.Final, "NOT STARTED:") {
 		t.Fatalf("expected Christmas to show NOT STARTED before July 1, got %q", row.Final)
+	}
+	if !strings.Contains(row.Final, "YoY") {
+		t.Fatalf("expected NOT STARTED status to include YoY comparison, got %q", row.Final)
 	}
 
 	inSeason := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
