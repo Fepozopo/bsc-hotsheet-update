@@ -98,7 +98,7 @@ var dataInsightDateMap = map[string]occasionDateInfo{
 	"VETERANS DAY":      {Display: "November 11", Month: time.November, Day: 11, SortKey: 1111},
 	"THANKSGIVING":      {Display: "November 28", Month: time.November, Day: 28, SortKey: 1128},
 	"HANUKKAH":          {Display: "December 8", Month: time.December, Day: 8, SortKey: 1208},
-	"HOLIDAY":           {Display: "December 15", Month: time.December, Day: 15, SortKey: 1215},
+	"HOLIDAY":           {Display: "December 25", Month: time.December, Day: 25, SortKey: 1225},
 	"CHRISTMAS":         {Display: "December 25", Month: time.December, Day: 25, SortKey: 1225},
 }
 
