@@ -281,6 +281,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		totalYTD := 0.0
 		totalPY := 0.0
 		totalProjectedSales := 0.0
+		// A section is considered started only once at least one row is actively in season.
+		sectionStarted := true
 		// A section is considered complete only when none of its rows are still in progress.
 		sectionComplete := true
 		for _, row := range sectionRows {
@@ -301,6 +303,10 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			totalPY += row.DollarSoldPY
 			totalProjectedSales += row.ProjectedDollar
 			// If any row is still in progress, the section total should use the same wording.
+			if strings.HasPrefix(row.Final, "NOT STARTED") {
+				sectionStarted = false
+				sectionComplete = false
+			}
 			if strings.HasPrefix(row.Final, "IN PROGRESS:") {
 				sectionComplete = false
 			}
@@ -308,9 +314,13 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		}
 
 		totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, ""}
-		// Totals preserve the same YoY wording style used by the section's detailed rows.
+		// Totals preserve the same status wording used by the section's detailed rows.
 		if section.name == "Spring" || section.name == "Winter" {
-			totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, sectionComplete)
+			if !sectionStarted {
+				totalRowValues[dataInsightsColumnFinal] = "NOT STARTED"
+			} else {
+				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, true, sectionComplete)
+			}
 		}
 		if section.name == "Everyday" {
 			totalRowValues[dataInsightsColumnFinal] = formatYoYFromProjectedSales(totalProjectedSales, totalPY)
@@ -392,28 +402,28 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now t
 			if isValentinesOccasion(group.Occasion) {
 				currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
 				row.ProjectedDollar = group.DollarSoldYTD * (totalSellingDays / currentSellingDays)
-				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, complete)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, complete)
 			} else if group.Section == "Winter" {
 				seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
 				if now.Before(seasonStart) {
 					// Before July 1, winter holidays are not yet in selling season, so keep the
 					// row at actual YTD sales instead of extrapolating from the off-season months.
 					row.ProjectedDollar = group.DollarSoldYTD
-					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, false, group.complete)
 				} else if group.complete {
 					row.ProjectedDollar = group.DollarSoldYTD
-					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
 				} else {
 					currentSellingMonths := monthsThroughSinceDate(now.Year(), time.July, 1, now.Month(), now.Day(), now.Location())
 					row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentSellingMonths)
-					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
 				}
 			} else if group.complete {
 				row.ProjectedDollar = group.DollarSoldYTD
-				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
 			} else {
 				row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentMonthsThrough)
-				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
 			}
 		} else {
 			// Everyday items do not have a calendar cutover, so they project across the full year.
@@ -733,7 +743,10 @@ func monthsThroughSinceDate(year int, startMonth time.Month, startDay int, endMo
 }
 
 // formatSeasonStatusYoY formats the season status text with a YoY comparison.
-func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete bool) string {
+func formatSeasonStatusYoY(projectedSales float64, pySales float64, started bool, complete bool) string {
+	if !started {
+		return "NOT STARTED"
+	}
 	if complete {
 		return fmt.Sprintf("COMPLETE: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
 	}
