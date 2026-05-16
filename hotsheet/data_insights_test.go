@@ -30,7 +30,6 @@ func TestValentinesProjectionWindow(t *testing.T) {
 	if complete {
 		t.Fatal("expected Valentine's Day to remain incomplete on Dec 31")
 	}
-
 }
 
 func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
@@ -70,5 +69,41 @@ func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
 	}
 	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
 		t.Fatalf("expected status to remain in progress on Dec 31, got %q", row.Final)
+	}
+}
+
+func TestGraduationProjectionWindow(t *testing.T) {
+	t.Parallel()
+
+	entries := []*entry{{
+		RawClassDesc:  "Counter Cards",
+		Occasion:      "Graduation",
+		DollarSoldYTD: 100,
+		DollarSoldPY:  80,
+	}}
+
+	beforeCutoff := time.Date(2026, time.June, 14, 12, 0, 0, 0, time.UTC)
+	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough(beforeCutoff), beforeCutoff)
+	rows := rowsBySection["Spring"]
+	if len(rows) != 1 {
+		t.Fatalf("expected one Spring row, got %d", len(rows))
+	}
+
+	row := rows[0]
+	if row.Date != "mid-June" {
+		t.Fatalf("expected Graduation to display as mid-June, got %q", row.Date)
+	}
+	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
+		t.Fatalf("expected Graduation to be in progress before June 15, got %q", row.Final)
+	}
+
+	afterCutoff := time.Date(2026, time.June, 16, 12, 0, 0, 0, time.UTC)
+	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(afterCutoff), afterCutoff)
+	row = rowsBySection["Spring"][0]
+	if row.Date != "mid-June" {
+		t.Fatalf("expected Graduation to still display as mid-June, got %q", row.Date)
+	}
+	if !strings.HasPrefix(row.Final, "COMPLETE:") {
+		t.Fatalf("expected Graduation to be complete after June 15, got %q", row.Final)
 	}
 }

@@ -82,6 +82,8 @@ type occasionDateInfo struct {
 
 // dataInsightDateMap maps normalized occasion names to their display text and calendar metadata.
 var dataInsightDateMap = map[string]occasionDateInfo{
+	// Valentine's Day cards sell in two separate windows, but we still anchor the occasion to Feb 14
+	// so the event keeps its normal calendar identity while projection logic handles the split season.
 	"VALENTINE'S DAY":   {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
 	"VALENTINES DAY":    {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
 	"ST PATRICKS DAY":   {Display: "March 17", Month: time.March, Day: 17, SortKey: 317},
@@ -89,7 +91,7 @@ var dataInsightDateMap = map[string]occasionDateInfo{
 	"EASTER":            {Display: "April 20", Month: time.April, Day: 20, SortKey: 420},
 	"MOTHER'S DAY":      {Display: "May 11", Month: time.May, Day: 11, SortKey: 511},
 	"MOTHERS DAY":       {Display: "May 11", Month: time.May, Day: 11, SortKey: 511},
-	"GRADUATION":        {Display: "June", Month: time.June, Day: 30, SortKey: 630},
+	"GRADUATION":        {Display: "mid-June", Month: time.June, Day: 15, SortKey: 615},
 	"FATHER'S DAY":      {Display: "June 15", Month: time.June, Day: 15, SortKey: 615},
 	"FATHERS DAY":       {Display: "June 15", Month: time.June, Day: 15, SortKey: 615},
 	"INDEPENDENCE DAY":  {Display: "July 4", Month: time.July, Day: 4, SortKey: 704},
@@ -637,6 +639,10 @@ func dataInsightDateInfo(section, occasion string, now time.Time) occasionDateIn
 	}
 
 	if isValentinesOccasion(occasion) {
+		// Valentine's Day is the one seasonal occasion that is sold in two merchandising waves:
+		// an early-year run through Feb 14, then a late-year run from Nov 16 through Dec 31.
+		// We show that split directly in the sheet and keep it marked incomplete until year end,
+		// because December inventory is still part of the same selling season.
 		info.Display = "Jan 1 - Feb 14, Nov 16 - Dec 31"
 		info.Complete = !now.Before(time.Date(now.Year()+1, time.January, 1, 0, 0, 0, 0, now.Location()))
 		info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
@@ -650,6 +656,8 @@ func dataInsightDateInfo(section, occasion string, now time.Time) occasionDateIn
 	return info
 }
 
+// isValentinesOccasion centralizes the occasion matching so both spelling variants
+// take the same split-window projection path.
 func isValentinesOccasion(occasion string) bool {
 	switch strings.ToUpper(strings.TrimSpace(occasion)) {
 	case "VALENTINE'S DAY", "VALENTINES DAY":
@@ -659,6 +667,9 @@ func isValentinesOccasion(occasion string) bool {
 	}
 }
 
+// valentinesProjectionWindow returns the active and total selling-day counts for the
+// split Valentine's season so projections can scale against the portion of the year
+// that is actually on sale instead of assuming the occasion sells all year.
 func valentinesProjectionWindow(now time.Time) (currentSellingDays float64, totalSellingDays float64, complete bool) {
 	year := now.Year()
 	loc := now.Location()
