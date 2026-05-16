@@ -29,7 +29,7 @@ const (
 	dataInsightsColumnFinal
 )
 
-var dataInsightsTableColumnWidths = []float64{26, 16, 14, 14, 34}
+var dataInsightsTableColumnWidths = []float64{26, 31, 14, 14, 34}
 
 // dataInsightsCell constructs an Excel cell name (e.g. "A5") from a column letter and row number.
 func dataInsightsCell(col string, row int) string {
@@ -82,6 +82,8 @@ type occasionDateInfo struct {
 
 // dataInsightDateMap maps normalized occasion names to their display text and calendar metadata.
 var dataInsightDateMap = map[string]occasionDateInfo{
+	// Valentine's Day cards sell in two separate windows, but we still anchor the occasion to Feb 14
+	// so the event keeps its normal calendar identity while projection logic handles the split season.
 	"VALENTINE'S DAY":   {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
 	"VALENTINES DAY":    {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
 	"ST PATRICKS DAY":   {Display: "March 17", Month: time.March, Day: 17, SortKey: 317},
@@ -89,7 +91,7 @@ var dataInsightDateMap = map[string]occasionDateInfo{
 	"EASTER":            {Display: "April 20", Month: time.April, Day: 20, SortKey: 420},
 	"MOTHER'S DAY":      {Display: "May 11", Month: time.May, Day: 11, SortKey: 511},
 	"MOTHERS DAY":       {Display: "May 11", Month: time.May, Day: 11, SortKey: 511},
-	"GRADUATION":        {Display: "June", Month: time.June, Day: 30, SortKey: 630},
+	"GRADUATION":        {Display: "mid-June", Month: time.June, Day: 15, SortKey: 615},
 	"FATHER'S DAY":      {Display: "June 15", Month: time.June, Day: 15, SortKey: 615},
 	"FATHERS DAY":       {Display: "June 15", Month: time.June, Day: 15, SortKey: 615},
 	"INDEPENDENCE DAY":  {Display: "July 4", Month: time.July, Day: 4, SortKey: 704},
@@ -98,15 +100,16 @@ var dataInsightDateMap = map[string]occasionDateInfo{
 	"VETERANS DAY":      {Display: "November 11", Month: time.November, Day: 11, SortKey: 1111},
 	"THANKSGIVING":      {Display: "November 28", Month: time.November, Day: 28, SortKey: 1128},
 	"HANUKKAH":          {Display: "December 8", Month: time.December, Day: 8, SortKey: 1208},
-	"HOLIDAY":           {Display: "December 15", Month: time.December, Day: 15, SortKey: 1215},
+	"HOLIDAY":           {Display: "December 25", Month: time.December, Day: 25, SortKey: 1225},
 	"CHRISTMAS":         {Display: "December 25", Month: time.December, Day: 25, SortKey: 1225},
 }
 
 // writeDataInsightsSheet creates the "Data Insights" worksheet and populates it with grouped sales data.
 func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
-	currentMonthsThrough := currentMonthsThrough()
+	now := time.Now()
+	currentMonthsThrough := currentMonthsThrough(now)
 	// Use the current month progress to annualize in-progress rows.
-	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough)
+	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough, now)
 	otherRows := buildOtherProductDataInsightsRows(entries, currentMonthsThrough)
 
 	sheetName := dataInsightsSheetName
@@ -278,6 +281,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		totalYTD := 0.0
 		totalPY := 0.0
 		totalProjectedSales := 0.0
+		// A section is considered started only once at least one row is actively in season.
+		sectionStarted := true
 		// A section is considered complete only when none of its rows are still in progress.
 		sectionComplete := true
 		for _, row := range sectionRows {
@@ -298,6 +303,10 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			totalPY += row.DollarSoldPY
 			totalProjectedSales += row.ProjectedDollar
 			// If any row is still in progress, the section total should use the same wording.
+			if strings.HasPrefix(row.Final, "NOT STARTED") {
+				sectionStarted = false
+				sectionComplete = false
+			}
 			if strings.HasPrefix(row.Final, "IN PROGRESS:") {
 				sectionComplete = false
 			}
@@ -305,9 +314,13 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		}
 
 		totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, ""}
-		// Totals preserve the same YoY wording style used by the section's detailed rows.
+		// Totals preserve the same status wording used by the section's detailed rows.
 		if section.name == "Spring" || section.name == "Winter" {
-			totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, sectionComplete)
+			if !sectionStarted {
+				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, false, false)
+			} else {
+				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, true, sectionComplete)
+			}
 		}
 		if section.name == "Everyday" {
 			totalRowValues[dataInsightsColumnFinal] = formatYoYFromProjectedSales(totalProjectedSales, totalPY)
@@ -335,7 +348,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 }
 
 // buildDataInsightsRows groups qualifying entries into the rows used by the Data Insights sheet.
-func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[string][]dataInsightsRow {
+func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
@@ -347,7 +360,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		// Normalize occasion names so common variants collapse into the same grouped row.
 		occasion := normalizeDataInsightsOccasion(e.Occasion)
 		section := mapOccasion(occasion)
-		dateInfo := dataInsightDateInfo(section, occasion)
+		dateInfo := dataInsightDateInfo(section, occasion, now)
 		// Use the normalized occasion plus section so variants collapse into one rollup bucket.
 		groupKey := section + "|" + strings.ToUpper(occasion)
 
@@ -386,12 +399,32 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		}
 		if group.Section == "Spring" || group.Section == "Winter" {
 			// Seasonal items are projected only up to their typical selling window.
-			if group.complete {
+			if isValentinesOccasion(group.Occasion) {
+				currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
+				row.ProjectedDollar = group.DollarSoldYTD * (totalSellingDays / currentSellingDays)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, complete)
+			} else if group.Section == "Winter" {
+				seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
+				if now.Before(seasonStart) {
+					// Before July 1, winter holidays are not yet in selling season, so keep the
+					// row at actual YTD sales instead of extrapolating from the off-season months.
+					row.ProjectedDollar = group.DollarSoldYTD
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, false, group.complete)
+				} else if group.complete {
+					row.ProjectedDollar = group.DollarSoldYTD
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
+				} else {
+					currentSellingMonths := monthsThroughSinceDate(now.Year(), time.July, 1, now.Month(), now.Day(), now.Location())
+					row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentSellingMonths)
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
+				}
+			} else if group.complete {
 				row.ProjectedDollar = group.DollarSoldYTD
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
 			} else {
 				row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentMonthsThrough)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
 			}
-			row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
 		} else {
 			// Everyday items do not have a calendar cutover, so they project across the full year.
 			row.Date = "N/A"
@@ -619,7 +652,7 @@ func normalizeDataInsightsOccasion(occ string) string {
 }
 
 // dataInsightDateInfo returns the display and projection metadata for a data-insight occasion.
-func dataInsightDateInfo(section, occasion string) occasionDateInfo {
+func dataInsightDateInfo(section, occasion string, now time.Time) occasionDateInfo {
 	if section == "Everyday" {
 		return occasionDateInfo{Display: "N/A", SortKey: 999999, TargetMonthsThrough: 12.0}
 	}
@@ -630,16 +663,90 @@ func dataInsightDateInfo(section, occasion string) occasionDateInfo {
 		return occasionDateInfo{Display: "N/A", SortKey: 999999, TargetMonthsThrough: 12.0}
 	}
 
-	now := time.Now()
+	if isValentinesOccasion(occasion) {
+		// Valentine's Day is the one seasonal occasion that is sold in two merchandising waves:
+		// an early-year run through Feb 14, then a late-year run from Nov 16 through Dec 31.
+		// We show that split directly in the sheet and keep it marked incomplete until year end,
+		// because December inventory is still part of the same selling season.
+		info.Display = "Jan 1 - Feb 14, Nov 16 - Dec 31"
+		info.Complete = !now.Before(time.Date(now.Year()+1, time.January, 1, 0, 0, 0, 0, now.Location()))
+		info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
+		return info
+	}
+
+	if section == "Winter" {
+		// Winter holidays don't really start selling until July 1, so treat that as the
+		// beginning of the season when calculating the projection window.
+		info.TargetMonthsThrough = monthsThroughSinceDate(now.Year(), time.July, 1, info.Month, info.Day, now.Location())
+	} else {
+		info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
+	}
+
 	// Treat the occasion as complete for the whole event day, not just after midnight.
 	eventDate := time.Date(now.Year(), info.Month, info.Day, 23, 59, 59, 0, now.Location())
 	info.Complete = !now.Before(eventDate)
-	info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
 	return info
 }
 
+// isValentinesOccasion centralizes the occasion matching so both spelling variants
+// take the same split-window projection path.
+func isValentinesOccasion(occasion string) bool {
+	switch strings.ToUpper(strings.TrimSpace(occasion)) {
+	case "VALENTINE'S DAY", "VALENTINES DAY":
+		return true
+	default:
+		return false
+	}
+}
+
+// valentinesProjectionWindow returns the active and total selling-day counts for the
+// split Valentine's season so projections can scale against the portion of the year
+// that is actually on sale instead of assuming the occasion sells all year.
+func valentinesProjectionWindow(now time.Time) (currentSellingDays float64, totalSellingDays float64, complete bool) {
+	year := now.Year()
+	loc := now.Location()
+
+	firstStart := time.Date(year, time.January, 1, 0, 0, 0, 0, loc)
+	firstEnd := time.Date(year, time.February, 14, 23, 59, 59, 0, loc)
+	secondStart := time.Date(year, time.November, 16, 0, 0, 0, 0, loc)
+	yearEnd := time.Date(year+1, time.January, 1, 0, 0, 0, 0, loc)
+
+	firstWindowDays := float64(firstEnd.YearDay() - firstStart.YearDay() + 1)
+	secondWindowDays := float64(time.Date(year, time.December, 31, 0, 0, 0, 0, loc).YearDay() - secondStart.YearDay() + 1)
+	totalSellingDays = firstWindowDays + secondWindowDays
+	complete = !now.Before(yearEnd)
+
+	switch {
+	case now.Before(firstStart):
+		currentSellingDays = 1
+	case !now.After(firstEnd):
+		currentSellingDays = float64(now.YearDay() - firstStart.YearDay() + 1)
+	case now.Before(secondStart):
+		currentSellingDays = firstWindowDays
+	default:
+		currentSellingDays = firstWindowDays + float64(now.YearDay()-secondStart.YearDay()+1)
+	}
+
+	if currentSellingDays <= 0 {
+		currentSellingDays = 1
+	}
+	return currentSellingDays, totalSellingDays, complete
+}
+
+// monthsThroughSinceDate returns the month progress between two calendar dates.
+func monthsThroughSinceDate(year int, startMonth time.Month, startDay int, endMonth time.Month, endDay int, loc *time.Location) float64 {
+	monthsThrough := monthsThroughForDate(year, endMonth, endDay, loc) - monthsThroughForDate(year, startMonth, startDay, loc)
+	if monthsThrough <= 0 {
+		monthsThrough = 1
+	}
+	return monthsThrough
+}
+
 // formatSeasonStatusYoY formats the season status text with a YoY comparison.
-func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete bool) string {
+func formatSeasonStatusYoY(projectedSales float64, pySales float64, started bool, complete bool) string {
+	if !started {
+		return fmt.Sprintf("NOT STARTED: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
+	}
 	if complete {
 		return fmt.Sprintf("COMPLETE: %s YoY", formatYoYFromProjectedSales(projectedSales, pySales))
 	}
@@ -647,8 +754,7 @@ func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete boo
 }
 
 // currentMonthsThrough returns the current year-to-date month progress as a fractional month count.
-func currentMonthsThrough() float64 {
-	now := time.Now()
+func currentMonthsThrough(now time.Time) float64 {
 	// Use the day-of-month as a fraction so projections move smoothly within the current month.
 	year := now.Year()
 	month := now.Month()
