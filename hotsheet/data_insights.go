@@ -29,7 +29,7 @@ const (
 	dataInsightsColumnFinal
 )
 
-var dataInsightsTableColumnWidths = []float64{26, 16, 14, 14, 34}
+var dataInsightsTableColumnWidths = []float64{26, 31, 14, 14, 34}
 
 // dataInsightsCell constructs an Excel cell name (e.g. "A5") from a column letter and row number.
 func dataInsightsCell(col string, row int) string {
@@ -104,9 +104,10 @@ var dataInsightDateMap = map[string]occasionDateInfo{
 
 // writeDataInsightsSheet creates the "Data Insights" worksheet and populates it with grouped sales data.
 func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
-	currentMonthsThrough := currentMonthsThrough()
+	now := time.Now()
+	currentMonthsThrough := currentMonthsThrough(now)
 	// Use the current month progress to annualize in-progress rows.
-	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough)
+	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough, now)
 	otherRows := buildOtherProductDataInsightsRows(entries, currentMonthsThrough)
 
 	sheetName := dataInsightsSheetName
@@ -335,7 +336,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 }
 
 // buildDataInsightsRows groups qualifying entries into the rows used by the Data Insights sheet.
-func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[string][]dataInsightsRow {
+func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
@@ -347,7 +348,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		// Normalize occasion names so common variants collapse into the same grouped row.
 		occasion := normalizeDataInsightsOccasion(e.Occasion)
 		section := mapOccasion(occasion)
-		dateInfo := dataInsightDateInfo(section, occasion)
+		dateInfo := dataInsightDateInfo(section, occasion, now)
 		// Use the normalized occasion plus section so variants collapse into one rollup bucket.
 		groupKey := section + "|" + strings.ToUpper(occasion)
 
@@ -386,12 +387,17 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64) map[s
 		}
 		if group.Section == "Spring" || group.Section == "Winter" {
 			// Seasonal items are projected only up to their typical selling window.
-			if group.complete {
+			if isValentinesOccasion(group.Occasion) {
+				currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
+				row.ProjectedDollar = group.DollarSoldYTD * (totalSellingDays / currentSellingDays)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, complete)
+			} else if group.complete {
 				row.ProjectedDollar = group.DollarSoldYTD
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
 			} else {
 				row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentMonthsThrough)
+				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
 			}
-			row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
 		} else {
 			// Everyday items do not have a calendar cutover, so they project across the full year.
 			row.Date = "N/A"
@@ -619,7 +625,7 @@ func normalizeDataInsightsOccasion(occ string) string {
 }
 
 // dataInsightDateInfo returns the display and projection metadata for a data-insight occasion.
-func dataInsightDateInfo(section, occasion string) occasionDateInfo {
+func dataInsightDateInfo(section, occasion string, now time.Time) occasionDateInfo {
 	if section == "Everyday" {
 		return occasionDateInfo{Display: "N/A", SortKey: 999999, TargetMonthsThrough: 12.0}
 	}
@@ -630,12 +636,58 @@ func dataInsightDateInfo(section, occasion string) occasionDateInfo {
 		return occasionDateInfo{Display: "N/A", SortKey: 999999, TargetMonthsThrough: 12.0}
 	}
 
-	now := time.Now()
+	if isValentinesOccasion(occasion) {
+		info.Display = "Jan 1 - Feb 14, Nov 16 - Dec 31"
+		info.Complete = !now.Before(time.Date(now.Year()+1, time.January, 1, 0, 0, 0, 0, now.Location()))
+		info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
+		return info
+	}
+
 	// Treat the occasion as complete for the whole event day, not just after midnight.
 	eventDate := time.Date(now.Year(), info.Month, info.Day, 23, 59, 59, 0, now.Location())
 	info.Complete = !now.Before(eventDate)
 	info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
 	return info
+}
+
+func isValentinesOccasion(occasion string) bool {
+	switch strings.ToUpper(strings.TrimSpace(occasion)) {
+	case "VALENTINE'S DAY", "VALENTINES DAY":
+		return true
+	default:
+		return false
+	}
+}
+
+func valentinesProjectionWindow(now time.Time) (currentSellingDays float64, totalSellingDays float64, complete bool) {
+	year := now.Year()
+	loc := now.Location()
+
+	firstStart := time.Date(year, time.January, 1, 0, 0, 0, 0, loc)
+	firstEnd := time.Date(year, time.February, 14, 23, 59, 59, 0, loc)
+	secondStart := time.Date(year, time.November, 16, 0, 0, 0, 0, loc)
+	yearEnd := time.Date(year+1, time.January, 1, 0, 0, 0, 0, loc)
+
+	firstWindowDays := float64(firstEnd.YearDay() - firstStart.YearDay() + 1)
+	secondWindowDays := float64(time.Date(year, time.December, 31, 0, 0, 0, 0, loc).YearDay() - secondStart.YearDay() + 1)
+	totalSellingDays = firstWindowDays + secondWindowDays
+	complete = !now.Before(yearEnd)
+
+	switch {
+	case now.Before(firstStart):
+		currentSellingDays = 1
+	case !now.After(firstEnd):
+		currentSellingDays = float64(now.YearDay() - firstStart.YearDay() + 1)
+	case now.Before(secondStart):
+		currentSellingDays = firstWindowDays
+	default:
+		currentSellingDays = firstWindowDays + float64(now.YearDay()-secondStart.YearDay()+1)
+	}
+
+	if currentSellingDays <= 0 {
+		currentSellingDays = 1
+	}
+	return currentSellingDays, totalSellingDays, complete
 }
 
 // formatSeasonStatusYoY formats the season status text with a YoY comparison.
@@ -647,8 +699,7 @@ func formatSeasonStatusYoY(projectedSales float64, pySales float64, complete boo
 }
 
 // currentMonthsThrough returns the current year-to-date month progress as a fractional month count.
-func currentMonthsThrough() float64 {
-	now := time.Now()
+func currentMonthsThrough(now time.Time) float64 {
 	// Use the day-of-month as a fraction so projections move smoothly within the current month.
 	year := now.Year()
 	month := now.Month()

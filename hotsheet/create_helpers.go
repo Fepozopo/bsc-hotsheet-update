@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -360,7 +361,7 @@ func writeStandardSheets(f *excelize.File, entries []*entry, hasPO bool) error {
 		}
 	}
 
-	monthsThrough := currentMonthsThrough()
+	monthsThrough := currentMonthsThrough(time.Now())
 	for _, sheetName := range standardSheetNames {
 		if err := writeStandardSheetRows(f, sheetName, entries, hasPO, monthsThrough, mtoYtdIdx, mtoPyIdx); err != nil {
 			return err

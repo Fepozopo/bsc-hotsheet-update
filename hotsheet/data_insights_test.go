@@ -1,0 +1,74 @@
+package hotsheet
+
+import (
+	"math"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestValentinesProjectionWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
+	current, total, complete := valentinesProjectionWindow(now)
+
+	if current != 45 {
+		t.Fatalf("expected 45 current selling days before the November window, got %v", current)
+	}
+	if total != 91 {
+		t.Fatalf("expected 91 total selling days across both Valentine windows, got %v", total)
+	}
+	if complete {
+		t.Fatal("expected Valentine's Day to remain incomplete before year end")
+	}
+
+	current, total, complete = valentinesProjectionWindow(time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC))
+	if current != total {
+		t.Fatalf("expected current selling days to equal the full window on Dec 31, got %v vs %v", current, total)
+	}
+	if complete {
+		t.Fatal("expected Valentine's Day to remain incomplete on Dec 31")
+	}
+
+}
+
+func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
+	t.Parallel()
+
+	entries := []*entry{{
+		RawClassDesc:  "Counter Cards",
+		Occasion:      "Valentine's Day",
+		DollarSoldYTD: 100,
+		DollarSoldPY:  80,
+	}}
+
+	now := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
+	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough(now), now)
+	rows := rowsBySection["Spring"]
+	if len(rows) != 1 {
+		t.Fatalf("expected one Spring row, got %d", len(rows))
+	}
+
+	row := rows[0]
+	if row.Date != "Jan 1 - Feb 14, Nov 16 - Dec 31" {
+		t.Fatalf("expected split-window Valentine's Day display date, got %q", row.Date)
+	}
+
+	expectedProjected := 100.0 * 91.0 / 45.0
+	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
+		t.Fatalf("expected projected sales %.9f, got %.9f", expectedProjected, row.ProjectedDollar)
+	}
+	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
+		t.Fatalf("expected in-progress status before year end, got %q", row.Final)
+	}
+
+	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC)), time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC))
+	row = rowsBySection["Spring"][0]
+	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
+		t.Fatalf("expected projected sales to match YTD at the end of the season, got %.9f", row.ProjectedDollar)
+	}
+	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
+		t.Fatalf("expected status to remain in progress on Dec 31, got %q", row.Final)
+	}
+}
