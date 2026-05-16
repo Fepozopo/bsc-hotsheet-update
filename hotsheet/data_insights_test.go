@@ -107,3 +107,43 @@ func TestGraduationProjectionWindow(t *testing.T) {
 		t.Fatalf("expected Graduation to be complete after June 15, got %q", row.Final)
 	}
 }
+
+func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
+	t.Parallel()
+
+	entries := []*entry{{
+		RawClassDesc:  "Counter Cards",
+		Occasion:      "Christmas",
+		DollarSoldYTD: 100,
+		DollarSoldPY:  80,
+	}}
+
+	beforeSeason := time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC)
+	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough(beforeSeason), beforeSeason)
+	rows := rowsBySection["Winter"]
+	if len(rows) != 1 {
+		t.Fatalf("expected one Winter row, got %d", len(rows))
+	}
+
+	row := rows[0]
+	if row.Date != "December 25" {
+		t.Fatalf("expected Christmas to display as December 25, got %q", row.Date)
+	}
+	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
+		t.Fatalf("expected winter projection to stay at YTD before July 1, got %.9f", row.ProjectedDollar)
+	}
+	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
+		t.Fatalf("expected Christmas to remain in progress before July 1, got %q", row.Final)
+	}
+
+	inSeason := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
+	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(inSeason), inSeason)
+	row = rowsBySection["Winter"][0]
+	expectedProjected := 100.0 * (monthsThroughSinceDate(2026, time.July, 1, time.December, 25, time.UTC) / monthsThroughSinceDate(2026, time.July, 1, time.September, 1, time.UTC))
+	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
+		t.Fatalf("expected winter projection %.9f after July 1, got %.9f", expectedProjected, row.ProjectedDollar)
+	}
+	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
+		t.Fatalf("expected Christmas to remain in progress before Dec 25, got %q", row.Final)
+	}
+}

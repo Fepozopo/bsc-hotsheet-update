@@ -393,6 +393,21 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now t
 				currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
 				row.ProjectedDollar = group.DollarSoldYTD * (totalSellingDays / currentSellingDays)
 				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, complete)
+			} else if group.Section == "Winter" {
+				seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
+				if now.Before(seasonStart) {
+					// Before July 1, winter holidays are not yet in selling season, so keep the
+					// row at actual YTD sales instead of extrapolating from the off-season months.
+					row.ProjectedDollar = group.DollarSoldYTD
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+				} else if group.complete {
+					row.ProjectedDollar = group.DollarSoldYTD
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+				} else {
+					currentSellingMonths := monthsThroughSinceDate(now.Year(), time.July, 1, now.Month(), now.Day(), now.Location())
+					row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentSellingMonths)
+					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
+				}
 			} else if group.complete {
 				row.ProjectedDollar = group.DollarSoldYTD
 				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, group.complete)
@@ -649,10 +664,17 @@ func dataInsightDateInfo(section, occasion string, now time.Time) occasionDateIn
 		return info
 	}
 
+	if section == "Winter" {
+		// Winter holidays don't really start selling until July 1, so treat that as the
+		// beginning of the season when calculating the projection window.
+		info.TargetMonthsThrough = monthsThroughSinceDate(now.Year(), time.July, 1, info.Month, info.Day, now.Location())
+	} else {
+		info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
+	}
+
 	// Treat the occasion as complete for the whole event day, not just after midnight.
 	eventDate := time.Date(now.Year(), info.Month, info.Day, 23, 59, 59, 0, now.Location())
 	info.Complete = !now.Before(eventDate)
-	info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
 	return info
 }
 
@@ -699,6 +721,15 @@ func valentinesProjectionWindow(now time.Time) (currentSellingDays float64, tota
 		currentSellingDays = 1
 	}
 	return currentSellingDays, totalSellingDays, complete
+}
+
+// monthsThroughSinceDate returns the month progress between two calendar dates.
+func monthsThroughSinceDate(year int, startMonth time.Month, startDay int, endMonth time.Month, endDay int, loc *time.Location) float64 {
+	monthsThrough := monthsThroughForDate(year, endMonth, endDay, loc) - monthsThroughForDate(year, startMonth, startDay, loc)
+	if monthsThrough <= 0 {
+		monthsThrough = 1
+	}
+	return monthsThrough
 }
 
 // formatSeasonStatusYoY formats the season status text with a YoY comparison.
