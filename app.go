@@ -65,6 +65,8 @@ type githubReleaseAsset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
+// currentReleaseAssetName returns the GitHub release asset name that matches the current
+// platform so the auto-updater can find the correct binary for this build.
 func currentReleaseAssetName() string {
 	base := "hotsheet"
 	switch runtime.GOOS {
@@ -75,6 +77,8 @@ func currentReleaseAssetName() string {
 	}
 }
 
+// detectLatestRelease queries the GitHub releases API, extracts the version tag, and
+// returns the download URL for the asset that matches the current platform.
 func detectLatestRelease(repo string) (semver.Version, string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -119,6 +123,9 @@ func detectLatestRelease(repo string) (semver.Version, string, error) {
 	return semver.Version{}, "", fmt.Errorf("release %q does not include asset %q", release.TagName, expectedAsset)
 }
 
+// checkForUpdates runs the release check in the background so the UI stays responsive.
+// If a newer release exists, the app forces the update path because the rest of the flow
+// assumes the binary is kept current.
 func checkForUpdates(w fyne.Window, showNoUpdatesDialog bool) {
 	go func() {
 		const repo = "Fepozopo/bsc-hotsheet-update"
@@ -189,13 +196,15 @@ type fileLabel struct {
 	onDouble func(string)
 }
 
+// DoubleTapped opens the file path associated with the clicked list item.
 func (f *fileLabel) DoubleTapped(*fyne.PointEvent) {
 	if f.onDouble != nil {
 		f.onDouble(f.path)
 	}
 }
 
-// openPath opens a file or folder using the platform's default handler.
+// openPath opens a file or folder using the platform's default handler. The platform
+// switch keeps the behavior native on macOS, Windows, and Linux without extra GUI code.
 func openPath(p string) {
 	if p == "" {
 		return
@@ -210,10 +219,9 @@ func openPath(p string) {
 	}
 }
 
-// selectFiles creates a GUI window that asks for the required reports and output directory,
-// but does the hotsheet generation itself. When generation finishes it opens a Fyne window
-// listing the created files. The main window is not closed after generation; instead the
-// inputs are cleared so the user can run another generation.
+// selectFiles creates the main GUI window that collects report paths and starts generation.
+// The function returns empty strings because the real work happens inside the UI event loop;
+// once generation completes, a second window is used to display the created files.
 func selectFiles(a fyne.App) (string, string, string) {
 	window := a.NewWindow("Hotsheet Generator")
 	checkForUpdates(window, false)
