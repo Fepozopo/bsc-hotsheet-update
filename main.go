@@ -5,6 +5,7 @@ import (
 	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
 )
 
+// main wires up the application logger and launches the GUI flow.
 func main() {
 	logger, logCloser, err := helpers.CreateSlogLogger("main", "DEBUG")
 	if err != nil {

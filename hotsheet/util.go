@@ -190,7 +190,9 @@ func getCell(r []string, idx int) string {
 	return r[idx]
 }
 
-// assignPO assigns a PO number and quantity into the first available PONum slot on the entry
+// assignPO assigns a PO number and quantity into the first available PO slot on the entry.
+// The workbook only exposes two visible PO lines, so any additional PO quantities are folded
+// into the first slot to avoid losing data.
 func assignPO(e *entry, poNum string, qty int) {
 	if poNum == "" && qty == 0 {
 		return
@@ -209,7 +211,9 @@ func assignPO(e *entry, poNum string, qty int) {
 	e.OnPO1 += qty
 }
 
-// mapOccasion maps raw occasion text to one of: "Everyday", "Winter", "Spring"
+// mapOccasion maps raw occasion text to one of: "Everyday", "Winter", or "Spring".
+// The token lists are checked in season order so more specific holiday matches win before
+// the broad Everyday fallback can claim the row.
 func mapOccasion(occ string) string {
 	o := strings.ToUpper(strings.TrimSpace(occ))
 	if o == "" {
@@ -233,7 +237,8 @@ func mapOccasion(occ string) string {
 	return "Everyday"
 }
 
-// simple sanitizer for file names
+// simple sanitizer for file names. It strips path separators and colons so the generated
+// output names stay safe on the local filesystem.
 func sanitizeFileName(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {

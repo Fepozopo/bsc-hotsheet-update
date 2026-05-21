@@ -482,6 +482,8 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 		}
 
 		// Determine the sales-season window used for MTO PY calculations.
+		// Winter and Spring use their shorter merchandising seasons, while Everyday uses
+		// the full year so the historical sales pace stays consistent with the workbook notes.
 		salesSeason := 12.0
 		switch sh {
 		case "Winter":

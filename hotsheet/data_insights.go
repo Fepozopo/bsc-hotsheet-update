@@ -11,14 +11,15 @@ import (
 )
 
 const (
-	dataInsightsSheetName          = "Data Insights"
-	dataInsightsTitleText          = "Data Insights"
-	dataInsightsLeftTableStartCol  = "A"
-	dataInsightsRightTableStartCol = "G"
-	dataInsightsTitleRow           = 1
-	dataInsightsSectionRow         = 3
-	dataInsightsTableStartRow      = 5
-	dataInsightsTableColumnCount   = 5
+	dataInsightsSheetName             = "Data Insights"
+	dataInsightsTitleText             = "Data Insights"
+	dataInsightsLeftTableStartCol     = "A"
+	dataInsightsRightTableStartCol    = "G"
+	dataInsightsTitleRow              = 1
+	dataInsightsSectionRow            = 3
+	dataInsightsTableStartRow         = 5
+	dataInsightsTableColumnCount      = 5
+	dataInsightsOtherTableColumnCount = 6
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 )
 
 var dataInsightsTableColumnWidths = []float64{26, 31, 14, 14, 34}
+var dataInsightsOtherTableColumnWidths = []float64{26, 24, 31, 14, 14, 34}
 
 // dataInsightsCell constructs an Excel cell name (e.g. "A5") from a column letter and row number.
 func dataInsightsCell(col string, row int) string {
@@ -37,17 +39,18 @@ func dataInsightsCell(col string, row int) string {
 }
 
 // dataInsightsTableEndCol calculates the last column of a Data Insights table based on the shared column count.
-func dataInsightsTableEndCol(startCol string) (string, error) {
-	cols, err := dataInsightsTableColumns(startCol)
+func dataInsightsTableEndCol(startCol string, columnCount int) (string, error) {
+	cols, err := dataInsightsTableColumns(startCol, columnCount)
 	if err != nil {
 		return "", err
 	}
 
-	return cols[dataInsightsTableColumnCount-1], nil
+	return cols[columnCount-1], nil
 }
 
 // dataInsightsRow represents one output row in the Data Insights sheet.
 type dataInsightsRow struct {
+	Class           string
 	Occasion        string
 	Date            string
 	DollarSoldYTD   float64
@@ -61,6 +64,7 @@ type dataInsightsRow struct {
 // dataInsightsGroup aggregates sales for a single normalized occasion within a section.
 type dataInsightsGroup struct {
 	Section             string
+	Class               string
 	Occasion            string
 	Date                string
 	sortKey             int
@@ -110,7 +114,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 	currentMonthsThrough := currentMonthsThrough(now)
 	// Use the current month progress to annualize in-progress rows.
 	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough, now)
-	otherRows := buildOtherProductDataInsightsRows(entries, currentMonthsThrough)
+	otherRowsBySection := buildOtherProductDataInsightsRows(entries, currentMonthsThrough, now)
 
 	sheetName := dataInsightsSheetName
 	if _, err := f.NewSheet(sheetName); err != nil {
@@ -183,19 +187,18 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to create currency total style: %w", err)
 	}
 
-	if err := setDataInsightsTableWidths(f, sheetName, dataInsightsLeftTableStartCol); err != nil {
+	if err := setDataInsightsTableWidths(f, sheetName, dataInsightsLeftTableStartCol, dataInsightsTableColumnWidths); err != nil {
 		return err
 	}
-	if err := setDataInsightsTableWidths(f, sheetName, dataInsightsRightTableStartCol); err != nil {
+	if err := setDataInsightsTableWidths(f, sheetName, dataInsightsRightTableStartCol, dataInsightsOtherTableColumnWidths); err != nil {
 		return err
 	}
 
-	leftCols, err := dataInsightsTableColumns(dataInsightsLeftTableStartCol)
+	leftEndCol, err := dataInsightsTableEndCol(dataInsightsLeftTableStartCol, dataInsightsTableColumnCount)
 	if err != nil {
 		return err
 	}
-	leftEndCol := leftCols[dataInsightsTableColumnCount-1]
-	titleEndCol, err := dataInsightsTableEndCol(dataInsightsRightTableStartCol)
+	titleEndCol, err := dataInsightsTableEndCol(dataInsightsRightTableStartCol, dataInsightsOtherTableColumnCount)
 	if err != nil {
 		return err
 	}
@@ -236,118 +239,235 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 		return fmt.Errorf("failed to style other products subtitle: %w", err)
 	}
 
-	// Leave a blank row between the subtitles and the tables for readability.
-	rowNum := dataInsightsTableStartRow
-	// Spring and Winter use completion-aware status text. Everyday uses a straight projected YoY value.
-	sections := []struct {
-		name    string
-		headers []string
-	}{
-		{name: "Spring", headers: []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"}},
-		{name: "Winter", headers: []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"}},
-		{name: "Everyday", headers: []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Projected YoY"}},
+	leftSections := []dataInsightsSection{
+		{
+			Name:               "Spring",
+			Headers:            []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
+			Rows:               rowsBySection["Spring"],
+			CurrencyStartIndex: dataInsightsColumnYTD,
+			CurrencyEndIndex:   dataInsightsColumnPY,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			},
+		},
+		{
+			Name:               "Winter",
+			Headers:            []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
+			Rows:               rowsBySection["Winter"],
+			CurrencyStartIndex: dataInsightsColumnYTD,
+			CurrencyEndIndex:   dataInsightsColumnPY,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			},
+		},
+		{
+			Name:               "Everyday",
+			Headers:            []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Projected YoY"},
+			Rows:               rowsBySection["Everyday"],
+			CurrencyStartIndex: dataInsightsColumnYTD,
+			CurrencyEndIndex:   dataInsightsColumnPY,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
+			},
+		},
 	}
 
-	for idx, section := range sections {
+	rowNum := dataInsightsTableStartRow
+	for idx, section := range leftSections {
 		if idx > 0 {
 			rowNum++
 		}
-		sectionTitleCell := dataInsightsCell(dataInsightsLeftTableStartCol, rowNum)
-		sectionTitleEnd := dataInsightsCell(leftEndCol, rowNum)
-		if err := f.SetCellValue(sheetName, sectionTitleCell, section.name); err != nil {
-			return fmt.Errorf("failed to set section title %s: %w", section.name, err)
+		nextRow, err := writeDataInsightsSectionTable(f, sheetName, dataInsightsLeftTableStartCol, rowNum, section, sectionStyle, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle)
+		if err != nil {
+			return err
 		}
-		if err := f.MergeCell(sheetName, sectionTitleCell, sectionTitleEnd); err != nil {
-			return fmt.Errorf("failed to merge section title %s: %w", section.name, err)
-		}
-		if err := f.SetCellStyle(sheetName, sectionTitleCell, sectionTitleEnd, sectionStyle); err != nil {
-			return fmt.Errorf("failed to style section title %s: %w", section.name, err)
-		}
-		rowNum++
-
-		headers := section.headers
-		for colIdx, header := range headers {
-			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowNum)
-			if err := f.SetCellValue(sheetName, cell, header); err != nil {
-				return fmt.Errorf("failed to set header %s: %w", header, err)
-			}
-		}
-		if err := f.SetCellStyle(sheetName, dataInsightsCell(leftCols[dataInsightsColumnOccasion], rowNum), dataInsightsCell(leftEndCol, rowNum), headerStyle); err != nil {
-			return fmt.Errorf("failed to style header row for %s: %w", section.name, err)
-		}
-		rowNum++
-
-		sectionRows := rowsBySection[section.name]
-		totalYTD := 0.0
-		totalPY := 0.0
-		totalProjectedSales := 0.0
-		// A section is considered started only once at least one row is actively in season.
-		sectionStarted := true
-		// A section is considered complete only when none of its rows are still in progress.
-		sectionComplete := true
-		for _, row := range sectionRows {
-			values := []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
-			for colIdx, value := range values {
-				cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowNum)
-				if err := f.SetCellValue(sheetName, cell, value); err != nil {
-					return fmt.Errorf("failed to write %s row cell %s: %w", section.name, cell, err)
-				}
-			}
-			if err := f.SetCellStyle(sheetName, dataInsightsCell(leftCols[dataInsightsColumnOccasion], rowNum), dataInsightsCell(leftEndCol, rowNum), dataStyle); err != nil {
-				return fmt.Errorf("failed to style %s data row: %w", section.name, err)
-			}
-			if err := f.SetCellStyle(sheetName, dataInsightsCell(leftCols[dataInsightsColumnYTD], rowNum), dataInsightsCell(leftCols[dataInsightsColumnPY], rowNum), currencyDataStyle); err != nil {
-				return fmt.Errorf("failed to style %s currency cells: %w", section.name, err)
-			}
-			totalYTD += row.DollarSoldYTD
-			totalPY += row.DollarSoldPY
-			totalProjectedSales += row.ProjectedDollar
-			// If any row is still in progress, the section total should use the same wording.
-			if strings.HasPrefix(row.Final, "NOT STARTED") {
-				sectionStarted = false
-				sectionComplete = false
-			}
-			if strings.HasPrefix(row.Final, "IN PROGRESS:") {
-				sectionComplete = false
-			}
-			rowNum++
-		}
-
-		totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, ""}
-		// Totals preserve the same status wording used by the section's detailed rows.
-		if section.name == "Spring" || section.name == "Winter" {
-			if !sectionStarted {
-				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, false, false)
-			} else {
-				totalRowValues[dataInsightsColumnFinal] = formatSeasonStatusYoY(totalProjectedSales, totalPY, true, sectionComplete)
-			}
-		}
-		if section.name == "Everyday" {
-			totalRowValues[dataInsightsColumnFinal] = formatYoYFromProjectedSales(totalProjectedSales, totalPY)
-		}
-		for colIdx, value := range totalRowValues {
-			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowNum)
-			if err := f.SetCellValue(sheetName, cell, value); err != nil {
-				return fmt.Errorf("failed to write %s total row cell %s: %w", section.name, cell, err)
-			}
-		}
-		if err := f.SetCellStyle(sheetName, dataInsightsCell(leftCols[dataInsightsColumnOccasion], rowNum), dataInsightsCell(leftEndCol, rowNum), totalStyle); err != nil {
-			return fmt.Errorf("failed to style total row for %s: %w", section.name, err)
-		}
-		if err := f.SetCellStyle(sheetName, dataInsightsCell(leftCols[dataInsightsColumnYTD], rowNum), dataInsightsCell(leftCols[dataInsightsColumnPY], rowNum), currencyTotalStyle); err != nil {
-			return fmt.Errorf("failed to style %s total currency cells: %w", section.name, err)
-		}
-		rowNum++
+		rowNum = nextRow
 	}
 
-	if err := writeOtherProductsTable(f, sheetName, dataInsightsRightTableStartCol, dataInsightsTableStartRow, otherRows, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle); err != nil {
-		return err
+	rightSections := []dataInsightsSection{
+		{
+			Name:               "Spring",
+			Headers:            []string{"Class", "Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
+			Rows:               otherRowsBySection["Spring"],
+			CurrencyStartIndex: 3,
+			CurrencyEndIndex:   4,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			},
+		},
+		{
+			Name:               "Winter",
+			Headers:            []string{"Class", "Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
+			Rows:               otherRowsBySection["Winter"],
+			CurrencyStartIndex: 3,
+			CurrencyEndIndex:   4,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			},
+		},
+		{
+			Name:               "Everyday",
+			Headers:            []string{"Class", "Occasion", "Date", "YTD Sales", "PY Sales", "Projected YoY"},
+			Rows:               otherRowsBySection["Everyday"],
+			CurrencyStartIndex: 3,
+			CurrencyEndIndex:   4,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
+			},
+		},
+	}
+
+	rowNum = dataInsightsTableStartRow
+	for idx, section := range rightSections {
+		if idx > 0 {
+			rowNum++
+		}
+		nextRow, err := writeDataInsightsSectionTable(f, sheetName, dataInsightsRightTableStartCol, rowNum, section, sectionStyle, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle)
+		if err != nil {
+			return err
+		}
+		rowNum = nextRow
 	}
 
 	return nil
 }
 
-// buildDataInsightsRows groups qualifying entries into the rows used by the Data Insights sheet.
+// dataInsightsSection captures all the information needed to render one section of the Data Insights sheet, including
+// the section name, headers, rows, which columns are currency values, and how to render the row and total values.
+type dataInsightsSection struct {
+	Name               string
+	Headers            []string
+	Rows               []dataInsightsRow
+	CurrencyStartIndex int
+	CurrencyEndIndex   int
+	RenderRow          func(dataInsightsRow) []interface{}
+	RenderTotal        func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{}
+}
+
+// writeDataInsightsSectionTable renders one seasonal section, including the section title,
+// headers, detail rows, and total row. The caller supplies the row formatter so the same
+// layout code can be reused for both Counter Cards and Other Products.
+func writeDataInsightsSectionTable(f *excelize.File, sheetName, startCol string, startRow int, section dataInsightsSection, sectionStyle, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle int) (int, error) {
+	cols, err := dataInsightsTableColumns(startCol, len(section.Headers))
+	if err != nil {
+		return 0, err
+	}
+	endCol := cols[len(cols)-1]
+
+	sectionTitleCell := dataInsightsCell(startCol, startRow)
+	sectionTitleEnd := dataInsightsCell(endCol, startRow)
+	if err := f.SetCellValue(sheetName, sectionTitleCell, section.Name); err != nil {
+		return 0, fmt.Errorf("failed to set section title %s: %w", section.Name, err)
+	}
+	if err := f.MergeCell(sheetName, sectionTitleCell, sectionTitleEnd); err != nil {
+		return 0, fmt.Errorf("failed to merge section title %s: %w", section.Name, err)
+	}
+	if err := f.SetCellStyle(sheetName, sectionTitleCell, sectionTitleEnd, sectionStyle); err != nil {
+		return 0, fmt.Errorf("failed to style section title %s: %w", section.Name, err)
+	}
+
+	rowNum := startRow + 1
+	for colIdx, header := range section.Headers {
+		cell := dataInsightsCell(cols[colIdx], rowNum)
+		if err := f.SetCellValue(sheetName, cell, header); err != nil {
+			return 0, fmt.Errorf("failed to set header %s: %w", header, err)
+		}
+	}
+	if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[0], rowNum), dataInsightsCell(endCol, rowNum), headerStyle); err != nil {
+		return 0, fmt.Errorf("failed to style header row for %s: %w", section.Name, err)
+	}
+
+	rowNum++
+	totalYTD := 0.0
+	totalPY := 0.0
+	totalProjectedSales := 0.0
+	for _, row := range section.Rows {
+		values := section.RenderRow(row)
+		if len(values) != len(section.Headers) {
+			return 0, fmt.Errorf("failed to render %s row: got %d values, want %d", section.Name, len(values), len(section.Headers))
+		}
+		for colIdx, value := range values {
+			cell := dataInsightsCell(cols[colIdx], rowNum)
+			if err := f.SetCellValue(sheetName, cell, value); err != nil {
+				return 0, fmt.Errorf("failed to write %s row cell %s: %w", section.Name, cell, err)
+			}
+		}
+		if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[0], rowNum), dataInsightsCell(endCol, rowNum), dataStyle); err != nil {
+			return 0, fmt.Errorf("failed to style %s data row: %w", section.Name, err)
+		}
+		if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[section.CurrencyStartIndex], rowNum), dataInsightsCell(cols[section.CurrencyEndIndex], rowNum), currencyDataStyle); err != nil {
+			return 0, fmt.Errorf("failed to style %s currency cells: %w", section.Name, err)
+		}
+
+		totalYTD += row.DollarSoldYTD
+		totalPY += row.DollarSoldPY
+		totalProjectedSales += row.ProjectedDollar
+		rowNum++
+	}
+
+	// The total row keeps the actual YTD and PY sums in their respective columns; only the
+	// rightmost column uses projected sales to derive the YoY percentage shown in the sheet.
+	totalRowValues := section.RenderTotal(totalYTD, totalPY, totalProjectedSales, section.Rows)
+	if len(totalRowValues) != len(section.Headers) {
+		return 0, fmt.Errorf("failed to render %s total row: got %d values, want %d", section.Name, len(totalRowValues), len(section.Headers))
+	}
+	for colIdx, value := range totalRowValues {
+		cell := dataInsightsCell(cols[colIdx], rowNum)
+		if err := f.SetCellValue(sheetName, cell, value); err != nil {
+			return 0, fmt.Errorf("failed to write %s total row cell %s: %w", section.Name, cell, err)
+		}
+	}
+	if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[0], rowNum), dataInsightsCell(endCol, rowNum), totalStyle); err != nil {
+		return 0, fmt.Errorf("failed to style total row for %s: %w", section.Name, err)
+	}
+	if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[section.CurrencyStartIndex], rowNum), dataInsightsCell(cols[section.CurrencyEndIndex], rowNum), currencyTotalStyle); err != nil {
+		return 0, fmt.Errorf("failed to style %s total currency cells: %w", section.Name, err)
+	}
+
+	return rowNum + 1, nil
+}
+
+// dataInsightsSeasonTotalFinal derives the section total status text from the rows that
+// were actually written so the total matches the same in-progress/complete wording used by
+// the detail rows above it.
+func dataInsightsSeasonTotalFinal(totalProjected, totalPY float64, rows []dataInsightsRow) string {
+	sectionStarted := true
+	sectionComplete := true
+	for _, row := range rows {
+		if strings.HasPrefix(row.Final, "NOT STARTED") {
+			sectionStarted = false
+			sectionComplete = false
+		}
+		if strings.HasPrefix(row.Final, "IN PROGRESS:") {
+			sectionComplete = false
+		}
+	}
+	if !sectionStarted {
+		return formatSeasonStatusYoY(totalProjected, totalPY, false, false)
+	}
+	return formatSeasonStatusYoY(totalProjected, totalPY, true, sectionComplete)
+}
+
+// buildDataInsightsRows groups Counter Cards into the seasonal sections used by the
+// Data Insights sheet, preserving the existing holiday/date/projection rules.
 func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
@@ -381,57 +501,19 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now t
 		group.DollarSoldPY += e.DollarSoldPY
 	}
 
-	// Pre-create all sections so the sheet still renders empty categories consistently.
-	rowsBySection := map[string][]dataInsightsRow{
-		"Spring":   {},
-		"Winter":   {},
-		"Everyday": {},
-	}
-
+	rowsBySection := newDataInsightsRowsBySection()
 	for _, group := range groups {
+		dateInfo, projected, final := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
 		row := dataInsightsRow{
-			Occasion:      group.Occasion,
-			Date:          group.Date,
-			DollarSoldYTD: group.DollarSoldYTD,
-			DollarSoldPY:  group.DollarSoldPY,
-			sortKey:       group.sortKey,
-			sortOccasion:  strings.ToUpper(group.Occasion),
+			Occasion:        group.Occasion,
+			Date:            dateInfo.Display,
+			DollarSoldYTD:   group.DollarSoldYTD,
+			DollarSoldPY:    group.DollarSoldPY,
+			ProjectedDollar: projected,
+			Final:           final,
+			sortKey:         group.sortKey,
+			sortOccasion:    strings.ToUpper(group.Occasion),
 		}
-		if group.Section == "Spring" || group.Section == "Winter" {
-			// Seasonal items are projected only up to their typical selling window.
-			if isValentinesOccasion(group.Occasion) {
-				currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
-				row.ProjectedDollar = group.DollarSoldYTD * (totalSellingDays / currentSellingDays)
-				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, complete)
-			} else if group.Section == "Winter" {
-				seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
-				if now.Before(seasonStart) {
-					// Before July 1, winter holidays are not yet in selling season, so keep the
-					// row at actual YTD sales instead of extrapolating from the off-season months.
-					row.ProjectedDollar = group.DollarSoldYTD
-					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, false, group.complete)
-				} else if group.complete {
-					row.ProjectedDollar = group.DollarSoldYTD
-					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
-				} else {
-					currentSellingMonths := monthsThroughSinceDate(now.Year(), time.July, 1, now.Month(), now.Day(), now.Location())
-					row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentSellingMonths)
-					row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
-				}
-			} else if group.complete {
-				row.ProjectedDollar = group.DollarSoldYTD
-				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
-			} else {
-				row.ProjectedDollar = group.DollarSoldYTD * (group.TargetMonthsThrough / currentMonthsThrough)
-				row.Final = formatSeasonStatusYoY(row.ProjectedDollar, group.DollarSoldPY, true, group.complete)
-			}
-		} else {
-			// Everyday items do not have a calendar cutover, so they project across the full year.
-			row.Date = "N/A"
-			row.ProjectedDollar = group.DollarSoldYTD * (12.0 / currentMonthsThrough)
-			row.Final = formatYoYFromProjectedSales(row.ProjectedDollar, group.DollarSoldPY)
-		}
-
 		if group.Section == "Spring" {
 			rowsBySection["Spring"] = append(rowsBySection["Spring"], row)
 			continue
@@ -444,45 +526,17 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now t
 	}
 
 	// Sort seasonal rows by calendar order first, then alphabetically for stable ties.
-	sort.Slice(rowsBySection["Spring"], func(i, j int) bool {
-		if rowsBySection["Spring"][i].sortKey == rowsBySection["Spring"][j].sortKey {
-			return rowsBySection["Spring"][i].sortOccasion < rowsBySection["Spring"][j].sortOccasion
-		}
-		return rowsBySection["Spring"][i].sortKey < rowsBySection["Spring"][j].sortKey
-	})
-	sort.Slice(rowsBySection["Winter"], func(i, j int) bool {
-		if rowsBySection["Winter"][i].sortKey == rowsBySection["Winter"][j].sortKey {
-			return rowsBySection["Winter"][i].sortOccasion < rowsBySection["Winter"][j].sortOccasion
-		}
-		return rowsBySection["Winter"][i].sortKey < rowsBySection["Winter"][j].sortKey
-	})
-	sort.Slice(rowsBySection["Everyday"], func(i, j int) bool {
-		return rowsBySection["Everyday"][i].sortOccasion < rowsBySection["Everyday"][j].sortOccasion
-	})
+	sortDataInsightsRows(rowsBySection["Spring"], true, false)
+	sortDataInsightsRows(rowsBySection["Winter"], true, false)
+	sortDataInsightsRows(rowsBySection["Everyday"], false, false)
 
 	return rowsBySection
 }
 
-// dataInsightsClassRow represents one output row in the Other Products table.
-type dataInsightsClassRow struct {
-	Class           string
-	Date            string
-	DollarSoldYTD   float64
-	DollarSoldPY    float64
-	ProjectedDollar float64
-	Final           string
-}
-
-// dataInsightsClassGroup aggregates sales for a single non-counter-card class description.
-type dataInsightsClassGroup struct {
-	Class         string
-	DollarSoldYTD float64
-	DollarSoldPY  float64
-}
-
-// buildOtherProductDataInsightsRows groups all non-counter-card entries by class description.
-func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough float64) []dataInsightsClassRow {
-	groups := make(map[string]*dataInsightsClassGroup)
+// buildOtherProductDataInsightsRows groups non-card products by class and occasion, then
+// applies the same seasonal bucketing and projection rules used by the card section.
+func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
+	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
 		if isExactCounterCards(e) {
@@ -490,11 +544,24 @@ func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough fl
 		}
 
 		classDesc := normalizeDataInsightsClassDescription(e)
-		groupKey := strings.ToUpper(classDesc)
+		occasion := normalizeDataInsightsOccasion(e.Occasion)
+		section := mapOccasion(occasion)
+		dateInfo := dataInsightDateInfo(section, occasion, now)
+		// Keep class and occasion in the grouping key so the same class can appear once per
+		// holiday date instead of collapsing all winter merchandise into a single row.
+		groupKey := section + "|" + strings.ToUpper(classDesc) + "|" + strings.ToUpper(occasion)
 
 		group, ok := groups[groupKey]
 		if !ok {
-			group = &dataInsightsClassGroup{Class: classDesc}
+			group = &dataInsightsGroup{
+				Section:             section,
+				Class:               classDesc,
+				Occasion:            occasion,
+				Date:                dateInfo.Display,
+				sortKey:             dateInfo.SortKey,
+				complete:            dateInfo.Complete,
+				TargetMonthsThrough: dateInfo.TargetMonthsThrough,
+			}
 			groups[groupKey] = group
 		}
 
@@ -502,24 +569,111 @@ func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough fl
 		group.DollarSoldPY += e.DollarSoldPY
 	}
 
-	rows := make([]dataInsightsClassRow, 0, len(groups))
+	rowsBySection := newDataInsightsRowsBySection()
 	for _, group := range groups {
-		projected := group.DollarSoldYTD * (12.0 / currentMonthsThrough)
-		rows = append(rows, dataInsightsClassRow{
+		dateInfo, projected, final := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
+		row := dataInsightsRow{
 			Class:           group.Class,
-			Date:            "N/A",
+			Occasion:        group.Occasion,
+			Date:            dateInfo.Display,
 			DollarSoldYTD:   group.DollarSoldYTD,
 			DollarSoldPY:    group.DollarSoldPY,
 			ProjectedDollar: projected,
-			Final:           formatYoYFromProjectedSales(projected, group.DollarSoldPY),
-		})
+			Final:           final,
+			sortKey:         group.sortKey,
+			sortOccasion:    strings.ToUpper(group.Occasion),
+		}
+		rowsBySection[group.Section] = append(rowsBySection[group.Section], row)
 	}
 
-	sort.Slice(rows, func(i, j int) bool {
-		return strings.ToUpper(rows[i].Class) < strings.ToUpper(rows[j].Class)
-	})
+	sortDataInsightsRows(rowsBySection["Spring"], true, true)
+	sortDataInsightsRows(rowsBySection["Winter"], true, true)
+	sortDataInsightsRows(rowsBySection["Everyday"], false, true)
 
-	return rows
+	return rowsBySection
+}
+
+// projectDataInsightsRow centralizes the seasonal projection rules so both card and
+// non-card Data Insights rows use the same date metadata and year-over-year logic.
+func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldPY, currentMonthsThrough float64, now time.Time) (occasionDateInfo, float64, string) {
+	dateInfo := dataInsightDateInfo(section, occasion, now)
+
+	if section == "Spring" || section == "Winter" {
+		// Seasonal items are projected only up to their typical selling window.
+		if isValentinesOccasion(occasion) {
+			// Valentine's Day is the one split-season exception: it sells in an early-year
+			// window and again near the end of the year, so we project against both windows.
+			currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
+			projected := dollarSoldYTD * (totalSellingDays / currentSellingDays)
+			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, complete)
+		}
+		if section == "Winter" {
+			// Winter items are treated as selling from July 1 forward, which matches the
+			// existing card logic and avoids projecting winter holidays from the off-season.
+			seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
+			if now.Before(seasonStart) {
+				projected := dollarSoldYTD
+				return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, false, dateInfo.Complete)
+			}
+			if dateInfo.Complete {
+				projected := dollarSoldYTD
+				return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
+			}
+			currentSellingMonths := monthsThroughSinceDate(now.Year(), time.July, 1, now.Month(), now.Day(), now.Location())
+			projected := dollarSoldYTD * (dateInfo.TargetMonthsThrough / currentSellingMonths)
+			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
+		}
+		if dateInfo.Complete {
+			// Once the holiday has passed, stop extrapolating and keep the row at actual YTD.
+			projected := dollarSoldYTD
+			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
+		}
+		projected := dollarSoldYTD * (dateInfo.TargetMonthsThrough / currentMonthsThrough)
+		return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
+	}
+
+	// Everyday items are projected across the full year because they do not have a holiday
+	// cutoff date to anchor them to.
+	projected := dollarSoldYTD * (12.0 / currentMonthsThrough)
+	return dateInfo, projected, formatYoYFromProjectedSales(projected, dollarSoldPY)
+}
+
+// newDataInsightsRowsBySection pre-creates each section so the worksheet keeps a stable
+// Spring / Winter / Everyday layout even when one of the buckets is empty.
+func newDataInsightsRowsBySection() map[string][]dataInsightsRow {
+	return map[string][]dataInsightsRow{
+		"Spring":   {},
+		"Winter":   {},
+		"Everyday": {},
+	}
+}
+
+// sortDataInsightsRows keeps section ordering stable. Seasonal rows are sorted by holiday
+// date first, while Other Products also groups by class so identical classes stay together.
+// Within a class, rows then sort by holiday date and occasion label.
+func sortDataInsightsRows(rows []dataInsightsRow, useSortKey bool, useClass bool) {
+	sort.Slice(rows, func(i, j int) bool {
+		if useClass && rows[i].Class != rows[j].Class {
+			return strings.ToUpper(rows[i].Class) < strings.ToUpper(rows[j].Class)
+		}
+		if useSortKey && rows[i].sortKey != rows[j].sortKey {
+			return rows[i].sortKey < rows[j].sortKey
+		}
+		if rows[i].sortOccasion == rows[j].sortOccasion {
+			return rows[i].Occasion < rows[j].Occasion
+		}
+		return rows[i].sortOccasion < rows[j].sortOccasion
+	})
+}
+
+// isExactCounterCards reports whether an inventory entry belongs to the exact Counter Cards
+// class, which is the only class that should feed the left-hand Data Insights table.
+func isExactCounterCards(e *entry) bool {
+	category := strings.TrimSpace(e.RawClassDesc)
+	if category == "" {
+		category = strings.TrimSpace(e.ClassDesc)
+	}
+	return category == "Counter Cards"
 }
 
 // normalizeDataInsightsClassDescription trims the class description and provides a fallback for empty values.
@@ -534,19 +688,15 @@ func normalizeDataInsightsClassDescription(e *entry) string {
 	return category
 }
 
-// setDataInsightsTableWidths applies the shared 5-column width pattern starting at the given column.
-func setDataInsightsTableWidths(f *excelize.File, sheetName, startCol string) error {
-	cols, err := dataInsightsTableColumns(startCol)
+// setDataInsightsTableWidths applies a shared width pattern starting at the given column.
+func setDataInsightsTableWidths(f *excelize.File, sheetName, startCol string, widths []float64) error {
+	cols, err := dataInsightsTableColumns(startCol, len(widths))
 	if err != nil {
 		return err
 	}
 
-	if len(dataInsightsTableColumnWidths) != dataInsightsTableColumnCount {
-		return fmt.Errorf("invalid data insights table width count: got %d, want %d", len(dataInsightsTableColumnWidths), dataInsightsTableColumnCount)
-	}
-
 	for idx, col := range cols {
-		if err := f.SetColWidth(sheetName, col, col, dataInsightsTableColumnWidths[idx]); err != nil {
+		if err := f.SetColWidth(sheetName, col, col, widths[idx]); err != nil {
 			return fmt.Errorf("failed to set width for column %s: %w", col, err)
 		}
 	}
@@ -554,14 +704,14 @@ func setDataInsightsTableWidths(f *excelize.File, sheetName, startCol string) er
 	return nil
 }
 
-// dataInsightsTableColumns returns the shared table columns starting at startCol.
-func dataInsightsTableColumns(startCol string) ([]string, error) {
+// dataInsightsTableColumns returns table columns starting at startCol.
+func dataInsightsTableColumns(startCol string, columnCount int) ([]string, error) {
 	startIdx, err := excelize.ColumnNameToNumber(startCol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve column %s: %w", startCol, err)
 	}
 
-	cols := make([]string, dataInsightsTableColumnCount)
+	cols := make([]string, columnCount)
 	for i := 0; i < len(cols); i++ {
 		col, err := excelize.ColumnNumberToName(startIdx + i)
 		if err != nil {
@@ -571,75 +721,6 @@ func dataInsightsTableColumns(startCol string) ([]string, error) {
 	}
 
 	return cols, nil
-}
-
-// writeOtherProductsTable writes the right-side Other Products table.
-func writeOtherProductsTable(f *excelize.File, sheetName, startCol string, startRow int, rows []dataInsightsClassRow, headerStyle, dataStyle, currencyDataStyle, totalStyle, currencyTotalStyle int) error {
-	cols, err := dataInsightsTableColumns(startCol)
-	if err != nil {
-		return err
-	}
-
-	headers := []string{"Class", "Date", "YTD Sales", "PY Sales", "Projected YoY"}
-	for idx, header := range headers {
-		cell := dataInsightsCell(cols[idx], startRow)
-		if err := f.SetCellValue(sheetName, cell, header); err != nil {
-			return fmt.Errorf("failed to set other products header %s: %w", header, err)
-		}
-	}
-	if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[dataInsightsColumnOccasion], startRow), dataInsightsCell(cols[dataInsightsColumnFinal], startRow), headerStyle); err != nil {
-		return fmt.Errorf("failed to style other products header row: %w", err)
-	}
-
-	rowNum := startRow + 1
-	totalYTD := 0.0
-	totalPY := 0.0
-	totalProjectedSales := 0.0
-	for _, row := range rows {
-		values := []interface{}{row.Class, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
-		for idx, value := range values {
-			cell := dataInsightsCell(cols[idx], rowNum)
-			if err := f.SetCellValue(sheetName, cell, value); err != nil {
-				return fmt.Errorf("failed to write other products row cell %s: %w", cell, err)
-			}
-		}
-		if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[dataInsightsColumnOccasion], rowNum), dataInsightsCell(cols[dataInsightsColumnFinal], rowNum), dataStyle); err != nil {
-			return fmt.Errorf("failed to style other products data row: %w", err)
-		}
-		if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[dataInsightsColumnYTD], rowNum), dataInsightsCell(cols[dataInsightsColumnPY], rowNum), currencyDataStyle); err != nil {
-			return fmt.Errorf("failed to style other products currency cells: %w", err)
-		}
-
-		totalYTD += row.DollarSoldYTD
-		totalPY += row.DollarSoldPY
-		totalProjectedSales += row.ProjectedDollar
-		rowNum++
-	}
-
-	totalRowValues := []interface{}{"Total", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjectedSales, totalPY)}
-	for idx, value := range totalRowValues {
-		cell := dataInsightsCell(cols[idx], rowNum)
-		if err := f.SetCellValue(sheetName, cell, value); err != nil {
-			return fmt.Errorf("failed to write other products total row cell %s: %w", cell, err)
-		}
-	}
-	if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[dataInsightsColumnOccasion], rowNum), dataInsightsCell(cols[dataInsightsColumnFinal], rowNum), totalStyle); err != nil {
-		return fmt.Errorf("failed to style other products total row: %w", err)
-	}
-	if err := f.SetCellStyle(sheetName, dataInsightsCell(cols[dataInsightsColumnYTD], rowNum), dataInsightsCell(cols[dataInsightsColumnPY], rowNum), currencyTotalStyle); err != nil {
-		return fmt.Errorf("failed to style other products total currency cells: %w", err)
-	}
-
-	return nil
-}
-
-// isExactCounterCards reports whether the entry belongs to the exact "Counter Cards" class.
-func isExactCounterCards(e *entry) bool {
-	category := strings.TrimSpace(e.RawClassDesc)
-	if category == "" {
-		category = strings.TrimSpace(e.ClassDesc)
-	}
-	return category == "Counter Cards"
 }
 
 // normalizeDataInsightsOccasion trims the occasion name and provides a fallback for empty values.
