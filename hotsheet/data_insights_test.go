@@ -250,6 +250,12 @@ func TestWriteDataInsightsSheetStacksOtherProductsBySeason(t *testing.T) {
 	if got, err := f.GetCellValue(sheetName, "H7"); err != nil || got != "Mother's Day" {
 		t.Fatalf("expected H7 to contain Mother's Day, got %q (err=%v)", got, err)
 	}
+	if got, err := f.GetCellValue(sheetName, "J8"); err != nil || got != "$150.00" {
+		t.Fatalf("expected J8 to contain the actual Spring YTD total, got %q (err=%v)", got, err)
+	}
+	if got, err := f.GetCellValue(sheetName, "K8"); err != nil || got != "$120.00" {
+		t.Fatalf("expected K8 to contain the actual Spring PY total, got %q (err=%v)", got, err)
+	}
 	if got, err := f.GetCellValue(sheetName, "G10"); err != nil || got != "Winter" {
 		t.Fatalf("expected G10 to contain Winter, got %q (err=%v)", got, err)
 	}

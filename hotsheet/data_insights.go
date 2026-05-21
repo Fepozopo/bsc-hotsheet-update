@@ -249,8 +249,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			RenderRow: func(row dataInsightsRow) []interface{} {
 				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			},
-			RenderTotal: func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", totalProjected, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
 			},
 		},
 		{
@@ -262,8 +262,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			RenderRow: func(row dataInsightsRow) []interface{} {
 				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			},
-			RenderTotal: func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", totalProjected, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
 			},
 		},
 		{
@@ -275,8 +275,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			RenderRow: func(row dataInsightsRow) []interface{} {
 				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			},
-			RenderTotal: func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", totalProjected, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
 			},
 		},
 	}
@@ -303,8 +303,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			RenderRow: func(row dataInsightsRow) []interface{} {
 				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			},
-			RenderTotal: func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", "", totalProjected, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
 			},
 		},
 		{
@@ -316,8 +316,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			RenderRow: func(row dataInsightsRow) []interface{} {
 				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			},
-			RenderTotal: func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", "", totalProjected, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", "", totalYTD, totalPY, dataInsightsSeasonTotalFinal(totalProjected, totalPY, rows)}
 			},
 		},
 		{
@@ -329,8 +329,8 @@ func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
 			RenderRow: func(row dataInsightsRow) []interface{} {
 				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.Final}
 			},
-			RenderTotal: func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", "", totalProjected, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
 			},
 		},
 	}
@@ -359,7 +359,7 @@ type dataInsightsSection struct {
 	CurrencyStartIndex int
 	CurrencyEndIndex   int
 	RenderRow          func(dataInsightsRow) []interface{}
-	RenderTotal        func(totalProjected, totalPY float64, rows []dataInsightsRow) []interface{}
+	RenderTotal        func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{}
 }
 
 // writeDataInsightsSectionTable renders one seasonal section, including the section title,
@@ -423,7 +423,9 @@ func writeDataInsightsSectionTable(f *excelize.File, sheetName, startCol string,
 		rowNum++
 	}
 
-	totalRowValues := section.RenderTotal(totalProjectedSales, totalPY, section.Rows)
+	// The total row keeps the actual YTD and PY sums in their respective columns; only the
+	// rightmost column uses projected sales to derive the YoY percentage shown in the sheet.
+	totalRowValues := section.RenderTotal(totalYTD, totalPY, totalProjectedSales, section.Rows)
 	if len(totalRowValues) != len(section.Headers) {
 		return 0, fmt.Errorf("failed to render %s total row: got %d values, want %d", section.Name, len(totalRowValues), len(section.Headers))
 	}
