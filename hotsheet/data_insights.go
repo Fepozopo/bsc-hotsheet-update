@@ -531,8 +531,6 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now t
 	return rowsBySection
 }
 
-// buildOtherProductDataInsightsRows groups all non-counter-card entries by class and occasion
-// so identical class/occasion combinations collapse into one row.
 // buildOtherProductDataInsightsRows groups non-card products by class and occasion, then
 // applies the same seasonal bucketing and projection rules used by the card section.
 func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
@@ -547,6 +545,8 @@ func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough fl
 		occasion := normalizeDataInsightsOccasion(e.Occasion)
 		section := mapOccasion(occasion)
 		dateInfo := dataInsightDateInfo(section, occasion, now)
+		// Keep class and occasion in the grouping key so the same class can appear once per
+		// holiday date instead of collapsing all winter merchandise into a single row.
 		groupKey := section + "|" + strings.ToUpper(classDesc) + "|" + strings.ToUpper(occasion)
 
 		group, ok := groups[groupKey]
@@ -599,11 +599,15 @@ func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldP
 	if section == "Spring" || section == "Winter" {
 		// Seasonal items are projected only up to their typical selling window.
 		if isValentinesOccasion(occasion) {
+			// Valentine's Day is the one split-season exception: it sells in an early-year
+			// window and again near the end of the year, so we project against both windows.
 			currentSellingDays, totalSellingDays, complete := valentinesProjectionWindow(now)
 			projected := dollarSoldYTD * (totalSellingDays / currentSellingDays)
 			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, complete)
 		}
 		if section == "Winter" {
+			// Winter items are treated as selling from July 1 forward, which matches the
+			// existing card logic and avoids projecting winter holidays from the off-season.
 			seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
 			if now.Before(seasonStart) {
 				projected := dollarSoldYTD
@@ -618,6 +622,7 @@ func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldP
 			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
 		}
 		if dateInfo.Complete {
+			// Once the holiday has passed, stop extrapolating and keep the row at actual YTD.
 			projected := dollarSoldYTD
 			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
 		}
@@ -625,6 +630,8 @@ func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldP
 		return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
 	}
 
+	// Everyday items are projected across the full year because they do not have a holiday
+	// cutoff date to anchor them to.
 	projected := dollarSoldYTD * (12.0 / currentMonthsThrough)
 	return dateInfo, projected, formatYoYFromProjectedSales(projected, dollarSoldPY)
 }
@@ -641,6 +648,7 @@ func newDataInsightsRowsBySection() map[string][]dataInsightsRow {
 
 // sortDataInsightsRows keeps section ordering stable. Seasonal rows are sorted by holiday
 // date first, while Other Products also groups by class so identical classes stay together.
+// Within a class, rows then sort by holiday date and occasion label.
 func sortDataInsightsRows(rows []dataInsightsRow, useSortKey bool, useClass bool) {
 	sort.Slice(rows, func(i, j int) bool {
 		if useClass && rows[i].Class != rows[j].Class {
