@@ -2,7 +2,7 @@
 
 ## Description
 
-Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics. The `Data Insights` sheet now shows `Counter Cards` on the left and `Other Products` on the right, with the other products split into Spring, Winter, and Everyday sections.
+Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics. The `Data Insights` sheet now shows `Counter Cards` on the left and `Other Products` on the right. The right-hand side is split into Spring, Winter, and Everyday sections, uses the same holiday-date/projection rules as the card section, and now includes both class and occasion columns so class-specific seasonal items stay separated.
 
 ## Motivation
 
@@ -48,7 +48,8 @@ Behavior notes
 - PO-only SKUs (SKUs present in PO but not in inventory) are skipped to avoid creating "UNKNOWN" product-line files.
 - Output file naming: `{ProductLine}_hotsheet_YYYYMMDD.xlsx` (e.g., `BAS_hotsheet_20260423.xlsx`).
 - Each output file contains four sheets: "Everyday", "Winter", "Spring", and "Data Insights". Header comments explain the MTO calculations.
-- The `Data Insights` sheet now has two side-by-side areas: `Counter Cards` on the left and `Other Products` on the right, with the right-hand side stacked into Spring, Winter, and Everyday sections.
+- The `Data Insights` sheet now has two side-by-side areas: `Counter Cards` on the left and `Other Products` on the right. The right-hand side is stacked into Spring, Winter, and Everyday sections, groups non-card items by both class and occasion, and uses the same holiday-date/projection rules as the card rows.
+- Valentine's Day remains the split-window exception: it uses the early-year and late-year selling windows rather than a single holiday date.
 
 ## Logs
 
@@ -69,7 +70,7 @@ On startup the GUI checks the public GitHub releases API for the latest version.
 - GUI & update-checks: `app.go` contains the UI, input validation, progress dialogs, and the auto-update flow. The app checks the public GitHub releases API and downloads the release asset for the selected platform.
 - Hotsheet generation: `hotsheet/create.go` orchestrates the report pipeline; `hotsheet/create_helpers.go` loads and merges inventory/PO data and writes workbooks; `hotsheet/data_insights.go` builds the `Data Insights` worksheet; `hotsheet/format_helpers.go` centralizes workbook styles; `hotsheet/util.go` includes parsing and mapping helpers.
 - Logging: `helpers/slog_logger.go` creates buffered JSON writers into `logs-bsc` under the system temp directory.
-- Version: `internal/version/version.go`..
+- Version: `internal/version/version.go`.
 - Build: `Makefile` provides cross-compile targets (uses CGO and `zig` by default).
 
 ## Troubleshooting
