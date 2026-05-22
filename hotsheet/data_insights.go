@@ -30,8 +30,8 @@ const (
 	dataInsightsColumnFinal
 )
 
-var dataInsightsTableColumnWidths = []float64{26, 31, 14, 14, 34}
-var dataInsightsOtherTableColumnWidths = []float64{26, 24, 31, 14, 14, 34}
+var dataInsightsTableColumnWidths = []float64{26, 31, 14, 14, 28}
+var dataInsightsOtherTableColumnWidths = []float64{26, 24, 31, 14, 14, 28}
 
 // dataInsightsCell constructs an Excel cell name (e.g. "A5") from a column letter and row number.
 func dataInsightsCell(col string, row int) string {
