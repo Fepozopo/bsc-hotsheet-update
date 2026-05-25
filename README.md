@@ -8,6 +8,18 @@ Hotsheet Updater is a small Go GUI (Fyne) application that generates unified Exc
 
 This tool automates the manual work of assembling hotsheets from inventory and PO reports, reducing errors and saving time.
 
+## Screenshots
+
+Below are screenshots of the generated sheets:
+
+### Everyday sheet
+
+![Everyday sheet](images/everyday.png)
+
+### Data Insights sheet
+
+![Data Insights sheet](images/data_insights.png)
+
 ## Requirements
 
 - Go 1.26.2
