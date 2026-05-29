@@ -2,4 +2,4 @@ package version
 
 // Version is the current application version.
 // Update this value before each release.
-var Version = "3.2.3"
+var Version = "3.2.4"
