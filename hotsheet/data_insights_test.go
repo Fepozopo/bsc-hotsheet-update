@@ -186,8 +186,8 @@ func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
 	if rowsBySection["Spring"][0].Class != "Gift Wrap" || rowsBySection["Spring"][0].Occasion != "Mother's Day" {
 		t.Fatalf("expected Spring row to carry class and occasion, got %+v", rowsBySection["Spring"])
 	}
-	if rowsBySection["Spring"][0].Date != "May 11" {
-		t.Fatalf("expected Mother's Day to display May 11, got %q", rowsBySection["Spring"][0].Date)
+	if rowsBySection["Spring"][0].Date != "May 10" {
+		t.Fatalf("expected Mother's Day to display May 10, got %q", rowsBySection["Spring"][0].Date)
 	}
 	if !strings.HasPrefix(rowsBySection["Spring"][0].Final, "COMPLETE:") {
 		t.Fatalf("expected Mother's Day to be complete, got %q", rowsBySection["Spring"][0].Final)

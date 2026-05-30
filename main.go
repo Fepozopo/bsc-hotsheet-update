@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fyne.io/fyne/v2/app"
 	helpers "github.com/Fepozopo/bsc-hotsheet-update/helpers"
+	"github.com/Fepozopo/bsc-hotsheet-update/internal/gui"
 )
 
 // main wires up the application logger and launches the GUI flow.
@@ -17,11 +17,10 @@ func main() {
 		_ = logCloser.Close()
 	}()
 
-	myApp := app.New()
-	defer myApp.Quit()
-
-	// The UI-driven flow in selectFiles handles generation and result display.
-	selectFiles(myApp)
+	if err := gui.Run(); err != nil {
+		logger.Error("failed to run GUI", "err", err)
+		return
+	}
 
 	logger.Info("application exited")
 }
