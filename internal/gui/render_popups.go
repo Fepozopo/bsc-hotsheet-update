@@ -9,14 +9,18 @@ import (
 	"github.com/aarzilli/nucular/rect"
 )
 
+// openErrorPopup shows a modal error popup with a single dismiss button.
 func (s *AppState) openErrorPopup(title, message string) {
 	s.openMessagePopup(title, message, "OK")
 }
 
+// openInfoPopup shows a modal informational popup with a single dismiss button.
 func (s *AppState) openInfoPopup(title, message string) {
 	s.openMessagePopup(title, message, "OK")
 }
 
+// openMessagePopup renders a small centered popup for one-off informational or
+// error messages.
 func (s *AppState) openMessagePopup(title, message, dismissText string) {
 	s.mw.PopupOpen(title, nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(560, 220), true, func(w *nucular.Window) {
 		s.renderPopupMessage(w, message, 48)
@@ -31,10 +35,14 @@ func (s *AppState) openMessagePopup(title, message, dismissText string) {
 	})
 }
 
+// openGenerateProgressPopup shows the modal progress popup for hotsheet
+// generation.
 func (s *AppState) openGenerateProgressPopup() {
 	s.mw.PopupOpen("Generating Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(460, 200), true, s.renderGenerateProgressPopup)
 }
 
+// renderGenerateProgressPopup draws the content of the generation progress
+// popup.
 func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 	if !s.generateInProgress {
 		w.Close()
@@ -54,10 +62,13 @@ func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 	w.Label("", "LC")
 }
 
+// openUpdateAvailablePopup shows the optional update prompt.
 func (s *AppState) openUpdateAvailablePopup() {
 	s.mw.PopupOpen("Update Available", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(640, 240), true, s.renderUpdateAvailablePopup)
 }
 
+// renderUpdateAvailablePopup draws the popup that offers either updating now or
+// continuing to use the current version.
 func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	if s.updateInProgress {
 		w.Close()
@@ -81,10 +92,14 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	w.Label("", "LC")
 }
 
+// openUpdateProgressPopup shows the modal progress popup while a self-update is
+// being applied.
 func (s *AppState) openUpdateProgressPopup() {
 	s.mw.PopupOpen("Updating", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(460, 200), true, s.renderUpdateProgressPopup)
 }
 
+// renderUpdateProgressPopup draws the content of the self-update progress
+// popup.
 func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 	if !s.updateInProgress {
 		w.Close()
@@ -104,10 +119,13 @@ func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 	w.Label("", "LC")
 }
 
+// openOutputsPopup shows the modal popup that lists the generated output files.
 func (s *AppState) openOutputsPopup() {
 	s.mw.PopupOpen("Created Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(660, 430), true, s.renderOutputsPopup)
 }
 
+// renderOutputsPopup draws the output list and action buttons after generation
+// completes.
 func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 	if len(s.outputs) == 0 {
 		w.Row(20).Dynamic(1)
@@ -122,6 +140,8 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		w.Label("Double-click a file to open it.", "LC")
 		w.Row(235).Dynamic(1)
 		if gl, gw := nucular.GroupListStart(w, len(s.outputs), "created-hotsheets", nucular.WindowBorder|nucular.WindowNoHScrollbar); gw != nil {
+			// SkipToVisible keeps large result lists from rendering every row on
+			// every frame while still preserving the current scroll position.
 			gl.SkipToVisible(22)
 			gw.Row(22).Dynamic(1)
 			for gl.Next() {
@@ -148,6 +168,14 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 	w.Label("", "LC")
 }
 
+// centeredPopupRect returns a popup rectangle that is centered inside the main
+// window.
+//
+// Nucular applies style scaling to popup rectangles when PopupOpen is called
+// with scale=true. The main window bounds stored in AppState are already scaled,
+// so this helper converts them back to unscaled coordinates before centering the
+// popup. Without that adjustment the popup drifts toward the lower-right on
+// high-DPI layouts and can end up partially off-screen.
 func (s *AppState) centeredPopupRect(width, height int) rect.Rect {
 	bounds := s.windowBounds
 	if bounds.W <= 0 || bounds.H <= 0 {
@@ -188,6 +216,8 @@ func (s *AppState) centeredPopupRect(width, height int) rect.Rect {
 	return rect.Rect{X: x, Y: y, W: width, H: height}
 }
 
+// renderPopupMessage draws popup text line-by-line using the custom word-wrap
+// helper.
 func (s *AppState) renderPopupMessage(w *nucular.Window, message string, maxChars int) {
 	for _, line := range wrapPopupText(message, maxChars) {
 		w.Row(24).Dynamic(1)
@@ -195,6 +225,8 @@ func (s *AppState) renderPopupMessage(w *nucular.Window, message string, maxChar
 	}
 }
 
+// wrapPopupText wraps popup copy on word boundaries so the renderer does not
+// split words in the middle on narrow lines.
 func wrapPopupText(message string, maxChars int) []string {
 	if maxChars <= 0 {
 		return []string{message}

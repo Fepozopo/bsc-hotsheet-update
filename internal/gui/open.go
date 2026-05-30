@@ -6,7 +6,10 @@ import (
 	"runtime"
 )
 
-// OpenPath opens a file or folder using the platform's default handler.
+// OpenPath opens a file or folder using the operating system's default handler.
+//
+// Any launch error is ignored because there is no actionable recovery path in
+// the GUI; the user can try again or open the file manually.
 func OpenPath(path string) {
 	if path == "" {
 		return

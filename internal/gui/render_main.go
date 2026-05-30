@@ -8,6 +8,10 @@ import (
 	"github.com/aarzilli/nucular"
 )
 
+// renderMainForm draws the main application window contents.
+//
+// The layout is intentionally kept close to the original Fyne-based UI: a title,
+// three labeled path pickers, a status line, and the bottom action row.
 func (s *AppState) renderMainForm(w *nucular.Window) {
 	w.Row(30).Dynamic(1)
 	w.Label("Create Unified Hotsheets from Reports", "CC")
@@ -27,6 +31,8 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	s.renderMainButtons(w)
 }
 
+// renderPathField draws a single labeled path editor with its Browse button and
+// hint text.
 func (s *AppState) renderPathField(w *nucular.Window, labelText, hintText string, editor *nucular.TextEditor, browseFn func()) {
 	editor.Flags = s.pathEditorFlags()
 
@@ -39,6 +45,8 @@ func (s *AppState) renderPathField(w *nucular.Window, labelText, hintText string
 		browseFn()
 	}
 
+	// Nucular does not provide native placeholder support for TextEditor, so the
+	// hint is rendered as a separate muted line below the field when it is empty.
 	w.Row(16).Dynamic(1)
 	if strings.TrimSpace(string(editor.Buffer)) == "" {
 		w.LabelColored(hintText, "LC", color.RGBA{R: 120, G: 120, B: 120, A: 255})
@@ -47,6 +55,10 @@ func (s *AppState) renderPathField(w *nucular.Window, labelText, hintText string
 	}
 }
 
+// renderStatusLine shows a concise status message below the inputs.
+//
+// The message communicates whichever background action or update state is most
+// relevant right now.
 func (s *AppState) renderStatusLine(w *nucular.Window) {
 	message := "Ready to generate hotsheets."
 	statusColor := color.RGBA{R: 70, G: 110, B: 170, A: 255}
@@ -73,6 +85,10 @@ func (s *AppState) renderStatusLine(w *nucular.Window) {
 	w.LabelColored(message, "LC", statusColor)
 }
 
+// renderMainButtons draws the primary action row at the bottom of the form.
+//
+// The requested layout keeps Quit and Check for Updates grouped on the left and
+// Generate Hotsheets aligned on the right.
 func (s *AppState) renderMainButtons(w *nucular.Window) {
 	w.Row(34).Static(80, 14, 150, 0, 170)
 	if w.ButtonText("Quit") {
@@ -88,6 +104,7 @@ func (s *AppState) renderMainButtons(w *nucular.Window) {
 	}
 }
 
+// renderSpacer inserts a fixed-height blank row into the layout.
 func (s *AppState) renderSpacer(w *nucular.Window, height int) {
 	w.Row(height).Dynamic(1)
 	w.Label("", "LC")

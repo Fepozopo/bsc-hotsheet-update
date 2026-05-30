@@ -14,15 +14,31 @@ import (
 )
 
 const (
-	updateRepo           = "Fepozopo/bsc-hotsheet-update"
+	// updateRepo is the GitHub repository identifier used by the built-in update
+	// checker.
+	updateRepo = "Fepozopo/bsc-hotsheet-update"
+
+	// doubleClickThreshold defines how quickly two clicks on the same output row
+	// must happen to be treated as a double-click.
 	doubleClickThreshold = 500 * time.Millisecond
-	quitForceExitDelay   = 750 * time.Millisecond
+
+	// quitForceExitDelay is a safety timeout used when closing the application.
+	// If the GUI backend does not terminate cleanly after a close request, the
+	// process is exited explicitly.
+	quitForceExitDelay = 750 * time.Millisecond
 )
 
+// isBusy reports whether the application is currently performing a long-running
+// action that should temporarily disable conflicting UI actions.
 func (s *AppState) isBusy() bool {
 	return s.generateInProgress || s.updateInProgress
 }
 
+// pathEditorFlags returns the text editor flags appropriate for the three path
+// fields in the main form.
+//
+// While generation or self-update is in progress the fields are switched to
+// read-only to prevent the user from changing the underlying inputs mid-run.
 func (s *AppState) pathEditorFlags() nucular.EditFlags {
 	flags := nucular.EditField
 	if s.isBusy() {
@@ -31,6 +47,8 @@ func (s *AppState) pathEditorFlags() nucular.EditFlags {
 	return flags
 }
 
+// browseInventory opens the native file picker and stores the selected
+// inventory report path in the inventory editor.
 func (s *AppState) browseInventory() {
 	path, err := pickFile()
 	if err != nil {
@@ -44,6 +62,8 @@ func (s *AppState) browseInventory() {
 	s.requestRedraw()
 }
 
+// browsePO opens the native file picker and stores the selected PO report path
+// in the optional PO editor.
 func (s *AppState) browsePO() {
 	path, err := pickFile()
 	if err != nil {
@@ -57,6 +77,8 @@ func (s *AppState) browsePO() {
 	s.requestRedraw()
 }
 
+// browseOutputDir opens the native directory picker and stores the chosen
+// output directory path.
 func (s *AppState) browseOutputDir() {
 	path, err := pickDirectory()
 	if err != nil {
@@ -70,6 +92,8 @@ func (s *AppState) browseOutputDir() {
 	s.requestRedraw()
 }
 
+// startGenerate validates the required inputs, shows the progress popup, and
+// launches hotsheet generation in a background goroutine.
 func (s *AppState) startGenerate() {
 	if s.isBusy() {
 		return
@@ -94,6 +118,11 @@ func (s *AppState) startGenerate() {
 	}(inventoryPath, poPath, outputDir)
 }
 
+// handleGenerateResult applies the result of a completed generation run back to
+// the UI state.
+//
+// Successful runs open the results popup; failed runs surface the error in a
+// modal popup and leave the main form intact.
 func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	s.generateInProgress = false
 	if err != nil {
@@ -110,6 +139,8 @@ func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	s.requestRedraw()
 }
 
+// resetInputs clears the three main path fields and resets any result-list
+// selection state so the user can start a fresh run.
 func (s *AppState) resetInputs() {
 	setEditorText(&s.inventoryEditor, "")
 	setEditorText(&s.poEditor, "")
@@ -120,6 +151,8 @@ func (s *AppState) resetInputs() {
 	s.requestRedraw()
 }
 
+// handleOutputClick updates selection state for the results list and opens the
+// file when the same row is clicked twice inside doubleClickThreshold.
 func (s *AppState) handleOutputClick(index int) {
 	now := time.Now()
 	if s.lastClickedOutput == index && now.Sub(s.lastClickAt) <= doubleClickThreshold {
@@ -132,12 +165,18 @@ func (s *AppState) handleOutputClick(index int) {
 	s.requestRedraw()
 }
 
+// openSelectedOutput opens the currently selected output file, if any.
 func (s *AppState) openSelectedOutput() {
 	if s.selectedOutput >= 0 && s.selectedOutput < len(s.outputs) {
 		OpenPath(s.outputs[s.selectedOutput])
 	}
 }
 
+// openSelectedOutputFolder opens the containing directory for the selected
+// output file.
+//
+// If no row is selected, the function falls back to the first generated output,
+// matching the behavior of the earlier Fyne implementation.
 func (s *AppState) openSelectedOutputFolder() {
 	if len(s.outputs) == 0 {
 		return
@@ -149,6 +188,10 @@ func (s *AppState) openSelectedOutputFolder() {
 	OpenFolderForFile(s.outputs[0])
 }
 
+// startUpdateCheck launches an asynchronous update check against GitHub.
+//
+// The check runs on startup and can also be triggered manually. Re-entrant runs
+// are ignored to avoid stacking duplicate requests and popups.
 func (s *AppState) startUpdateCheck(showNoUpdates bool) {
 	if s.updateCheckInProgress || s.updateInProgress || s.closingRequested {
 		return
@@ -164,6 +207,11 @@ func (s *AppState) startUpdateCheck(showNoUpdates bool) {
 	}()
 }
 
+// beginSelfUpdate starts downloading and applying the selected update in the
+// background.
+//
+// The current version remains usable if the update fails; only a successful
+// update path restarts and exits the running process.
 func (s *AppState) beginSelfUpdate() {
 	if s.isBusy() || strings.TrimSpace(s.latestAssetURL) == "" {
 		return
@@ -191,6 +239,11 @@ func (s *AppState) beginSelfUpdate() {
 	}(s.latestAssetURL)
 }
 
+// handleUpdateCheckResult merges the outcome of a completed update check into
+// the application state and decides whether to show any popup.
+//
+// A failed check is intentionally non-fatal: the user can keep using the app
+// even when GitHub is unreachable.
 func (s *AppState) handleUpdateCheckResult(result appupdate.CheckResult, err error, showNoUpdates bool) {
 	s.updateCheckInProgress = false
 	if err != nil {
@@ -216,6 +269,8 @@ func (s *AppState) handleUpdateCheckResult(result appupdate.CheckResult, err err
 		return
 	}
 
+	// The explicit string check is defensive; semver comparison should already
+	// cover equality, but keeping this branch makes the intent obvious.
 	if result.LatestVersion.String() == version.Version {
 		s.updateAvailable = false
 		return
@@ -227,6 +282,7 @@ func (s *AppState) handleUpdateCheckResult(result appupdate.CheckResult, err err
 	s.openUpdateAvailablePopup()
 }
 
+// handleSelfUpdateResult applies the result of the background self-update.
 func (s *AppState) handleSelfUpdateResult(err error) {
 	s.updateInProgress = false
 	if err != nil {
@@ -238,12 +294,17 @@ func (s *AppState) handleSelfUpdateResult(err error) {
 	s.quit()
 }
 
+// quit initiates application shutdown and guarantees process termination even
+// if the GUI backend does not exit cleanly on its own.
 func (s *AppState) quit() {
 	if s.closingRequested {
 		return
 	}
 	s.closingRequested = true
 
+	// The fallback exit protects against backend shutdown deadlocks. The native
+	// window is still asked to close first so the UI can terminate cleanly when
+	// possible.
 	go func() {
 		time.Sleep(quitForceExitDelay)
 		os.Exit(0)
@@ -258,16 +319,20 @@ func (s *AppState) quit() {
 	}(s.mw)
 }
 
+// requestRedraw schedules another Nucular frame if the master window exists.
 func (s *AppState) requestRedraw() {
 	if s.mw != nil {
 		s.mw.Changed()
 	}
 }
 
+// editorText returns the trimmed contents of a Nucular text editor.
 func editorText(editor *nucular.TextEditor) string {
 	return strings.TrimSpace(string(editor.Buffer))
 }
 
+// setEditorText replaces the entire contents of a Nucular text editor and moves
+// the cursor to the end of the new text.
 func setEditorText(editor *nucular.TextEditor, value string) {
 	editor.Buffer = []rune(value)
 	editor.Cursor = len(editor.Buffer)

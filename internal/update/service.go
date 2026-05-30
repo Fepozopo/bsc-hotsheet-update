@@ -14,6 +14,8 @@ import (
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
+// CheckResult summarizes the outcome of asking GitHub whether a newer release
+// exists for the current platform.
 type CheckResult struct {
 	CurrentVersion  semver.Version
 	LatestVersion   semver.Version
@@ -21,11 +23,15 @@ type CheckResult struct {
 	UpdateAvailable bool
 }
 
+// githubRelease mirrors the small subset of the GitHub releases API response
+// that the updater needs.
 type githubRelease struct {
 	TagName string               `json:"tag_name"`
 	Assets  []githubReleaseAsset `json:"assets"`
 }
 
+// githubReleaseAsset mirrors the subset of a GitHub release asset payload used
+// to choose and download the correct binary.
 type githubReleaseAsset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
