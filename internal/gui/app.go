@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	defaultWindowWidth  = 1280
-	defaultWindowHeight = 720
+	defaultWindowWidth  = 900
+	defaultWindowHeight = 600
 	defaultUIScale      = 2.0
 )
 
