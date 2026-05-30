@@ -164,6 +164,7 @@ func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 // TestBuildOtherProductDataInsightsRowsSeasonalBuckets confirms other products split into
 // class/occasion buckets and reuse the same holiday metadata and projection rules.
 func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
+
 	t.Parallel()
 
 	entries := []*entry{
@@ -171,7 +172,7 @@ func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
 		{RawClassDesc: "Napkins", Occasion: "HOLIDAY", DollarSoldYTD: 75, DollarSoldPY: 70},
 		{RawClassDesc: "Napkins", Occasion: "VETERAN'S DAY", DollarSoldYTD: 55, DollarSoldPY: 45},
 		{RawClassDesc: "Coasters", Occasion: "HOLIDAY", DollarSoldYTD: 120, DollarSoldPY: 90},
-		{RawClassDesc: "Gift Wrap", Occasion: "Mother's Day", DollarSoldYTD: 150, DollarSoldPY: 120},
+		{RawClassDesc: "Gift Wrap", Occasion: "INDEPENDENCE DAY", DollarSoldYTD: 150, DollarSoldPY: 120},
 		{RawClassDesc: "Alpha Everyday", DollarSoldYTD: 60, DollarSoldPY: 50},
 		{RawClassDesc: "Desk Notes", DollarSoldYTD: 45, DollarSoldPY: 35},
 		{RawClassDesc: "", ClassDesc: "", DollarSoldYTD: 30, DollarSoldPY: 20},
@@ -183,14 +184,14 @@ func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
 	if got := len(rowsBySection["Spring"]); got != 1 {
 		t.Fatalf("expected one Spring row, got %d", got)
 	}
-	if rowsBySection["Spring"][0].Class != "Gift Wrap" || rowsBySection["Spring"][0].Occasion != "Mother's Day" {
+	if rowsBySection["Spring"][0].Class != "Gift Wrap" || rowsBySection["Spring"][0].Occasion != "INDEPENDENCE DAY" {
 		t.Fatalf("expected Spring row to carry class and occasion, got %+v", rowsBySection["Spring"])
 	}
-	if rowsBySection["Spring"][0].Date != "May 10" {
-		t.Fatalf("expected Mother's Day to display May 10, got %q", rowsBySection["Spring"][0].Date)
+	if rowsBySection["Spring"][0].Date != "July 4" {
+		t.Fatalf("expected Independence Day to display July 4, got %q", rowsBySection["Spring"][0].Date)
 	}
 	if !strings.HasPrefix(rowsBySection["Spring"][0].Final, "COMPLETE:") {
-		t.Fatalf("expected Mother's Day to be complete, got %q", rowsBySection["Spring"][0].Final)
+		t.Fatalf("expected Independence Day to be complete, got %q", rowsBySection["Spring"][0].Final)
 	}
 
 	if got := len(rowsBySection["Winter"]); got != 3 {
