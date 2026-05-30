@@ -22,11 +22,12 @@ func (s *AppState) openMessagePopup(title, message, dismissText string) {
 		s.renderPopupMessage(w, message, 48)
 		w.Row(56).Dynamic(1)
 		w.Label("", "LC")
-		w.Row(32).Static(0, 90)
-		w.Spacing(1)
+		w.Row(32).Static(0, 110, 0)
+		w.Label("", "LC")
 		if w.ButtonText(dismissText) {
 			w.Close()
 		}
+		w.Label("", "LC")
 	})
 }
 
@@ -45,11 +46,12 @@ func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 	s.renderPopupMessage(w, "Please wait while the reports are processed. Closing this popup will not cancel the generation.", 42)
 	w.Row(46).Dynamic(1)
 	w.Label("", "LC")
-	w.Row(32).Static(0, 90)
-	w.Spacing(1)
+	w.Row(32).Static(0, 110, 0)
+	w.Label("", "LC")
 	if w.ButtonText("Cancel") {
 		w.Close()
 	}
+	w.Label("", "LC")
 }
 
 func (s *AppState) openUpdateAvailablePopup() {
@@ -66,15 +68,17 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	s.renderPopupMessage(w, message, 50)
 	w.Row(74).Dynamic(1)
 	w.Label("", "LC")
-	w.Row(32).Static(0, 110, 110)
-	w.Spacing(1)
+	w.Row(32).Static(0, 120, 24, 120, 0)
+	w.Label("", "LC")
 	if w.ButtonText("Update") {
 		s.beginSelfUpdate()
 		return
 	}
+	w.Label("", "LC")
 	if w.ButtonText("Continue") {
 		w.Close()
 	}
+	w.Label("", "LC")
 }
 
 func (s *AppState) openUpdateProgressPopup() {
@@ -92,11 +96,12 @@ func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 	s.renderPopupMessage(w, "Please wait while the new version is downloaded and applied. Closing this popup will not stop the update.", 42)
 	w.Row(46).Dynamic(1)
 	w.Label("", "LC")
-	w.Row(32).Static(0, 90)
-	w.Spacing(1)
+	w.Row(32).Static(0, 110, 0)
+	w.Label("", "LC")
 	if w.ButtonText("Cancel") {
 		w.Close()
 	}
+	w.Label("", "LC")
 }
 
 func (s *AppState) openOutputsPopup() {
@@ -129,16 +134,18 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		}
 	}
 
-	w.Row(32).Static(0, 120, 80)
-	w.Spacing(1)
+	w.Row(32).Static(0, 130, 24, 90, 0)
+	w.Label("", "LC")
 	if w.ButtonText("Open Folder") {
 		s.openSelectedOutputFolder()
 	}
+	w.Label("", "LC")
 	if w.ButtonText("Done") {
 		s.resetInputs()
 		s.outputs = nil
 		w.Close()
 	}
+	w.Label("", "LC")
 }
 
 func (s *AppState) centeredPopupRect(width, height int) rect.Rect {
@@ -147,13 +154,36 @@ func (s *AppState) centeredPopupRect(width, height int) rect.Rect {
 		return rect.Rect{X: 40, Y: 40, W: width, H: height}
 	}
 
-	x := bounds.X + (bounds.W-width)/2
-	y := bounds.Y + (bounds.H-height)/2
-	if x < 20 {
-		x = 20
+	scale := 1.0
+	if s.mw != nil && s.mw.Style() != nil && s.mw.Style().Scaling > 0 {
+		scale = s.mw.Style().Scaling
 	}
-	if y < 20 {
-		y = 20
+
+	unscaledX := int(float64(bounds.X) / scale)
+	unscaledY := int(float64(bounds.Y) / scale)
+	unscaledW := int(float64(bounds.W) / scale)
+	unscaledH := int(float64(bounds.H) / scale)
+	if unscaledW <= 0 || unscaledH <= 0 {
+		return rect.Rect{X: 40, Y: 40, W: width, H: height}
+	}
+
+	margin := 20
+	maxWidth := unscaledW - 2*margin
+	maxHeight := unscaledH - 2*margin
+	if maxWidth > 0 && width > maxWidth {
+		width = maxWidth
+	}
+	if maxHeight > 0 && height > maxHeight {
+		height = maxHeight
+	}
+
+	x := unscaledX + (unscaledW-width)/2
+	y := unscaledY + (unscaledH-height)/2
+	if x < unscaledX+margin {
+		x = unscaledX + margin
+	}
+	if y < unscaledY+margin {
+		y = unscaledY + margin
 	}
 	return rect.Rect{X: x, Y: y, W: width, H: height}
 }

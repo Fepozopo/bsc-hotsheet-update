@@ -74,16 +74,17 @@ func (s *AppState) renderStatusLine(w *nucular.Window) {
 }
 
 func (s *AppState) renderMainButtons(w *nucular.Window) {
-	w.Row(34).Static(0, 150, 170, 80)
-	w.Spacing(1)
+	w.Row(34).Static(80, 14, 150, 0, 170)
+	if w.ButtonText("Quit") {
+		s.quit()
+	}
+	w.Label("", "LC")
 	if w.ButtonText("Check for Updates") && !s.isBusy() && !s.updateCheckInProgress {
 		s.startUpdateCheck(true)
 	}
+	w.Label("", "LC")
 	if w.ButtonText("Generate Hotsheets") && !s.isBusy() && !s.updateCheckInProgress {
 		s.startGenerate()
-	}
-	if w.ButtonText("Quit") {
-		s.quit()
 	}
 }
 
