@@ -53,6 +53,7 @@ Built binaries are written to the `bin/` directory.
    - Output Directory (optional): where generated files will be written (defaults to the current working directory).
 3. Click `Generate Hotsheets`. The app validates inputs, shows a modal progress popup, and performs the generation.
 4. On success a `Created Hotsheets` modal popup lists generated files. Double-click an entry to open it, or use `Open Folder` to reveal the containing folder. Click `Done` to close the popup and clear the inputs to run again.
+5. Use `Check for Updates` at any time to manually run the same optional update check that happens on startup.
 
 Behavior notes
 

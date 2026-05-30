@@ -4,13 +4,16 @@ import (
 	"time"
 
 	"github.com/aarzilli/nucular"
+	"github.com/aarzilli/nucular/rect"
 )
 
 // AppState stores the persistent UI state required by the immediate-mode Nucular GUI.
 type AppState struct {
-	mw                 nucular.MasterWindow
-	events             chan UIEvent
-	updateCheckStarted bool
+	mw                    nucular.MasterWindow
+	events                chan UIEvent
+	updateCheckStarted    bool
+	updateCheckInProgress bool
+	windowBounds          rect.Rect
 
 	inventoryEditor nucular.TextEditor
 	poEditor        nucular.TextEditor
@@ -49,6 +52,7 @@ func (s *AppState) BindMasterWindow(mw nucular.MasterWindow) {
 
 // Update is the Nucular root update callback.
 func (s *AppState) Update(w *nucular.Window) {
+	s.windowBounds = w.Bounds
 	s.drainEvents()
 	if !s.updateCheckStarted {
 		s.updateCheckStarted = true

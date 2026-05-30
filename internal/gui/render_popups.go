@@ -2,6 +2,8 @@ package gui
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/aarzilli/nucular"
 	"github.com/aarzilli/nucular/rect"
@@ -16,10 +18,10 @@ func (s *AppState) openInfoPopup(title, message string) {
 }
 
 func (s *AppState) openMessagePopup(title, message, dismissText string) {
-	s.mw.PopupOpen(title, nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, rect.Rect{X: 60, Y: 60, W: 520, H: 190}, true, func(w *nucular.Window) {
-		w.Row(95).Dynamic(1)
-		w.LabelWrap(message)
-
+	s.mw.PopupOpen(title, nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(560, 220), true, func(w *nucular.Window) {
+		s.renderPopupMessage(w, message, 48)
+		w.Row(56).Dynamic(1)
+		w.Label("", "LC")
 		w.Row(32).Static(0, 90)
 		w.Spacing(1)
 		if w.ButtonText(dismissText) {
@@ -29,7 +31,7 @@ func (s *AppState) openMessagePopup(title, message, dismissText string) {
 }
 
 func (s *AppState) openGenerateProgressPopup() {
-	s.mw.PopupOpen("Generating Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, rect.Rect{X: 90, Y: 80, W: 430, H: 180}, true, s.renderGenerateProgressPopup)
+	s.mw.PopupOpen("Generating Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(460, 200), true, s.renderGenerateProgressPopup)
 }
 
 func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
@@ -40,8 +42,9 @@ func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 
 	w.Row(28).Dynamic(1)
 	w.Label("Generating hotsheets...", "LC")
-	w.Row(60).Dynamic(1)
-	w.LabelWrap("Please wait while the reports are processed. Closing this popup will not cancel the generation.")
+	s.renderPopupMessage(w, "Please wait while the reports are processed. Closing this popup will not cancel the generation.", 42)
+	w.Row(46).Dynamic(1)
+	w.Label("", "LC")
 	w.Row(32).Static(0, 90)
 	w.Spacing(1)
 	if w.ButtonText("Cancel") {
@@ -50,7 +53,7 @@ func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 }
 
 func (s *AppState) openUpdateAvailablePopup() {
-	s.mw.PopupOpen("Update Available", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, rect.Rect{X: 55, Y: 55, W: 600, H: 230}, true, s.renderUpdateAvailablePopup)
+	s.mw.PopupOpen("Update Available", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(640, 240), true, s.renderUpdateAvailablePopup)
 }
 
 func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
@@ -60,8 +63,9 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	}
 
 	message := fmt.Sprintf("A new version (%s) is available. You can update now, or continue using the current version.", s.latestVersion)
-	w.Row(118).Dynamic(1)
-	w.LabelWrap(message)
+	s.renderPopupMessage(w, message, 50)
+	w.Row(74).Dynamic(1)
+	w.Label("", "LC")
 	w.Row(32).Static(0, 110, 110)
 	w.Spacing(1)
 	if w.ButtonText("Update") {
@@ -74,7 +78,7 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 }
 
 func (s *AppState) openUpdateProgressPopup() {
-	s.mw.PopupOpen("Updating", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, rect.Rect{X: 90, Y: 80, W: 430, H: 180}, true, s.renderUpdateProgressPopup)
+	s.mw.PopupOpen("Updating", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(460, 200), true, s.renderUpdateProgressPopup)
 }
 
 func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
@@ -85,8 +89,9 @@ func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 
 	w.Row(28).Dynamic(1)
 	w.Label("Updating application...", "LC")
-	w.Row(60).Dynamic(1)
-	w.LabelWrap("Please wait while the new version is downloaded and applied. Closing this popup will not stop the update.")
+	s.renderPopupMessage(w, "Please wait while the new version is downloaded and applied. Closing this popup will not stop the update.", 42)
+	w.Row(46).Dynamic(1)
+	w.Label("", "LC")
 	w.Row(32).Static(0, 90)
 	w.Spacing(1)
 	if w.ButtonText("Cancel") {
@@ -95,15 +100,16 @@ func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 }
 
 func (s *AppState) openOutputsPopup() {
-	s.mw.PopupOpen("Created Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, rect.Rect{X: 40, Y: 30, W: 620, H: 400}, true, s.renderOutputsPopup)
+	s.mw.PopupOpen("Created Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(660, 430), true, s.renderOutputsPopup)
 }
 
 func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 	if len(s.outputs) == 0 {
 		w.Row(20).Dynamic(1)
 		w.Label("No files were created.", "LC")
-		w.Row(220).Dynamic(1)
-		w.LabelWrap("No output files were returned by the generator.")
+		s.renderPopupMessage(w, "No output files were returned by the generator.", 52)
+		w.Row(172).Dynamic(1)
+		w.Label("", "LC")
 	} else {
 		w.Row(20).Dynamic(1)
 		w.Label(fmt.Sprintf("Created files (%d):", len(s.outputs)), "LC")
@@ -133,4 +139,61 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		s.outputs = nil
 		w.Close()
 	}
+}
+
+func (s *AppState) centeredPopupRect(width, height int) rect.Rect {
+	bounds := s.windowBounds
+	if bounds.W <= 0 || bounds.H <= 0 {
+		return rect.Rect{X: 40, Y: 40, W: width, H: height}
+	}
+
+	x := bounds.X + (bounds.W-width)/2
+	y := bounds.Y + (bounds.H-height)/2
+	if x < 20 {
+		x = 20
+	}
+	if y < 20 {
+		y = 20
+	}
+	return rect.Rect{X: x, Y: y, W: width, H: height}
+}
+
+func (s *AppState) renderPopupMessage(w *nucular.Window, message string, maxChars int) {
+	for _, line := range wrapPopupText(message, maxChars) {
+		w.Row(24).Dynamic(1)
+		w.Label(line, "LC")
+	}
+}
+
+func wrapPopupText(message string, maxChars int) []string {
+	if maxChars <= 0 {
+		return []string{message}
+	}
+
+	paragraphs := strings.Split(message, "\n")
+	lines := make([]string, 0, len(paragraphs))
+	for idx, paragraph := range paragraphs {
+		words := strings.Fields(paragraph)
+		if len(words) == 0 {
+			lines = append(lines, "")
+			continue
+		}
+
+		current := words[0]
+		for _, word := range words[1:] {
+			candidate := current + " " + word
+			if utf8.RuneCountInString(candidate) <= maxChars {
+				current = candidate
+				continue
+			}
+			lines = append(lines, current)
+			current = word
+		}
+		lines = append(lines, current)
+
+		if idx < len(paragraphs)-1 {
+			lines = append(lines, "")
+		}
+	}
+	return lines
 }

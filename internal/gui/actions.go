@@ -150,6 +150,14 @@ func (s *AppState) openSelectedOutputFolder() {
 }
 
 func (s *AppState) startUpdateCheck(showNoUpdates bool) {
+	if s.updateCheckInProgress || s.updateInProgress || s.closingRequested {
+		return
+	}
+
+	s.updateCheckInProgress = true
+	s.updateStatusMessage = "Checking for updates..."
+	s.requestRedraw()
+
 	go func() {
 		result, err := appupdate.CheckForUpdates(updateRepo, version.Version)
 		s.queueEvent(updateCheckCompletedEvent{Result: result, Err: err, ShowNoUpdates: showNoUpdates})
@@ -184,11 +192,15 @@ func (s *AppState) beginSelfUpdate() {
 }
 
 func (s *AppState) handleUpdateCheckResult(result appupdate.CheckResult, err error, showNoUpdates bool) {
+	s.updateCheckInProgress = false
 	if err != nil {
 		s.updateAvailable = false
 		s.latestVersion = ""
 		s.latestAssetURL = ""
 		s.updateStatusMessage = "Could not check for updates. Continuing without an update check."
+		if showNoUpdates {
+			s.openInfoPopup("Update Check Failed", "Could not check for updates right now. Continuing without an update check.")
+		}
 		s.requestRedraw()
 		return
 	}
@@ -196,6 +208,8 @@ func (s *AppState) handleUpdateCheckResult(result appupdate.CheckResult, err err
 	s.updateStatusMessage = ""
 	if !result.UpdateAvailable {
 		s.updateAvailable = false
+		s.latestVersion = ""
+		s.latestAssetURL = ""
 		if showNoUpdates {
 			s.openInfoPopup("No Updates", "You are already running the latest version.")
 		}
