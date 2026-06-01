@@ -17,7 +17,7 @@ var (
 
 // mergePOData opens the optional PO workbook and merges PO numbers and quantities into the
 // provided inventory map. PO-only SKUs are skipped so the workbook does not create UNKNOWN groups.
-func mergePOData(poPath string, invMap map[string]*entry, logger *slog.Logger) error {
+func mergePOData(poPath string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) error {
 	if strings.TrimSpace(poPath) == "" {
 		return nil
 	}
@@ -49,7 +49,7 @@ func mergePOData(poPath string, invMap map[string]*entry, logger *slog.Logger) e
 			continue
 		}
 
-		e, ok := invMap[sku]
+		item, ok := inventoryBySKU[sku]
 		if !ok {
 			if logger != nil {
 				logger.Info("Skipping PO-only SKU (not present in inventory)", "SKU", sku)
@@ -77,7 +77,7 @@ func mergePOData(poPath string, invMap map[string]*entry, logger *slog.Logger) e
 				break
 			}
 
-			poNum, qty := applyPOToEntry(e, nextRow)
+			poNum, qty := applyPOToEntry(item, nextRow)
 			if logger != nil {
 				status := strings.TrimSpace(getCell(nextRow, poStatusIdx))
 				logger.Debug("Individual PO parse",
@@ -99,7 +99,7 @@ func mergePOData(poPath string, invMap map[string]*entry, logger *slog.Logger) e
 
 // applyPOToEntry normalizes one PO line, chooses the correct quantity column based on the status,
 // and assigns the PO into the first available slot on the inventory entry.
-func applyPOToEntry(e *entry, poRow []string) (string, int) {
+func applyPOToEntry(item *inventoryEntry, poRow []string) (string, int) {
 	status := strings.TrimSpace(getCell(poRow, poStatusIdx))
 	var qty int
 	if strings.EqualFold(status, "Back Order") {
@@ -113,27 +113,27 @@ func applyPOToEntry(e *entry, poRow []string) (string, int) {
 	if poNum == "" {
 		poNum = "0"
 	}
-	assignPO(e, poNum, qty)
+	assignPO(item, poNum, qty)
 	return poNum, qty
 }
 
 // assignPO assigns a PO number and quantity into the first available PO slot on the entry.
 // The workbook only exposes two visible PO lines, so any additional PO quantities are folded
 // into the first slot to avoid losing data.
-func assignPO(e *entry, poNum string, qty int) {
+func assignPO(item *inventoryEntry, poNum string, qty int) {
 	if poNum == "" && qty == 0 {
 		return
 	}
-	if e.PONum1 == "" {
-		e.PONum1 = poNum
-		e.OnPO1 = qty
+	if item.PONum1 == "" {
+		item.PONum1 = poNum
+		item.OnPO1 = qty
 		return
 	}
-	if e.PONum2 == "" {
-		e.PONum2 = poNum
-		e.OnPO2 = qty
+	if item.PONum2 == "" {
+		item.PONum2 = poNum
+		item.OnPO2 = qty
 		return
 	}
 	// fallback: accumulate into OnPO1
-	e.OnPO1 += qty
+	item.OnPO1 += qty
 }

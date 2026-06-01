@@ -34,7 +34,7 @@ type dataInsightsGroup struct {
 
 // buildDataInsightsRows groups Counter Cards into the seasonal sections used by the
 // Data Insights sheet, preserving the existing holiday/date/projection rules.
-func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
+func buildDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
@@ -101,7 +101,7 @@ func buildDataInsightsRows(entries []*entry, currentMonthsThrough float64, now t
 
 // buildOtherProductDataInsightsRows groups non-card products by class and occasion, then
 // applies the same seasonal bucketing and projection rules used by the card section.
-func buildOtherProductDataInsightsRows(entries []*entry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
+func buildOtherProductDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
@@ -189,19 +189,19 @@ func sortDataInsightsRows(rows []dataInsightsRow, useSortKey bool, useClass bool
 
 // isExactCounterCards reports whether an inventory entry belongs to the exact Counter Cards
 // class, which is the only class that should feed the left-hand Data Insights table.
-func isExactCounterCards(e *entry) bool {
-	category := strings.TrimSpace(e.RawClassDesc)
+func isExactCounterCards(item *inventoryEntry) bool {
+	category := strings.TrimSpace(item.RawClassDesc)
 	if category == "" {
-		category = strings.TrimSpace(e.ClassDesc)
+		category = strings.TrimSpace(item.ClassDesc)
 	}
 	return category == "Counter Cards"
 }
 
 // normalizeDataInsightsClassDescription trims the class description and provides a fallback for empty values.
-func normalizeDataInsightsClassDescription(e *entry) string {
-	category := strings.TrimSpace(e.RawClassDesc)
+func normalizeDataInsightsClassDescription(item *inventoryEntry) string {
+	category := strings.TrimSpace(item.RawClassDesc)
 	if category == "" {
-		category = strings.TrimSpace(e.ClassDesc)
+		category = strings.TrimSpace(item.ClassDesc)
 	}
 	if category == "" {
 		return "UNCLASSIFIED"

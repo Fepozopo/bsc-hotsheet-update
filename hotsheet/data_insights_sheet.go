@@ -46,7 +46,7 @@ func dataInsightsTableEndCol(startCol string, columnCount int) (string, error) {
 }
 
 // writeDataInsightsSheet creates the "Data Insights" worksheet and populates it with grouped sales data.
-func writeDataInsightsSheet(f *excelize.File, entries []*entry) error {
+func writeDataInsightsSheet(f *excelize.File, entries []*inventoryEntry) error {
 	now := time.Now()
 	currentMonthsThrough := currentMonthsThrough(now)
 	// Use the current month progress to annualize in-progress rows.

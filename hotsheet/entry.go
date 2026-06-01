@@ -1,7 +1,7 @@
 package hotsheet
 
-// entry represents a single inventory item.
-type entry struct {
+// inventoryEntry represents a single inventory item.
+type inventoryEntry struct {
 	SKU         string
 	ProductLine string
 	ClassDesc   string

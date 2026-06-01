@@ -8,27 +8,27 @@ import (
 
 // groupEntriesByProductLine iterates the inventory map and groups entries by ProductLine while
 // preserving the current behavior of skipping blank product-line entries.
-func groupEntriesByProductLine(invMap map[string]*entry, logger *slog.Logger) map[string][]*entry {
-	productGroups := make(map[string][]*entry)
-	for _, e := range invMap {
-		if e == nil {
+func groupEntriesByProductLine(inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) map[string][]*inventoryEntry {
+	productGroups := make(map[string][]*inventoryEntry)
+	for _, item := range inventoryBySKU {
+		if item == nil {
 			continue
 		}
-		pl := strings.TrimSpace(e.ProductLine)
+		pl := strings.TrimSpace(item.ProductLine)
 		if pl == "" {
 			if logger != nil {
 				// Skip entries without a ProductLine so the workbook does not create UNKNOWN files.
-				logger.Info("Skipping SKU with empty ProductLine (likely PO-only entry)", "SKU", e.SKU)
+				logger.Info("Skipping SKU with empty ProductLine (likely PO-only entry)", "SKU", item.SKU)
 			}
 			continue
 		}
-		productGroups[pl] = append(productGroups[pl], e)
+		productGroups[pl] = append(productGroups[pl], item)
 	}
 	return productGroups
 }
 
 // sortEntriesForProductLine sorts a product-line slice into a stable SKU order before workbook
 // generation so the tab contents remain consistent.
-func sortEntriesForProductLine(entries []*entry) {
+func sortEntriesForProductLine(entries []*inventoryEntry) {
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].SKU < entries[j].SKU })
 }

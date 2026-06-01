@@ -13,7 +13,7 @@ var standardSheetNames = []string{"Everyday", "Winter", "Spring"}
 
 // writeStandardSheets writes the Everyday, Winter, and Spring tabs, their headers, their rows,
 // and the shared widths and filters used by the standard hotsheet layout.
-func writeStandardSheets(f *excelize.File, entries []*entry, hasPO bool) error {
+func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool) error {
 	headers, mtoYtdIdx, mtoPyIdx := buildStandardSheetHeaders(hasPO)
 
 	for _, sheetName := range standardSheetNames {
@@ -134,7 +134,7 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 
 // writeStandardSheetRows writes the report rows for one standard worksheet, preserving the
 // current derived values, class-prefix behavior, and conditional coloring rules.
-func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry, hasPO bool, monthsThrough float64, mtoYtdIdx, mtoPyIdx int) error {
+func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inventoryEntry, hasPO bool, monthsThrough float64, mtoYtdIdx, mtoPyIdx int) error {
 	rowIdx := 2
 	for _, e := range entries {
 		sh := mapOccasion(e.Occasion)
@@ -165,7 +165,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 		mtoYTD := float64(totalAvail) / (soldPerMonthYTD + 1)
 		mtoPY := float64(totalAvail) / (soldPerMonthPY + 1)
 
-		classDesc := applyStandardClassPrefix(e)
+		classDesc := applyStandardDisplayClassPrefix(e)
 
 		vals := []interface{}{
 			e.SKU,
@@ -226,9 +226,9 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*entry
 	return nil
 }
 
-// applyStandardClassPrefix applies the current display-time class prefix rules while keeping the
+// applyStandardDisplayClassPrefix applies the current display-time class prefix rules while keeping the
 // original inventory class available through RawClassDesc for downstream reuse.
-func applyStandardClassPrefix(e *entry) string {
+func applyStandardDisplayClassPrefix(e *inventoryEntry) string {
 	classDesc := strings.TrimSpace(e.ClassDesc)
 	skuUpper := strings.ToUpper(strings.TrimSpace(e.SKU))
 	prefix := ""

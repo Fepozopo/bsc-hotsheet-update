@@ -11,7 +11,7 @@ import (
 
 // buildProductLineWorkbook creates one workbook for a product line, writes the standard report
 // sheets and Data Insights sheet, and saves the result to disk.
-func buildProductLineWorkbook(productLine string, entries []*entry, outputDir, dateStr string, hasPO bool, logger *slog.Logger) (string, error) {
+func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO bool, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
 	defer func() {
 		_ = f.Close()
@@ -31,7 +31,7 @@ func buildProductLineWorkbook(productLine string, entries []*entry, outputDir, d
 		return "", fmt.Errorf("failed to create Data Insights sheet for %s: %w", productLine, err)
 	}
 
-	outPath, err := saveWorkbook(f, outputDir, productLine, dateStr)
+	outPath, err := saveWorkbook(f, outputDir, productLine, dateStamp)
 	if err != nil {
 		if logger != nil {
 			logger.Error("failed to save hotsheet for product line", "productLine", productLine, "err", err)

@@ -34,7 +34,7 @@ var (
 
 // loadInventoryEntries opens the inventory workbook, parses the inventory rows, and returns
 // the populated inventory map keyed by SKU.
-func loadInventoryEntries(inventoryPath string, logger *slog.Logger) (map[string]*entry, error) {
+func loadInventoryEntries(inventoryPath string, logger *slog.Logger) (map[string]*inventoryEntry, error) {
 	if logger != nil {
 		logger.Info("loading inventory report", "path", inventoryPath)
 	}
@@ -55,24 +55,24 @@ func loadInventoryEntries(inventoryPath string, logger *slog.Logger) (map[string
 		return nil, fmt.Errorf("inventory report appears empty")
 	}
 
-	invMap := make(map[string]*entry)
+	inventoryBySKU := make(map[string]*inventoryEntry)
 	for rowNum := 2; ; rowNum += 3 {
-		e, stop := parseInventoryEntry(invRows, rowNum, logger)
+		item, stop := parseInventoryEntry(invRows, rowNum, logger)
 		if stop {
 			break
 		}
-		if e == nil {
+		if item == nil {
 			continue
 		}
-		invMap[e.SKU] = e
+		inventoryBySKU[item.SKU] = item
 	}
 
-	return invMap, nil
+	return inventoryBySKU, nil
 }
 
 // parseInventoryEntry parses one inventory item from the worksheet rows and reports whether
 // parsing should stop because the scan reached the workbook footer or ran out of rows.
-func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*entry, bool) {
+func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*inventoryEntry, bool) {
 	if rowNum-1 >= len(rows) {
 		return nil, true
 	}
@@ -98,56 +98,56 @@ func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*ent
 		return nil, true
 	}
 
-	e := &entry{SKU: sku}
-	e.ProductLine = getCellAt(rows, valRow, inventoryProductLineIdx)
-	e.ClassDesc = getCellAt(rows, valRow, inventoryClassIdx)
-	e.RawClassDesc = e.ClassDesc
-	e.Status = getCellAt(rows, valRow, inventoryStatusIdx)
-	e.OnHand = parseInt(getCellAt(rows, valRow, inventoryOnHandIdx))
-	e.OnPO = parseInt(getCellAt(rows, valRow, inventoryOnPOIdx))
-	e.OnSO = parseInt(getCellAt(rows, valRow, inventoryOnSOIdx))
-	e.OnBO = parseInt(getCellAt(rows, valRow, inventoryOnBOIdx))
-	e.TotalAvailable = parseInt(getCellAt(rows, valRow, inventoryTotalAvailIdx))
-	e.YTDSold = parseInt(getCellAt(rows, valRow, inventoryYTDSoldIdx))
-	e.YTDIssued = parseInt(getCellAt(rows, valRow, inventoryYTDIssuedIdx))
-	e.SoldPY = parseInt(getCellAt(rows, valRow, inventorySoldPYIdx))
-	e.IssuedPY = parseInt(getCellAt(rows, valRow, inventoryIssuedPYIdx))
-	e.Foil = getCellAt(rows, valRow, inventoryFoilIdx)
-	e.Occasion = getCellAt(rows, valRow, inventoryOccasionIdx)
-	e.Description = getCellAt(rows, valRow, inventoryDescIdx)
-	e.UPC = getCellAt(rows, valRow, inventoryUPCIdx)
-	e.RoyaltyCode = getCellAt(rows, valRow, inventoryRoyaltyCodeIdx)
-	e.DollarSoldYTD = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarYTDIdx))
-	e.DollarSoldPY = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarPYIdx))
+	item := &inventoryEntry{SKU: sku}
+	item.ProductLine = getCellAt(rows, valRow, inventoryProductLineIdx)
+	item.ClassDesc = getCellAt(rows, valRow, inventoryClassIdx)
+	item.RawClassDesc = item.ClassDesc
+	item.Status = getCellAt(rows, valRow, inventoryStatusIdx)
+	item.OnHand = parseInt(getCellAt(rows, valRow, inventoryOnHandIdx))
+	item.OnPO = parseInt(getCellAt(rows, valRow, inventoryOnPOIdx))
+	item.OnSO = parseInt(getCellAt(rows, valRow, inventoryOnSOIdx))
+	item.OnBO = parseInt(getCellAt(rows, valRow, inventoryOnBOIdx))
+	item.TotalAvailable = parseInt(getCellAt(rows, valRow, inventoryTotalAvailIdx))
+	item.YTDSold = parseInt(getCellAt(rows, valRow, inventoryYTDSoldIdx))
+	item.YTDIssued = parseInt(getCellAt(rows, valRow, inventoryYTDIssuedIdx))
+	item.SoldPY = parseInt(getCellAt(rows, valRow, inventorySoldPYIdx))
+	item.IssuedPY = parseInt(getCellAt(rows, valRow, inventoryIssuedPYIdx))
+	item.Foil = getCellAt(rows, valRow, inventoryFoilIdx)
+	item.Occasion = getCellAt(rows, valRow, inventoryOccasionIdx)
+	item.Description = getCellAt(rows, valRow, inventoryDescIdx)
+	item.UPC = getCellAt(rows, valRow, inventoryUPCIdx)
+	item.RoyaltyCode = getCellAt(rows, valRow, inventoryRoyaltyCodeIdx)
+	item.DollarSoldYTD = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarYTDIdx))
+	item.DollarSoldPY = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarPYIdx))
 
 	if logger != nil {
 		logger.Debug("Inventory parse",
-			"SKU", e.SKU,
+			"SKU", item.SKU,
 			"skuRow", rowNum,
 			"valRow", valRow,
-			"ProductLine", e.ProductLine,
-			"ClassDesc", e.ClassDesc,
-			"Status", e.Status,
-			"OnHand", e.OnHand,
-			"OnPO", e.OnPO,
-			"OnSO", e.OnSO,
-			"OnBO", e.OnBO,
-			"TotalAvailable", e.TotalAvailable,
-			"YTDSold", e.YTDSold,
-			"YTDIssued", e.YTDIssued,
-			"SoldPY", e.SoldPY,
-			"IssuedPY", e.IssuedPY,
-			"Foil", e.Foil,
-			"Occasion", e.Occasion,
-			"Description", e.Description,
-			"UPC", e.UPC,
-			"RoyaltyCode", e.RoyaltyCode,
-			"DollarSoldYTD", e.DollarSoldYTD,
-			"DollarSoldPY", e.DollarSoldPY,
+			"ProductLine", item.ProductLine,
+			"ClassDesc", item.ClassDesc,
+			"Status", item.Status,
+			"OnHand", item.OnHand,
+			"OnPO", item.OnPO,
+			"OnSO", item.OnSO,
+			"OnBO", item.OnBO,
+			"TotalAvailable", item.TotalAvailable,
+			"YTDSold", item.YTDSold,
+			"YTDIssued", item.YTDIssued,
+			"SoldPY", item.SoldPY,
+			"IssuedPY", item.IssuedPY,
+			"Foil", item.Foil,
+			"Occasion", item.Occasion,
+			"Description", item.Description,
+			"UPC", item.UPC,
+			"RoyaltyCode", item.RoyaltyCode,
+			"DollarSoldYTD", item.DollarSoldYTD,
+			"DollarSoldPY", item.DollarSoldPY,
 		)
 	}
 
-	return e, false
+	return item, false
 }
 
 // parseInventoryDollar converts inventory currency text into a float64 while preserving the
