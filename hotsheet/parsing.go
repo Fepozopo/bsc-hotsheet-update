@@ -1,0 +1,121 @@
+package hotsheet
+
+import (
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+// colToIndex converts Excel column letters to zero-based index (A->0).
+func colToIndex(col string) int {
+	col = strings.ToUpper(col)
+	idx := 0
+	for i := 0; i < len(col); i++ {
+		idx *= 26
+		idx += int(col[i]-'A') + 1
+	}
+	return idx - 1
+}
+
+// parseInt parses numbers permissively (commas, floats fallback, trailing "-" interpreted as negative).
+func parseInt(s string) int {
+	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
+	if s == "" {
+		return 0
+	}
+	if strings.HasSuffix(s, "-") {
+		s = "-" + strings.TrimSuffix(s, "-")
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		f, err2 := strconv.ParseFloat(s, 64)
+		if err2 != nil {
+			return 0
+		}
+		return int(f)
+	}
+	return v
+}
+
+// parseFloat parses numbers permissively (commas, trailing "-" interpreted as negative).
+// Returns a float64, or 0.0 on parse failure.
+func parseFloat(s string) float64 {
+	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
+	if s == "" {
+		return 0.0
+	}
+	if strings.HasSuffix(s, "-") {
+		s = "-" + strings.TrimSuffix(s, "-")
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0.0
+	}
+	return v
+}
+
+// getCellAt reads a cell from rows by 1-based row number and 0-based column index.
+func getCellAt(rows [][]string, rowNum int, colIdx int) string {
+	if rowNum-1 < 0 || rowNum-1 >= len(rows) {
+		return ""
+	}
+	row := rows[rowNum-1]
+	if colIdx < 0 || colIdx >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[colIdx])
+}
+
+// isRunDate determines whether a cell looks like a run-date (tries to detect explicit dates/times or a "Run Date" label).
+func isRunDate(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	upper := strings.ToUpper(s)
+	// explicit label like "Run Date" is a strong indicator
+	if strings.Contains(upper, "RUN") && strings.Contains(upper, "DATE") {
+		return true
+	}
+	// match common date formats like 04/09/2026 or 4/9/26
+	dateRe := regexp.MustCompile(`\b\d{1,2}/\d{1,2}/\d{2,4}\b`)
+	if dateRe.MatchString(s) {
+		return true
+	}
+	// match time patterns like 12:34
+	timeRe := regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
+	if timeRe.MatchString(s) {
+		return true
+	}
+	return false
+}
+
+// getRow returns the row at 1-based index vloc (or nil).
+func getRow(rows [][]string, vloc int) []string {
+	if vloc-1 >= 0 && vloc-1 < len(rows) {
+		return rows[vloc-1]
+	}
+	return nil
+}
+
+// getCell returns the string at index idx in row r (or empty string).
+func getCell(r []string, idx int) string {
+	if r == nil || idx < 0 || idx >= len(r) {
+		return ""
+	}
+	return r[idx]
+}
+
+// simple sanitizer for file names. It strips path separators and colons so the generated
+// output names stay safe on the local filesystem.
+func sanitizeFileName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "unknown"
+	}
+	// replace path separators and colons
+	s = strings.ReplaceAll(s, string(filepath.Separator), "_")
+	s = strings.ReplaceAll(s, ":", "")
+	return s
+}
