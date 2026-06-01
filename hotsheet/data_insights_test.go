@@ -41,7 +41,7 @@ func TestValentinesProjectionWindow(t *testing.T) {
 func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
 	t.Parallel()
 
-	entries := []*entry{{
+	entries := []*inventoryEntry{{
 		RawClassDesc:  "Counter Cards",
 		Occasion:      "Valentine's Day",
 		DollarSoldYTD: 100,
@@ -83,7 +83,7 @@ func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
 func TestGraduationProjectionWindow(t *testing.T) {
 	t.Parallel()
 
-	entries := []*entry{{
+	entries := []*inventoryEntry{{
 		RawClassDesc:  "Counter Cards",
 		Occasion:      "Graduation",
 		DollarSoldYTD: 100,
@@ -121,7 +121,7 @@ func TestGraduationProjectionWindow(t *testing.T) {
 func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 	t.Parallel()
 
-	entries := []*entry{{
+	entries := []*inventoryEntry{{
 		RawClassDesc:  "Counter Cards",
 		Occasion:      "Christmas",
 		DollarSoldYTD: 100,
@@ -167,7 +167,7 @@ func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
 
 	t.Parallel()
 
-	entries := []*entry{
+	entries := []*inventoryEntry{
 		{RawClassDesc: "Counter Cards", DollarSoldYTD: 999, DollarSoldPY: 888},
 		{RawClassDesc: "Napkins", Occasion: "HOLIDAY", DollarSoldYTD: 75, DollarSoldPY: 70},
 		{RawClassDesc: "Napkins", Occasion: "VETERAN'S DAY", DollarSoldYTD: 55, DollarSoldPY: 45},
@@ -224,7 +224,7 @@ func TestWriteDataInsightsSheetStacksOtherProductsBySeason(t *testing.T) {
 	t.Parallel()
 
 	f := excelize.NewFile()
-	entries := []*entry{
+	entries := []*inventoryEntry{
 		{RawClassDesc: "Gift Wrap", Occasion: "Mother's Day", DollarSoldYTD: 150, DollarSoldPY: 120},
 		{RawClassDesc: "Napkins", Occasion: "HOLIDAY", DollarSoldYTD: 120, DollarSoldPY: 90},
 		{RawClassDesc: "Napkins", Occasion: "VETERAN'S DAY", DollarSoldYTD: 55, DollarSoldPY: 45},

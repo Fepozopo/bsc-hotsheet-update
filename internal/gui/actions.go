@@ -113,7 +113,7 @@ func (s *AppState) startGenerate() {
 	s.requestRedraw()
 
 	go func(inv, po, outdir string) {
-		outputs, err := hotsheet.CreateHotsheet(inv, po, outdir)
+		outputs, err := hotsheet.Generate(inv, po, outdir)
 		s.queueEvent(generateCompletedEvent{Outputs: outputs, Err: err})
 	}(inventoryPath, poPath, outputDir)
 }
