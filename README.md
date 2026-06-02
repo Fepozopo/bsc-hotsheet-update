@@ -52,8 +52,9 @@ Built binaries are written to the `bin/` directory.
    - PO Report (optional): path to the PO XLSX (if omitted per-PO columns are not written).
    - Output Directory (optional): where generated files will be written (defaults to the current working directory).
 3. Click `Generate Hotsheets`. The app validates inputs, shows a modal progress popup, and performs the generation.
-4. On success a `Created Hotsheets` modal popup lists generated files. Double-click an entry to open it, or use `Open Folder` to reveal the containing folder. Click `Done` to close the popup and clear the inputs to run again.
-5. Use `Check for Updates` at any time to manually run the same optional update check that happens on startup.
+4. On success a `Created Hotsheets` modal popup lists generated files. Double-click an entry to open it, or use the Up/Down arrow keys to move through the list and press `Enter` to open the selected file. Use `Command+O` on macOS (or `Ctrl+O` on other platforms) to open the selected file's folder, `Command+D` (`Ctrl+D`) to dismiss the popup and reset the form, or press `Esc` to close the popup.
+5. Use `Command+I`, `Command+R`, and `Command+D` on macOS (or `Ctrl+I`, `Ctrl+R`, and `Ctrl+D` on other platforms) to browse for the inventory report, PO report, and output directory. Use `Command+G` to generate hotsheets, `Command+U` to check for updates, and `Command+Q` to quit.
+6. When an update is available, use `Command+U` to update, or `Esc` to close the popup and continue using the current version.
 
 Behavior notes
 

@@ -20,15 +20,16 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	w.LabelColored("Inventory report is required. PO report and output directory are optional.", "CC", color.RGBA{R: 95, G: 95, B: 95, A: 255})
 
 	s.renderSpacer(w, 6)
-	s.renderPathField(w, "Inventory Report:", "Path to inventory report (.xlsx)", &s.inventoryEditor, s.browseInventory)
+	s.renderPathField(w, "Inventory Report:", shortcutHint("Path to inventory report (.xlsx)", "I"), &s.inventoryEditor, s.browseInventory)
 	s.renderSpacer(w, 6)
-	s.renderPathField(w, "PO Report (optional):", "Path to PO report (.xlsx)", &s.poEditor, s.browsePO)
+	s.renderPathField(w, "PO Report (optional):", shortcutHint("Path to PO report (.xlsx)", "R"), &s.poEditor, s.browsePO)
 	s.renderSpacer(w, 6)
-	s.renderPathField(w, "Output Directory (optional):", "Directory for generated files", &s.outputEditor, s.browseOutputDir)
+	s.renderPathField(w, "Output Directory (optional):", shortcutHint("Directory for generated files", "D"), &s.outputEditor, s.browseOutputDir)
 	s.renderSpacer(w, 8)
 	s.renderStatusLine(w)
 	s.renderSpacer(w, 8)
 	s.renderMainButtons(w)
+	s.handleMainKeyboard(w)
 }
 
 // renderPathField draws a single labeled path editor with its Browse button and
@@ -90,16 +91,16 @@ func (s *AppState) renderStatusLine(w *nucular.Window) {
 // The requested layout keeps Quit and Check for Updates grouped on the left and
 // Generate Hotsheets aligned on the right.
 func (s *AppState) renderMainButtons(w *nucular.Window) {
-	w.Row(34).Static(80, 14, 150, 0, 170)
-	if w.ButtonText("Quit") {
+	w.Row(34).Static(120, 14, 220, 0, 220)
+	if w.ButtonText(buttonShortcutLabel("Quit", "Q")) {
 		s.quit()
 	}
 	w.Label("", "LC")
-	if w.ButtonText("Check for Updates") && !s.isBusy() && !s.updateCheckInProgress {
+	if w.ButtonText(buttonShortcutLabel("Check for Updates", "U")) && !s.isBusy() && !s.updateCheckInProgress {
 		s.startUpdateCheck(true)
 	}
 	w.Label("", "LC")
-	if w.ButtonText("Generate Hotsheets") && !s.isBusy() && !s.updateCheckInProgress {
+	if w.ButtonText(buttonShortcutLabel("Generate Hotsheets", "G")) && !s.isBusy() && !s.updateCheckInProgress {
 		s.startGenerate()
 	}
 }
