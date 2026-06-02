@@ -52,7 +52,7 @@ func shortcutHint(baseText, keyName string) string {
 func shortcutDisplay(keyName string) string {
 	keyName = strings.ToUpper(strings.TrimSpace(keyName))
 	if shortcutModifier() == key.ModMeta {
-		return "⌘" + keyName
+		return "Cmd+" + keyName
 	}
 	return "Ctrl+" + keyName
 }
