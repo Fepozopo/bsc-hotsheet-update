@@ -23,7 +23,7 @@ func (s *AppState) handleMainKeyboard(w *nucular.Window) {
 	switch {
 	case hasShortcut(in.Keyboard.Keys, key.CodeI) && !s.isBusy():
 		s.browseInventory()
-	case hasShortcut(in.Keyboard.Keys, key.CodeP) && !s.isBusy():
+	case hasShortcut(in.Keyboard.Keys, key.CodeR) && !s.isBusy():
 		s.browsePO()
 	case hasShortcut(in.Keyboard.Keys, key.CodeD) && !s.isBusy():
 		s.browseOutputDir()

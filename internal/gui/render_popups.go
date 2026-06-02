@@ -93,15 +93,15 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	w.Row(50).Dynamic(1)
 	w.Label("", "LC")
 	w.Row(18).Dynamic(1)
-	w.Label(fmt.Sprintf("%s to update, %s to continue, Esc to close.", shortcutDisplay("U"), shortcutDisplay("C")), "LC")
-	w.Row(32).Static(0, 160, 24, 180, 0)
+	w.Label(fmt.Sprintf("%s to update, or Esc to close.", shortcutDisplay("U")), "LC")
+	w.Row(32).Static(0, 160, 24, 120, 0)
 	w.Label("", "LC")
 	if w.ButtonText(buttonShortcutLabel("Update", "U")) {
 		s.beginSelfUpdate()
 		return
 	}
 	w.Label("", "LC")
-	if w.ButtonText(buttonShortcutLabel("Continue", "C")) {
+	if w.ButtonText("Continue") {
 		s.closePopup(w)
 	}
 	w.Label("", "LC")
@@ -241,9 +241,6 @@ func (s *AppState) handleUpdateAvailablePopupKeyboard(w *nucular.Window) bool {
 	switch {
 	case hasShortcut(in.Keyboard.Keys, key.CodeU):
 		s.beginSelfUpdate()
-		return true
-	case hasShortcut(in.Keyboard.Keys, key.CodeC):
-		s.closePopup(w)
 		return true
 	}
 

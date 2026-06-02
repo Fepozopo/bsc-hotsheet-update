@@ -22,7 +22,7 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, "Inventory Report:", shortcutHint("Path to inventory report (.xlsx)", "I"), &s.inventoryEditor, s.browseInventory)
 	s.renderSpacer(w, 6)
-	s.renderPathField(w, "PO Report (optional):", shortcutHint("Path to PO report (.xlsx)", "P"), &s.poEditor, s.browsePO)
+	s.renderPathField(w, "PO Report (optional):", shortcutHint("Path to PO report (.xlsx)", "R"), &s.poEditor, s.browsePO)
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, "Output Directory (optional):", shortcutHint("Directory for generated files", "D"), &s.outputEditor, s.browseOutputDir)
 	s.renderSpacer(w, 8)
