@@ -1,10 +1,12 @@
 package gui
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/aarzilli/nucular"
 	"github.com/aarzilli/nucular/rect"
+	"golang.org/x/mobile/event/key"
 )
 
 // AppState stores the persistent state that drives the immediate-mode GUI.
@@ -12,12 +14,24 @@ import (
 // Unlike retained-mode toolkits, Nucular does not keep long-lived widgets with
 // their own internal application logic. Instead, the application owns the state
 // explicitly and redraws the interface from that state on every frame.
+type popupKind int
+
+const (
+	popupNone popupKind = iota
+	popupMessage
+	popupGenerateProgress
+	popupUpdateAvailable
+	popupUpdateProgress
+	popupOutputs
+)
+
 type AppState struct {
 	mw                    nucular.MasterWindow
 	events                chan UIEvent
 	updateCheckStarted    bool
 	updateCheckInProgress bool
 	windowBounds          rect.Rect
+	currentPopup          popupKind
 
 	inventoryEditor nucular.TextEditor
 	poEditor        nucular.TextEditor
@@ -104,4 +118,19 @@ func newPathEditor() nucular.TextEditor {
 		Flags:  nucular.EditField,
 		Maxlen: 4096,
 	}
+}
+
+// shortcutModifier returns the platform-appropriate application shortcut
+// modifier: Command on macOS, Control elsewhere.
+func shortcutModifier() key.Modifiers {
+	if runtime.GOOS == "darwin" {
+		return key.ModMeta
+	}
+	return key.ModControl
+}
+
+// anyEditorActive reports whether one of the main form text inputs currently
+// owns keyboard focus.
+func (s *AppState) anyEditorActive() bool {
+	return s.inventoryEditor.Active || s.poEditor.Active || s.outputEditor.Active
 }

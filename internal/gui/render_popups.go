@@ -23,14 +23,18 @@ func (s *AppState) openInfoPopup(title, message string) {
 // openMessagePopup renders a small centered popup for one-off informational or
 // error messages.
 func (s *AppState) openMessagePopup(title, message, dismissText string) {
+	s.currentPopup = popupMessage
 	s.mw.PopupOpen(title, nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(560, 220), true, func(w *nucular.Window) {
+		if s.handlePopupEscape(w) {
+			return
+		}
 		s.renderPopupMessage(w, message, 48)
 		w.Row(56).Dynamic(1)
 		w.Label("", "LC")
 		w.Row(32).Static(0, 110, 0)
 		w.Label("", "LC")
 		if w.ButtonText(dismissText) {
-			w.Close()
+			s.closePopup(w)
 		}
 		w.Label("", "LC")
 	})
@@ -39,6 +43,7 @@ func (s *AppState) openMessagePopup(title, message, dismissText string) {
 // openGenerateProgressPopup shows the modal progress popup for hotsheet
 // generation.
 func (s *AppState) openGenerateProgressPopup() {
+	s.currentPopup = popupGenerateProgress
 	s.mw.PopupOpen("Generating Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(460, 200), true, s.renderGenerateProgressPopup)
 }
 
@@ -46,7 +51,10 @@ func (s *AppState) openGenerateProgressPopup() {
 // popup.
 func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 	if !s.generateInProgress {
-		w.Close()
+		s.closePopup(w)
+		return
+	}
+	if s.handlePopupEscape(w) {
 		return
 	}
 
@@ -58,13 +66,14 @@ func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 	w.Row(32).Static(0, 110, 0)
 	w.Label("", "LC")
 	if w.ButtonText("Cancel") {
-		w.Close()
+		s.closePopup(w)
 	}
 	w.Label("", "LC")
 }
 
 // openUpdateAvailablePopup shows the optional update prompt.
 func (s *AppState) openUpdateAvailablePopup() {
+	s.currentPopup = popupUpdateAvailable
 	s.mw.PopupOpen("Update Available", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(640, 240), true, s.renderUpdateAvailablePopup)
 }
 
@@ -72,23 +81,28 @@ func (s *AppState) openUpdateAvailablePopup() {
 // continuing to use the current version.
 func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	if s.updateInProgress {
-		w.Close()
+		s.closePopup(w)
+		return
+	}
+	if s.handleUpdateAvailablePopupKeyboard(w) {
 		return
 	}
 
 	message := fmt.Sprintf("A new version (%s) is available. You can update now, or continue using the current version.", s.latestVersion)
 	s.renderPopupMessage(w, message, 50)
-	w.Row(74).Dynamic(1)
+	w.Row(50).Dynamic(1)
 	w.Label("", "LC")
-	w.Row(32).Static(0, 120, 24, 120, 0)
+	w.Row(18).Dynamic(1)
+	w.Label(fmt.Sprintf("%s to update, %s to continue, Esc to close.", shortcutDisplay("U"), shortcutDisplay("C")), "LC")
+	w.Row(32).Static(0, 160, 24, 180, 0)
 	w.Label("", "LC")
-	if w.ButtonText("Update") {
+	if w.ButtonText(buttonShortcutLabel("Update", "U")) {
 		s.beginSelfUpdate()
 		return
 	}
 	w.Label("", "LC")
-	if w.ButtonText("Continue") {
-		w.Close()
+	if w.ButtonText(buttonShortcutLabel("Continue", "C")) {
+		s.closePopup(w)
 	}
 	w.Label("", "LC")
 }
@@ -96,6 +110,7 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 // openUpdateProgressPopup shows the modal progress popup while a self-update is
 // being applied.
 func (s *AppState) openUpdateProgressPopup() {
+	s.currentPopup = popupUpdateProgress
 	s.mw.PopupOpen("Updating", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(460, 200), true, s.renderUpdateProgressPopup)
 }
 
@@ -103,7 +118,10 @@ func (s *AppState) openUpdateProgressPopup() {
 // popup.
 func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 	if !s.updateInProgress {
-		w.Close()
+		s.closePopup(w)
+		return
+	}
+	if s.handlePopupEscape(w) {
 		return
 	}
 
@@ -115,13 +133,14 @@ func (s *AppState) renderUpdateProgressPopup(w *nucular.Window) {
 	w.Row(32).Static(0, 110, 0)
 	w.Label("", "LC")
 	if w.ButtonText("Cancel") {
-		w.Close()
+		s.closePopup(w)
 	}
 	w.Label("", "LC")
 }
 
 // openOutputsPopup shows the modal popup that lists the generated output files.
 func (s *AppState) openOutputsPopup() {
+	s.currentPopup = popupOutputs
 	s.mw.PopupOpen("Created Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(660, 430), true, s.renderOutputsPopup)
 }
 
@@ -140,7 +159,7 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		w.Row(20).Dynamic(1)
 		w.Label(fmt.Sprintf("Created files (%d):", len(s.outputs)), "LC")
 		w.Row(18).Dynamic(1)
-		w.Label("Double-click a file to open it, or use the Up/Down arrows and Enter.", "LC")
+		w.Label(fmt.Sprintf("Double-click to open, use ↑/↓ and Enter, %s for folder, %s for done, or Esc to close.", shortcutDisplay("O"), shortcutDisplay("D")), "LC")
 		w.Row(235).Dynamic(1)
 		if gl, gw := nucular.GroupListStart(w, len(s.outputs), "created-hotsheets", nucular.WindowBorder|nucular.WindowNoHScrollbar); gw != nil {
 			// SkipToVisible keeps large result lists from rendering every row on
@@ -161,16 +180,14 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		}
 	}
 
-	w.Row(32).Static(0, 130, 24, 90, 0)
+	w.Row(32).Static(0, 180, 24, 150, 0)
 	w.Label("", "LC")
-	if w.ButtonText("Open Folder") {
+	if w.ButtonText(buttonShortcutLabel("Open Folder", "O")) {
 		s.openSelectedOutputFolder()
 	}
 	w.Label("", "LC")
-	if w.ButtonText("Done") {
-		s.resetInputs()
-		s.outputs = nil
-		w.Close()
+	if w.ButtonText(buttonShortcutLabel("Done", "D")) {
+		s.closeOutputsPopup(w)
 	}
 	w.Label("", "LC")
 }
@@ -178,7 +195,7 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 // handleOutputsPopupKeyboard applies keyboard navigation and activation for the
 // generated output list while the popup is open.
 func (s *AppState) handleOutputsPopupKeyboard(w *nucular.Window) {
-	if len(s.outputs) == 0 {
+	if s.handlePopupEscape(w) || len(s.outputs) == 0 {
 		return
 	}
 
@@ -194,7 +211,62 @@ func (s *AppState) handleOutputsPopupKeyboard(w *nucular.Window) {
 		s.moveSelectedOutput(-1)
 	case in.Keyboard.Pressed(key.CodeReturnEnter), in.Keyboard.Pressed(key.CodeKeypadEnter):
 		s.openSelectedOutput()
+	case hasShortcut(in.Keyboard.Keys, key.CodeO):
+		s.openSelectedOutputFolder()
+	case hasShortcut(in.Keyboard.Keys, key.CodeD):
+		s.closeOutputsPopup(w)
 	}
+}
+
+// closeOutputsPopup dismisses the output-results popup and resets the inputs for
+// the next generation run.
+func (s *AppState) closeOutputsPopup(w *nucular.Window) {
+	s.resetInputs()
+	s.outputs = nil
+	s.closePopup(w)
+}
+
+// handleUpdateAvailablePopupKeyboard applies the update prompt's keyboard
+// shortcuts and returns true when one of them closes or advances the popup.
+func (s *AppState) handleUpdateAvailablePopupKeyboard(w *nucular.Window) bool {
+	if s.handlePopupEscape(w) {
+		return true
+	}
+
+	in := w.Input()
+	if in == nil {
+		return false
+	}
+
+	switch {
+	case hasShortcut(in.Keyboard.Keys, key.CodeU):
+		s.beginSelfUpdate()
+		return true
+	case hasShortcut(in.Keyboard.Keys, key.CodeC):
+		s.closePopup(w)
+		return true
+	}
+
+	return false
+}
+
+// handlePopupEscape closes the active popup when Escape is pressed.
+func (s *AppState) handlePopupEscape(w *nucular.Window) bool {
+	in := w.Input()
+	if in == nil {
+		return false
+	}
+	if !in.Keyboard.Pressed(key.CodeEscape) {
+		return false
+	}
+	s.closePopup(w)
+	return true
+}
+
+// closePopup dismisses the currently open popup and clears the popup state.
+func (s *AppState) closePopup(w *nucular.Window) {
+	s.currentPopup = popupNone
+	w.Close()
 }
 
 // centeredPopupRect returns a popup rectangle that is centered inside the main
