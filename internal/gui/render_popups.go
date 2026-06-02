@@ -7,6 +7,7 @@ import (
 
 	"github.com/aarzilli/nucular"
 	"github.com/aarzilli/nucular/rect"
+	"golang.org/x/mobile/event/key"
 )
 
 // openErrorPopup shows a modal error popup with a single dismiss button.
@@ -127,6 +128,8 @@ func (s *AppState) openOutputsPopup() {
 // renderOutputsPopup draws the output list and action buttons after generation
 // completes.
 func (s *AppState) renderOutputsPopup(w *nucular.Window) {
+	s.handleOutputsPopupKeyboard(w)
+
 	if len(s.outputs) == 0 {
 		w.Row(20).Dynamic(1)
 		w.Label("No files were created.", "LC")
@@ -137,7 +140,7 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		w.Row(20).Dynamic(1)
 		w.Label(fmt.Sprintf("Created files (%d):", len(s.outputs)), "LC")
 		w.Row(18).Dynamic(1)
-		w.Label("Double-click a file to open it.", "LC")
+		w.Label("Double-click a file to open it, or use the Up/Down arrows and Enter.", "LC")
 		w.Row(235).Dynamic(1)
 		if gl, gw := nucular.GroupListStart(w, len(s.outputs), "created-hotsheets", nucular.WindowBorder|nucular.WindowNoHScrollbar); gw != nil {
 			// SkipToVisible keeps large result lists from rendering every row on
@@ -149,6 +152,10 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 				selected := idx == s.selectedOutput
 				if gw.SelectableLabel(s.outputs[idx], "LC", &selected) {
 					s.handleOutputClick(idx)
+				}
+				if idx == s.selectedOutput && s.selectedOutputNeedsScroll {
+					gl.Center()
+					s.selectedOutputNeedsScroll = false
 				}
 			}
 		}
@@ -166,6 +173,28 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		w.Close()
 	}
 	w.Label("", "LC")
+}
+
+// handleOutputsPopupKeyboard applies keyboard navigation and activation for the
+// generated output list while the popup is open.
+func (s *AppState) handleOutputsPopupKeyboard(w *nucular.Window) {
+	if len(s.outputs) == 0 {
+		return
+	}
+
+	in := w.Input()
+	if in == nil {
+		return
+	}
+
+	switch {
+	case in.Keyboard.Pressed(key.CodeDownArrow):
+		s.moveSelectedOutput(1)
+	case in.Keyboard.Pressed(key.CodeUpArrow):
+		s.moveSelectedOutput(-1)
+	case in.Keyboard.Pressed(key.CodeReturnEnter), in.Keyboard.Pressed(key.CodeKeypadEnter):
+		s.openSelectedOutput()
+	}
 }
 
 // centeredPopupRect returns a popup rectangle that is centered inside the main

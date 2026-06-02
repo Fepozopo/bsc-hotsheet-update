@@ -132,7 +132,13 @@ func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	}
 
 	s.outputs = outputs
-	s.selectedOutput = -1
+	if len(outputs) > 0 {
+		s.selectedOutput = 0
+		s.selectedOutputNeedsScroll = true
+	} else {
+		s.selectedOutput = -1
+		s.selectedOutputNeedsScroll = false
+	}
 	s.lastClickedOutput = -1
 	s.lastClickAt = time.Time{}
 	s.openOutputsPopup()
@@ -146,7 +152,42 @@ func (s *AppState) resetInputs() {
 	setEditorText(&s.poEditor, "")
 	setEditorText(&s.outputEditor, "")
 	s.selectedOutput = -1
+	s.selectedOutputNeedsScroll = false
 	s.lastClickedOutput = -1
+	s.lastClickAt = time.Time{}
+	s.requestRedraw()
+}
+
+// moveSelectedOutput changes the active result-list selection by delta rows.
+func (s *AppState) moveSelectedOutput(delta int) {
+	if len(s.outputs) == 0 || delta == 0 {
+		return
+	}
+
+	next := s.selectedOutput
+	if next < 0 {
+		if delta > 0 {
+			next = 0
+		} else {
+			next = len(s.outputs) - 1
+		}
+	} else {
+		next += delta
+		if next < 0 {
+			next = 0
+		}
+		if next >= len(s.outputs) {
+			next = len(s.outputs) - 1
+		}
+	}
+
+	if next == s.selectedOutput {
+		return
+	}
+
+	s.selectedOutput = next
+	s.selectedOutputNeedsScroll = true
+	s.lastClickedOutput = next
 	s.lastClickAt = time.Time{}
 	s.requestRedraw()
 }
@@ -160,6 +201,7 @@ func (s *AppState) handleOutputClick(index int) {
 		s.openSelectedOutput()
 	}
 	s.selectedOutput = index
+	s.selectedOutputNeedsScroll = false
 	s.lastClickedOutput = index
 	s.lastClickAt = now
 	s.requestRedraw()
@@ -175,8 +217,7 @@ func (s *AppState) openSelectedOutput() {
 // openSelectedOutputFolder opens the containing directory for the selected
 // output file.
 //
-// If no row is selected, the function falls back to the first generated output,
-// matching the behavior of the earlier Fyne implementation.
+// If no row is selected, the function falls back to the first generated output.
 func (s *AppState) openSelectedOutputFolder() {
 	if len(s.outputs) == 0 {
 		return

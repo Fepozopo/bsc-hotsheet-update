@@ -23,10 +23,11 @@ type AppState struct {
 	poEditor        nucular.TextEditor
 	outputEditor    nucular.TextEditor
 
-	outputs           []string
-	selectedOutput    int
-	lastClickedOutput int
-	lastClickAt       time.Time
+	outputs                   []string
+	selectedOutput            int
+	selectedOutputNeedsScroll bool
+	lastClickedOutput         int
+	lastClickAt               time.Time
 
 	generateInProgress  bool
 	updateInProgress    bool
