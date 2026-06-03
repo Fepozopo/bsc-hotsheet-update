@@ -3,6 +3,7 @@ package gui
 import (
 	"image"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/aarzilli/nucular"
@@ -16,8 +17,11 @@ const (
 	defaultWindowHeight = 600
 
 	// defaultUIScale increases the effective size of the Nucular widgets so the
-	// UI is comfortably readable on modern high-DPI displays, especially macOS.
-	defaultUIScale = 2.0
+	// UI is comfortably readable on modern high-DPI displays.
+	baseUIScale = 1.5
+	// darwinUIScale is a further increase for macOS, where the default scaling is
+	// more aggressive and can result in a very small UI if left at 1.5.
+	darwinUIScale = 2.0
 )
 
 // Run constructs the Nucular master window, binds it to the application state,
@@ -33,7 +37,11 @@ func Run() error {
 	// disappears, so a separate watchdog terminates the process once the window
 	// is actually reported closed.
 	mw.OnClose(func() {})
-	mw.SetStyle(nstyle.FromTheme(nstyle.DefaultTheme, defaultUIScale))
+	scale := baseUIScale
+	if runtime.GOOS == "darwin" {
+		scale = darwinUIScale
+	}
+	mw.SetStyle(nstyle.FromTheme(nstyle.DefaultTheme, scale))
 	state.BindMasterWindow(mw)
 	go watchForClosedWindow(mw)
 	mw.Main()
