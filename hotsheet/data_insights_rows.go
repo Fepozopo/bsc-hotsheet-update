@@ -7,16 +7,20 @@ import (
 )
 
 // dataInsightsRow represents one output row in the Data Insights sheet.
+//
+// YoYDisplay stores the exact text written into the rightmost column. For seasonal rows that
+// includes status wording such as "IN PROGRESS:" or "COMPLETE:", while everyday rows only
+// show the projected year-over-year percentage.
 type dataInsightsRow struct {
-	Class           string
-	Occasion        string
-	Date            string
-	DollarSoldYTD   float64
-	DollarSoldPY    float64
-	ProjectedDollar float64
-	Final           string
-	sortKey         int
-	sortOccasion    string
+	Class               string
+	Occasion            string
+	Date                string
+	DollarSoldYTD       float64
+	DollarSoldPY        float64
+	ProjectedDollar     float64
+	YoYDisplay          string
+	occasionDateSortKey int
+	occasionSortLabel   string
 }
 
 // dataInsightsGroup aggregates sales for a single normalized occasion within a section.
@@ -25,7 +29,7 @@ type dataInsightsGroup struct {
 	Class               string
 	Occasion            string
 	Date                string
-	sortKey             int
+	occasionDateSortKey int
 	complete            bool
 	TargetMonthsThrough float64
 	DollarSoldYTD       float64
@@ -56,7 +60,7 @@ func buildDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float
 				Section:             section,
 				Occasion:            occasion,
 				Date:                dateInfo.Display,
-				sortKey:             dateInfo.SortKey,
+				occasionDateSortKey: dateInfo.SortKey,
 				complete:            dateInfo.Complete,
 				TargetMonthsThrough: dateInfo.TargetMonthsThrough,
 			}
@@ -69,16 +73,16 @@ func buildDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float
 
 	rowsBySection := newDataInsightsRowsBySection()
 	for _, group := range groups {
-		dateInfo, projected, final := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
+		dateInfo, projected, yoyDisplay := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
 		row := dataInsightsRow{
-			Occasion:        group.Occasion,
-			Date:            dateInfo.Display,
-			DollarSoldYTD:   group.DollarSoldYTD,
-			DollarSoldPY:    group.DollarSoldPY,
-			ProjectedDollar: projected,
-			Final:           final,
-			sortKey:         group.sortKey,
-			sortOccasion:    strings.ToUpper(group.Occasion),
+			Occasion:            group.Occasion,
+			Date:                dateInfo.Display,
+			DollarSoldYTD:       group.DollarSoldYTD,
+			DollarSoldPY:        group.DollarSoldPY,
+			ProjectedDollar:     projected,
+			YoYDisplay:          yoyDisplay,
+			occasionDateSortKey: group.occasionDateSortKey,
+			occasionSortLabel:   strings.ToUpper(group.Occasion),
 		}
 		if group.Section == "Spring" {
 			rowsBySection["Spring"] = append(rowsBySection["Spring"], row)
@@ -99,9 +103,9 @@ func buildDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float
 	return rowsBySection
 }
 
-// buildOtherProductDataInsightsRows groups non-card products by class and occasion, then
+// buildOtherProductsDataInsightsRows groups non-card products by class and occasion, then
 // applies the same seasonal bucketing and projection rules used by the card section.
-func buildOtherProductDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
+func buildOtherProductsDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
 	groups := make(map[string]*dataInsightsGroup)
 
 	for _, e := range entries {
@@ -124,7 +128,7 @@ func buildOtherProductDataInsightsRows(entries []*inventoryEntry, currentMonthsT
 				Class:               classDesc,
 				Occasion:            occasion,
 				Date:                dateInfo.Display,
-				sortKey:             dateInfo.SortKey,
+				occasionDateSortKey: dateInfo.SortKey,
 				complete:            dateInfo.Complete,
 				TargetMonthsThrough: dateInfo.TargetMonthsThrough,
 			}
@@ -137,17 +141,17 @@ func buildOtherProductDataInsightsRows(entries []*inventoryEntry, currentMonthsT
 
 	rowsBySection := newDataInsightsRowsBySection()
 	for _, group := range groups {
-		dateInfo, projected, final := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
+		dateInfo, projected, yoyDisplay := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
 		row := dataInsightsRow{
-			Class:           group.Class,
-			Occasion:        group.Occasion,
-			Date:            dateInfo.Display,
-			DollarSoldYTD:   group.DollarSoldYTD,
-			DollarSoldPY:    group.DollarSoldPY,
-			ProjectedDollar: projected,
-			Final:           final,
-			sortKey:         group.sortKey,
-			sortOccasion:    strings.ToUpper(group.Occasion),
+			Class:               group.Class,
+			Occasion:            group.Occasion,
+			Date:                dateInfo.Display,
+			DollarSoldYTD:       group.DollarSoldYTD,
+			DollarSoldPY:        group.DollarSoldPY,
+			ProjectedDollar:     projected,
+			YoYDisplay:          yoyDisplay,
+			occasionDateSortKey: group.occasionDateSortKey,
+			occasionSortLabel:   strings.ToUpper(group.Occasion),
 		}
 		rowsBySection[group.Section] = append(rowsBySection[group.Section], row)
 	}
@@ -177,13 +181,13 @@ func sortDataInsightsRows(rows []dataInsightsRow, useSortKey bool, useClass bool
 		if useClass && rows[i].Class != rows[j].Class {
 			return strings.ToUpper(rows[i].Class) < strings.ToUpper(rows[j].Class)
 		}
-		if useSortKey && rows[i].sortKey != rows[j].sortKey {
-			return rows[i].sortKey < rows[j].sortKey
+		if useSortKey && rows[i].occasionDateSortKey != rows[j].occasionDateSortKey {
+			return rows[i].occasionDateSortKey < rows[j].occasionDateSortKey
 		}
-		if rows[i].sortOccasion == rows[j].sortOccasion {
+		if rows[i].occasionSortLabel == rows[j].occasionSortLabel {
 			return rows[i].Occasion < rows[j].Occasion
 		}
-		return rows[i].sortOccasion < rows[j].sortOccasion
+		return rows[i].occasionSortLabel < rows[j].occasionSortLabel
 	})
 }
 

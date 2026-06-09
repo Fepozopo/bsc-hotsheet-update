@@ -41,18 +41,20 @@ var dataInsightsDateMap = map[string]occasionDateInfo{
 	"CHRISTMAS":         {Display: "December 25", Month: time.December, Day: 25, SortKey: 1225},
 }
 
-// dataInsightsSeasonTotalFinal derives the section total status text from the rows that
-// were actually written so the total matches the same in-progress/complete wording used by
-// the detail rows above it.
-func dataInsightsSeasonTotalFinal(totalProjected, totalPY float64, rows []dataInsightsRow) string {
+// dataInsightsSeasonTotalYoYDisplay derives the section-total text for the rightmost
+// Data Insights column from the rows that were actually written.
+//
+// Seasonal detail rows can be marked NOT STARTED, IN PROGRESS, or COMPLETE, and the total row
+// needs to mirror that same wording so the aggregate reads consistently with the rows above it.
+func dataInsightsSeasonTotalYoYDisplay(totalProjected, totalPY float64, rows []dataInsightsRow) string {
 	sectionStarted := true
 	sectionComplete := true
 	for _, row := range rows {
-		if strings.HasPrefix(row.Final, "NOT STARTED") {
+		if strings.HasPrefix(row.YoYDisplay, "NOT STARTED") {
 			sectionStarted = false
 			sectionComplete = false
 		}
-		if strings.HasPrefix(row.Final, "IN PROGRESS:") {
+		if strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
 			sectionComplete = false
 		}
 	}
@@ -63,7 +65,8 @@ func dataInsightsSeasonTotalFinal(totalProjected, totalPY float64, rows []dataIn
 }
 
 // projectDataInsightsRow centralizes the seasonal projection rules so both card and
-// non-card Data Insights rows use the same date metadata and year-over-year logic.
+// non-card Data Insights rows use the same date metadata, projected sales, and rightmost-column
+// year-over-year display text.
 func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldPY, currentMonthsThrough float64, now time.Time) (occasionDateInfo, float64, string) {
 	dateInfo := dataInsightsDateInfo(section, occasion, now)
 

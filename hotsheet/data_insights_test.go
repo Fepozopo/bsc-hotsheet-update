@@ -64,8 +64,8 @@ func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
 	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
 		t.Fatalf("expected projected sales %.9f, got %.9f", expectedProjected, row.ProjectedDollar)
 	}
-	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
-		t.Fatalf("expected in-progress status before year end, got %q", row.Final)
+	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
+		t.Fatalf("expected in-progress status before year end, got %q", row.YoYDisplay)
 	}
 
 	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC)), time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC))
@@ -73,8 +73,8 @@ func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
 	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
 		t.Fatalf("expected projected sales to match YTD at the end of the season, got %.9f", row.ProjectedDollar)
 	}
-	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
-		t.Fatalf("expected status to remain in progress on Dec 31, got %q", row.Final)
+	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
+		t.Fatalf("expected status to remain in progress on Dec 31, got %q", row.YoYDisplay)
 	}
 }
 
@@ -101,8 +101,8 @@ func TestGraduationProjectionWindow(t *testing.T) {
 	if row.Date != "mid-June" {
 		t.Fatalf("expected Graduation to display as mid-June, got %q", row.Date)
 	}
-	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
-		t.Fatalf("expected Graduation to be in progress before June 15, got %q", row.Final)
+	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
+		t.Fatalf("expected Graduation to be in progress before June 15, got %q", row.YoYDisplay)
 	}
 
 	afterCutoff := time.Date(2026, time.June, 16, 12, 0, 0, 0, time.UTC)
@@ -111,8 +111,8 @@ func TestGraduationProjectionWindow(t *testing.T) {
 	if row.Date != "mid-June" {
 		t.Fatalf("expected Graduation to still display as mid-June, got %q", row.Date)
 	}
-	if !strings.HasPrefix(row.Final, "COMPLETE:") {
-		t.Fatalf("expected Graduation to be complete after June 15, got %q", row.Final)
+	if !strings.HasPrefix(row.YoYDisplay, "COMPLETE:") {
+		t.Fatalf("expected Graduation to be complete after June 15, got %q", row.YoYDisplay)
 	}
 }
 
@@ -142,11 +142,11 @@ func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
 		t.Fatalf("expected winter projection to stay at YTD before July 1, got %.9f", row.ProjectedDollar)
 	}
-	if !strings.HasPrefix(row.Final, "NOT STARTED:") {
-		t.Fatalf("expected Christmas to show NOT STARTED before July 1, got %q", row.Final)
+	if !strings.HasPrefix(row.YoYDisplay, "NOT STARTED:") {
+		t.Fatalf("expected Christmas to show NOT STARTED before July 1, got %q", row.YoYDisplay)
 	}
-	if !strings.Contains(row.Final, "YoY") {
-		t.Fatalf("expected NOT STARTED status to include YoY comparison, got %q", row.Final)
+	if !strings.Contains(row.YoYDisplay, "YoY") {
+		t.Fatalf("expected NOT STARTED status to include YoY comparison, got %q", row.YoYDisplay)
 	}
 
 	inSeason := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
@@ -156,14 +156,14 @@ func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
 		t.Fatalf("expected winter projection %.9f after July 1, got %.9f", expectedProjected, row.ProjectedDollar)
 	}
-	if !strings.HasPrefix(row.Final, "IN PROGRESS:") {
-		t.Fatalf("expected Christmas to remain in progress before Dec 25, got %q", row.Final)
+	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
+		t.Fatalf("expected Christmas to remain in progress before Dec 25, got %q", row.YoYDisplay)
 	}
 }
 
-// TestBuildOtherProductDataInsightsRowsSeasonalBuckets confirms other products split into
+// TestBuildOtherProductsDataInsightsRowsSeasonalBuckets confirms other products split into
 // class/occasion buckets and reuse the same holiday metadata and projection rules.
-func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
+func TestBuildOtherProductsDataInsightsRowsSeasonalBuckets(t *testing.T) {
 
 	t.Parallel()
 
@@ -179,7 +179,7 @@ func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
 	}
 
 	now := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
-	rowsBySection := buildOtherProductDataInsightsRows(entries, currentMonthsThrough(now), now)
+	rowsBySection := buildOtherProductsDataInsightsRows(entries, currentMonthsThrough(now), now)
 
 	if got := len(rowsBySection["Spring"]); got != 1 {
 		t.Fatalf("expected one Spring row, got %d", got)
@@ -190,8 +190,8 @@ func TestBuildOtherProductDataInsightsRowsSeasonalBuckets(t *testing.T) {
 	if rowsBySection["Spring"][0].Date != "July 4" {
 		t.Fatalf("expected Independence Day to display July 4, got %q", rowsBySection["Spring"][0].Date)
 	}
-	if !strings.HasPrefix(rowsBySection["Spring"][0].Final, "COMPLETE:") {
-		t.Fatalf("expected Independence Day to be complete, got %q", rowsBySection["Spring"][0].Final)
+	if !strings.HasPrefix(rowsBySection["Spring"][0].YoYDisplay, "COMPLETE:") {
+		t.Fatalf("expected Independence Day to be complete, got %q", rowsBySection["Spring"][0].YoYDisplay)
 	}
 
 	if got := len(rowsBySection["Winter"]); got != 3 {

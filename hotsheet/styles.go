@@ -6,9 +6,14 @@ const (
 	// currencyFormat is the shared Excel number format used for dollar-value columns.
 	currencyFormat = "$#,##0.00;[Red]($#,##0.00)"
 	// Shared fill colors keep the workbook styling consistent across sheets.
-	dataInsightsSectionFill = "#D9EAF7"
-	standardHeaderFill      = "#E6E6FA"
-	standardTotalFill       = "#F2F2F2"
+	dataInsightsSectionFill           = "#D9EAF7"
+	standardHeaderFill                = "#E6E6FA"
+	dataInsightsOtherProductsBandFill = "#F2F2F2"
+	// dataInsightsTotalFill is intentionally darker than dataInsightsOtherProductsBandFill
+	// because the right-side Other Products table on the Data Insights sheet uses the
+	// lighter gray as alternating class-group banding. A darker total fill preserves a
+	// clear visual hierarchy so totals still stand out from shaded detail rows.
+	dataInsightsTotalFill = "#D9D9D9"
 )
 
 // currencyNumFmt returns a pointer suitable for excelize.Style.CustomNumFmt.
