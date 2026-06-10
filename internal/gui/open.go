@@ -1,3 +1,5 @@
+//go:build !windows
+
 package gui
 
 import (
@@ -18,8 +20,6 @@ func OpenPath(path string) {
 	switch runtime.GOOS {
 	case "darwin":
 		_ = exec.Command("open", path).Start()
-	case "windows":
-		_ = exec.Command("cmd", "/C", "start", "", path).Start()
 	default:
 		_ = exec.Command("xdg-open", path).Start()
 	}

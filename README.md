@@ -25,9 +25,9 @@ Below are screenshots of the generated sheets:
 - Go `1.26.2`
 - `nucular` and the other Go module dependencies in `go.mod`
 - Internet access is optional. The app checks for updates on startup when it can reach the public GitHub releases API, but it remains usable if the update check fails or there is no network connection.
-- Native file pickers are launched through platform tools:
+- Native file pickers are launched through platform-native dialog systems:
   - macOS: `osascript`
-  - Windows: PowerShell / WinForms
+  - Windows: native Common Item Dialog / shell APIs (no PowerShell dependency)
   - Linux: `zenity` or `kdialog`
 
 ## Quick Start
@@ -53,7 +53,7 @@ Built binaries are written to the `bin/` directory.
    - Output Directory (optional): where generated files will be written (defaults to the current working directory).
 3. Click `Generate Hotsheets`. The app validates inputs, shows a modal progress popup, and performs the generation.
 4. On success a `Created Hotsheets` modal popup lists generated files. Double-click an entry to open it, or use the Up/Down arrow keys to move through the list and press `Enter` to open the selected file. Use `Command+O` on macOS (or `Ctrl+O` on other platforms) to open the selected file's folder, `Command+D` (`Ctrl+D`) to dismiss the popup and reset the form, or press `Esc` to close the popup.
-5. Use `Command+I`, `Command+R`, and `Command+D` on macOS (or `Ctrl+I`, `Ctrl+R`, and `Ctrl+D` on other platforms) to browse for the inventory report, PO report, and output directory. Use `Command+G` to generate hotsheets, `Command+U` to check for updates, and `Command+Q` to quit.
+5. Use `Command+I`, `Command+R`, and `Command+D` on macOS (or `Ctrl+I`, `Ctrl+R`, and `Ctrl+D` on other platforms) to browse for the inventory report, PO report, and output directory. On Windows these browse actions use the native Explorer-style Common Item Dialog instead of launching PowerShell. Use `Command+G` to generate hotsheets, `Command+U` to check for updates, and `Command+Q` to quit.
 6. When an update is available, use `Command+U` to update, or `Esc` to close the popup and continue using the current version.
 
 Behavior notes
@@ -89,7 +89,7 @@ On startup the GUI checks the public GitHub releases API for the latest version.
 
 - Entry point: `main.go` sets up logging and launches the Nucular GUI via `internal/gui`.
 - GUI: `internal/gui/app.go`, `internal/gui/state.go`, `internal/gui/actions.go`, `internal/gui/render_main.go`, and `internal/gui/render_popups.go` contain the immediate-mode UI, popups, input handling, and background-task coordination.
-- Native dialogs and file opening: `internal/gui/native_dialogs.go` and `internal/gui/open.go` preserve native file pickers and platform-specific open behavior.
+- Native dialogs and file opening: `internal/gui/native_dialogs.go`, `internal/gui/native_dialogs_nonwindows.go`, `internal/gui/native_dialogs_windows.go`, `internal/gui/open.go`, and `internal/gui/open_windows.go` preserve native file pickers and platform-specific open behavior. Windows now uses the Common Item Dialog for both file and folder browsing and `ShellExecuteW` for opening files/folders without spawning a terminal window.
 - Auto-update transport: `internal/update/service.go` checks the public GitHub releases API, selects the correct release asset for the active platform, applies updates, and restarts the executable.
 - Hotsheet generation: `hotsheet/generate.go` exposes `hotsheet.Generate(...)` and orchestrates the report pipeline. The package is now split by responsibility: `hotsheet/inventory_reader.go` parses the inventory export, `hotsheet/po_reader.go` merges optional PO data, `hotsheet/product_line.go` groups entries by product line, `hotsheet/standard_sheets.go` writes the Everyday/Winter/Spring tabs, `hotsheet/data_insights_sheet.go` renders the `Data Insights` worksheet, `hotsheet/data_insights_rows.go` builds grouped Data Insights rows, `hotsheet/data_insights_projection.go` contains seasonal date/projection logic, `hotsheet/workbook.go` creates and saves workbooks, `hotsheet/styles.go` centralizes workbook styles, and `hotsheet/parsing.go`, `hotsheet/occasion.go`, and `hotsheet/entry.go` hold shared parsing, occasion mapping, and core model definitions.
 - Logging: `helpers/slog_logger.go` creates buffered JSON writers into `logs-bsc` under the system temp directory.
@@ -100,5 +100,5 @@ On startup the GUI checks the public GitHub releases API for the latest version.
 
 - Auto-update failed: the app should still remain usable. Ensure internet connectivity if you want update checks/downloads to succeed, and ensure the app has permission to replace the executable if you choose to update.
 - No logs: check your OS temp directory for a `logs-bsc` folder and file permissions.
-- If a browse button fails to open a picker, ensure your platform dialog tool is available (`osascript` on macOS, PowerShell on Windows, `zenity` or `kdialog` on Linux).
+- If a browse button fails to open a picker, ensure your platform dialog support is available (`osascript` on macOS, built-in Windows shell/Common Item Dialog support on Windows, `zenity` or `kdialog` on Linux).
 - If you build manually without the expected `nucular` tag for your platform, the GUI may not use the intended backend. Prefer the provided `Makefile` or the explicit `go run -tags ...` examples above.
