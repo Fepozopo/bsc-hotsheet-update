@@ -109,13 +109,33 @@ func (s *AppState) startGenerate() {
 	outputDir := editorText(&s.outputEditor)
 
 	s.generateInProgress = true
+	s.generateProgress = 0
+	s.generateProgressMessage = "Starting generation..."
 	s.openGenerateProgressPopup()
 	s.requestRedraw()
 
 	go func(inv, po, outdir string) {
-		outputs, err := hotsheet.Generate(inv, po, outdir)
+		outputs, err := hotsheet.Generate(inv, po, outdir, func(progress hotsheet.Progress) {
+			// Generate invokes this callback from the worker goroutine, so route the
+			// update through the UI event channel before touching AppState-owned UI data.
+			s.queueEvent(generateProgressEvent{Progress: progress})
+		})
 		s.queueEvent(generateCompletedEvent{Outputs: outputs, Err: err})
 	}(inventoryPath, poPath, outputDir)
+}
+
+// handleGenerateProgress applies a background generation progress update to the
+// UI state that drives the determinate popup progress bar.
+func (s *AppState) handleGenerateProgress(progress hotsheet.Progress) {
+	if !s.generateInProgress {
+		// A completion event may close the progress popup before a queued progress
+		// event is drained. Ignore stale updates so an old worker cannot affect the
+		// next idle frame or a later generation run.
+		return
+	}
+	s.generateProgress = progress.Percent
+	s.generateProgressMessage = progress.Message
+	s.requestRedraw()
 }
 
 // handleGenerateResult applies the result of a completed generation run back to
@@ -125,6 +145,7 @@ func (s *AppState) startGenerate() {
 // modal popup and leave the main form intact.
 func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	s.generateInProgress = false
+	s.generateProgress = 100
 	if err != nil {
 		s.openErrorPopup("Generation Failed", err.Error())
 		s.requestRedraw()

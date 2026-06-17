@@ -18,7 +18,7 @@ const (
 
 	// defaultUIScale increases the effective size of the Nucular widgets so the
 	// UI is comfortably readable on modern high-DPI displays.
-	baseUIScale = 1.5
+	baseUIScale = 1.25
 	// darwinUIScale is a further increase for macOS, where the default scaling is
 	// more aggressive and can result in a very small UI if left at 1.5.
 	darwinUIScale = 2.0

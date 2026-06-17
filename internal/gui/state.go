@@ -25,6 +25,11 @@ const (
 	popupOutputs
 )
 
+// AppState contains all mutable state owned by the GUI layer.
+//
+// Nucular redraws the interface from application-owned data on every frame, so
+// this struct is the single source of truth for window state, form inputs,
+// background-job status, and transient popup state.
 type AppState struct {
 	mw                    nucular.MasterWindow
 	events                chan UIEvent
@@ -33,23 +38,31 @@ type AppState struct {
 	windowBounds          rect.Rect
 	currentPopup          popupKind
 
+	// Text editors back the three path fields in the main form.
 	inventoryEditor nucular.TextEditor
 	poEditor        nucular.TextEditor
 	outputEditor    nucular.TextEditor
 
+	// Output selection state is tracked separately from the rendered list because
+	// the immediate-mode UI is rebuilt each frame.
 	outputs                   []string
 	selectedOutput            int
 	selectedOutputNeedsScroll bool
 	lastClickedOutput         int
 	lastClickAt               time.Time
 
-	generateInProgress  bool
-	updateInProgress    bool
-	closingRequested    bool
-	updateAvailable     bool
-	updateStatusMessage string
-	latestVersion       string
-	latestAssetURL      string
+	generateInProgress bool
+	// generateProgress and generateProgressMessage are written only from the UI
+	// event-drain path. Background goroutines must send generateProgressEvent
+	// values instead of mutating these fields directly.
+	generateProgress        int
+	generateProgressMessage string
+	updateInProgress        bool
+	closingRequested        bool
+	updateAvailable         bool
+	updateStatusMessage     string
+	latestVersion           string
+	latestAssetURL          string
 }
 
 // NewAppState constructs the initial GUI state.
@@ -99,6 +112,8 @@ func (s *AppState) drainEvents() {
 		select {
 		case evt := <-s.events:
 			switch e := evt.(type) {
+			case generateProgressEvent:
+				s.handleGenerateProgress(e.Progress)
 			case generateCompletedEvent:
 				s.handleGenerateResult(e.Outputs, e.Err)
 			case updateCheckCompletedEvent:

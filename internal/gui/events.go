@@ -1,6 +1,9 @@
 package gui
 
-import appupdate "github.com/Fepozopo/bsc-hotsheet-update/internal/update"
+import (
+	"github.com/Fepozopo/bsc-hotsheet-update/hotsheet"
+	appupdate "github.com/Fepozopo/bsc-hotsheet-update/internal/update"
+)
 
 // UIEvent is the marker interface used for messages sent from background
 // goroutines back to the immediate-mode GUI state.
@@ -10,6 +13,15 @@ import appupdate "github.com/Fepozopo/bsc-hotsheet-update/internal/update"
 type UIEvent interface {
 	isUIEvent()
 }
+
+// generateProgressEvent reports progress from a background hotsheet generation
+// run.
+type generateProgressEvent struct {
+	Progress hotsheet.Progress
+}
+
+// isUIEvent marks generateProgressEvent as safe to send through AppState.events.
+func (generateProgressEvent) isUIEvent() {}
 
 // generateCompletedEvent reports the outcome of a background hotsheet
 // generation run.

@@ -59,9 +59,13 @@ func (s *AppState) renderGenerateProgressPopup(w *nucular.Window) {
 	}
 
 	w.Row(28).Dynamic(1)
-	w.Label("Generating hotsheets...", "LC")
-	s.renderPopupMessage(w, "Please wait while the reports are processed. Closing this popup will not cancel the generation.", 42)
-	w.Row(46).Dynamic(1)
+	w.Label(fmt.Sprintf("Generating hotsheets... %d%%", s.generateProgress), "LC")
+	w.Row(28).Dynamic(1)
+	progress := s.generateProgress
+	w.Progress(&progress, 100, false)
+	w.Row(18).Dynamic(1)
+	w.Label(s.generateProgressMessage, "LC")
+	w.Row(32).Dynamic(1)
 	w.Label("", "LC")
 	w.Row(32).Static(0, 110, 0)
 	w.Label("", "LC")
