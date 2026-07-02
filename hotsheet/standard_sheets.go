@@ -111,7 +111,7 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 			cmt := excelize.Comment{
 				Cell:   cell,
 				Author: "Shane DuPrey",
-				Text:   "MTO YTD + QTY Available / ((QTY Sold+Issued YTD) / (monthsThrough + 1)). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace.",
+				Text:   "MTO YTD = QTY Available / ((QTY Sold+Issued YTD + QTY on SO+BO) / (monthsThrough + 1)). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace including current sales orders/backorders.",
 				Height: 190,
 				Width:  200,
 			}
@@ -155,13 +155,16 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			salesSeason = 12.0
 		}
 
-		// Preserve the current derived-value math exactly so workbook output stays compatible.
+		// Calculate the derived values used by the standard report layout.
 		onSOBO := e.OnSO + e.OnBO
-		totalAvail := e.OnHand + e.OnPO - onSOBO
+		totalInventory := e.OnHand + e.OnPO
+		totalAvail := totalInventory - onSOBO
+
 		totalSoldYTD := e.YTDSold + max(e.YTDIssued, 0)
 		totalSoldPY := e.SoldPY + max(e.IssuedPY, 0)
-		soldPerMonthYTD := float64(totalSoldYTD) / monthsThrough
+		soldPerMonthYTD := (float64(totalSoldYTD) + float64(onSOBO)) / monthsThrough
 		soldPerMonthPY := float64(totalSoldPY) / salesSeason
+
 		mtoYTD := float64(totalAvail) / (soldPerMonthYTD + 1)
 		mtoPY := float64(totalAvail) / (soldPerMonthPY + 1)
 
