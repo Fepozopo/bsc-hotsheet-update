@@ -64,6 +64,30 @@ func dataInsightsSeasonTotalYoYDisplay(totalProjected, totalPY float64, rows []d
 	return formatSeasonStatusYoY(totalProjected, totalPY, true, sectionComplete)
 }
 
+// otherProductsClassTotalYoYDisplay derives the total-row text for one class table on the
+// Other Products side of the sheet.
+//
+// Seasonal-only classes keep the familiar NOT STARTED / IN PROGRESS / COMPLETE wording so their
+// totals read the same way as their detail rows. Mixed or everyday-only classes fall back to a
+// plain projected YoY percentage because a single seasonal status would misrepresent a class total
+// that includes non-seasonal sales.
+func otherProductsClassTotalYoYDisplay(totalProjected, totalPY float64, rows []dataInsightsRow) string {
+	hasSeasonalRows := false
+	hasEverydayRows := false
+	for _, row := range rows {
+		if row.Section == "Everyday" {
+			hasEverydayRows = true
+			continue
+		}
+		hasSeasonalRows = true
+	}
+
+	if !hasSeasonalRows || hasEverydayRows {
+		return formatYoYFromProjectedSales(totalProjected, totalPY)
+	}
+	return dataInsightsSeasonTotalYoYDisplay(totalProjected, totalPY, rows)
+}
+
 // projectDataInsightsRow centralizes the seasonal projection rules so both card and
 // non-card Data Insights rows use the same date metadata, projected sales, and rightmost-column
 // year-over-year display text.
@@ -80,9 +104,9 @@ func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldP
 			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, complete)
 		}
 		if section == "Winter" {
-			// Winter items are treated as selling from July 1 forward, which matches the
+			// Winter items are treated as selling from June 15 forward, which matches the
 			// existing card logic and avoids projecting winter holidays from the off-season.
-			seasonStart := time.Date(now.Year(), time.July, 1, 0, 0, 0, 0, now.Location())
+			seasonStart := time.Date(now.Year(), time.June, 15, 0, 0, 0, 0, now.Location())
 			if now.Before(seasonStart) {
 				projected := dollarSoldYTD
 				return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, false, dateInfo.Complete)
@@ -91,7 +115,7 @@ func projectDataInsightsRow(section, occasion string, dollarSoldYTD, dollarSoldP
 				projected := dollarSoldYTD
 				return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
 			}
-			currentSellingMonths := monthsThroughSinceDate(now.Year(), time.July, 1, now.Month(), now.Day(), now.Location())
+			currentSellingMonths := monthsThroughSinceDate(now.Year(), time.June, 15, now.Month(), now.Day(), now.Location())
 			projected := dollarSoldYTD * (dateInfo.TargetMonthsThrough / currentSellingMonths)
 			return dateInfo, projected, formatSeasonStatusYoY(projected, dollarSoldPY, true, dateInfo.Complete)
 		}
@@ -134,9 +158,9 @@ func dataInsightsDateInfo(section, occasion string, now time.Time) occasionDateI
 	}
 
 	if section == "Winter" {
-		// Winter holidays don't really start selling until July 1, so treat that as the
+		// Winter holidays don't really start selling until June 15, so treat that as the
 		// beginning of the season when calculating the projection window.
-		info.TargetMonthsThrough = monthsThroughSinceDate(now.Year(), time.July, 1, info.Month, info.Day, now.Location())
+		info.TargetMonthsThrough = monthsThroughSinceDate(now.Year(), time.June, 15, info.Month, info.Day, now.Location())
 	} else {
 		info.TargetMonthsThrough = monthsThroughForDate(now.Year(), info.Month, info.Day, now.Location())
 	}

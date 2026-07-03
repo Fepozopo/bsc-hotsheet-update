@@ -2,7 +2,6 @@ package hotsheet
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -17,7 +16,7 @@ const (
 	dataInsightsSectionRow            = 3
 	dataInsightsTableStartRow         = 5
 	dataInsightsTableColumnCount      = 5
-	dataInsightsOtherTableColumnCount = 6
+	dataInsightsOtherTableColumnCount = 5
 )
 
 const (
@@ -29,7 +28,7 @@ const (
 )
 
 var dataInsightsTableColumnWidths = []float64{26, 31, 14, 14, 28}
-var dataInsightsOtherTableColumnWidths = []float64{26, 24, 31, 14, 14, 28}
+var dataInsightsOtherTableColumnWidths = []float64{26, 31, 14, 14, 28}
 
 // dataInsightsCell constructs an Excel cell name (e.g. "A5") from a column letter and row number.
 func dataInsightsCell(col string, row int) string {
@@ -46,13 +45,14 @@ func dataInsightsTableEndCol(startCol string, columnCount int) (string, error) {
 	return cols[columnCount-1], nil
 }
 
-// writeDataInsightsSheet creates the "Data Insights" worksheet and populates it with grouped sales data.
+// writeDataInsightsSheet creates the "Data Insights" worksheet, with Counter Cards grouped by
+// seasonal section on the left and Other Products grouped into one table per class on the right.
 func writeDataInsightsSheet(f *excelize.File, entries []*inventoryEntry) error {
 	now := time.Now()
 	currentMonthsThrough := currentMonthsThrough(now)
 	// Use the current month progress to annualize in-progress rows.
 	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough, now)
-	otherRowsBySection := buildOtherProductsDataInsightsRows(entries, currentMonthsThrough, now)
+	otherRowsByClass := buildOtherProductsDataInsightsRows(entries, currentMonthsThrough, now)
 
 	sheetName := dataInsightsSheetName
 	if _, err := f.NewSheet(sheetName); err != nil {
@@ -102,25 +102,6 @@ func writeDataInsightsSheet(f *excelize.File, entries []*inventoryEntry) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create currency data style: %w", err)
-	}
-
-	otherProductsClassBandRowStyleID, err := f.NewStyle(&excelize.Style{
-		Alignment: centeredAlignment(),
-		Border:    thinBlackBorder(),
-		Fill:      patternFill(dataInsightsOtherProductsBandFill),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create other products class-band row style: %w", err)
-	}
-
-	otherProductsClassBandCurrencyStyleID, err := f.NewStyle(&excelize.Style{
-		Alignment:    centeredAlignment(),
-		Border:       thinBlackBorder(),
-		Fill:         patternFill(dataInsightsOtherProductsBandFill),
-		CustomNumFmt: currencyNumFmt(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create other products class-band currency style: %w", err)
 	}
 
 	totalStyle, err := f.NewStyle(&excelize.Style{
@@ -250,50 +231,7 @@ func writeDataInsightsSheet(f *excelize.File, entries []*inventoryEntry) error {
 		rowNum = nextRow
 	}
 
-	rightSections := []dataInsightsSection{
-		{
-			Name:               "Spring",
-			Headers:            []string{"Class", "Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
-			Rows:               otherRowsBySection["Spring"],
-			RowStyleIDs:        buildOtherProductsClassBandRowStyleIDs(otherRowsBySection["Spring"], dataStyle, currencyDataStyle, otherProductsClassBandRowStyleID, otherProductsClassBandCurrencyStyleID),
-			CurrencyStartIndex: 3,
-			CurrencyEndIndex:   4,
-			RenderRow: func(row dataInsightsRow) []interface{} {
-				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.YoYDisplay}
-			},
-			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", "", totalYTD, totalPY, dataInsightsSeasonTotalYoYDisplay(totalProjected, totalPY, rows)}
-			},
-		},
-		{
-			Name:               "Winter",
-			Headers:            []string{"Class", "Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
-			Rows:               otherRowsBySection["Winter"],
-			RowStyleIDs:        buildOtherProductsClassBandRowStyleIDs(otherRowsBySection["Winter"], dataStyle, currencyDataStyle, otherProductsClassBandRowStyleID, otherProductsClassBandCurrencyStyleID),
-			CurrencyStartIndex: 3,
-			CurrencyEndIndex:   4,
-			RenderRow: func(row dataInsightsRow) []interface{} {
-				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.YoYDisplay}
-			},
-			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", "", totalYTD, totalPY, dataInsightsSeasonTotalYoYDisplay(totalProjected, totalPY, rows)}
-			},
-		},
-		{
-			Name:               "Everyday",
-			Headers:            []string{"Class", "Occasion", "Date", "YTD Sales", "PY Sales", "Projected YoY"},
-			Rows:               otherRowsBySection["Everyday"],
-			RowStyleIDs:        buildOtherProductsClassBandRowStyleIDs(otherRowsBySection["Everyday"], dataStyle, currencyDataStyle, otherProductsClassBandRowStyleID, otherProductsClassBandCurrencyStyleID),
-			CurrencyStartIndex: 3,
-			CurrencyEndIndex:   4,
-			RenderRow: func(row dataInsightsRow) []interface{} {
-				return []interface{}{row.Class, row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.YoYDisplay}
-			},
-			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
-				return []interface{}{"Total", "", "", totalYTD, totalPY, formatYoYFromProjectedSales(totalProjected, totalPY)}
-			},
-		},
-	}
+	rightSections := buildOtherProductsDataInsightsSections(otherRowsByClass)
 
 	rowNum = dataInsightsTableStartRow
 	for idx, section := range rightSections {
@@ -332,42 +270,34 @@ type dataInsightsSection struct {
 	RenderTotal        func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{}
 }
 
-// buildOtherProductsClassBandRowStyleIDs returns one row-style pair per Other Products detail row.
-//
-// Rows are expected to already be sorted so identical class descriptions are contiguous.
-// The function then alternates fill color by class group, not by individual row: the first
-// class group stays unfilled, the next class group gets the light gray band, the following
-// class group returns to no fill, and so on. That naming is deliberate: the alternation is
-// driven by class boundaries, so multiple occasions for the same class remain visually grouped.
-func buildOtherProductsClassBandRowStyleIDs(rows []dataInsightsRow, defaultRowStyleID, defaultCurrencyStyleID, classBandRowStyleID, classBandCurrencyStyleID int) []dataInsightsRowStyleIDs {
-	rowStyleIDs := make([]dataInsightsRowStyleIDs, len(rows))
-	previousClassKey := ""
-	useClassBandStyle := false
-
-	for rowIdx, row := range rows {
-		classKey := strings.ToUpper(strings.TrimSpace(row.Class))
-		if rowIdx > 0 && classKey != previousClassKey {
-			useClassBandStyle = !useClassBandStyle
-		}
-
-		rowStyleIDs[rowIdx] = dataInsightsRowStyleIDs{
-			RowStyleID:      defaultRowStyleID,
-			CurrencyStyleID: defaultCurrencyStyleID,
-		}
-		if useClassBandStyle {
-			rowStyleIDs[rowIdx] = dataInsightsRowStyleIDs{
-				RowStyleID:      classBandRowStyleID,
-				CurrencyStyleID: classBandCurrencyStyleID,
-			}
-		}
-
-		previousClassKey = classKey
+// buildOtherProductsDataInsightsSections converts the class-keyed Other Products rows into the
+// sheet sections rendered on the right side of Data Insights.
+func buildOtherProductsDataInsightsSections(rowsByClass map[string][]dataInsightsRow) []dataInsightsSection {
+	classNames := sortedOtherProductsDataInsightsClasses(rowsByClass)
+	sections := make([]dataInsightsSection, 0, len(classNames))
+	for _, className := range classNames {
+		classRows := rowsByClass[className]
+		// Each class owns its own table now, so repeating the class value in every detail row would
+		// waste space that is better spent on the occasion/date/projection columns.
+		sections = append(sections, dataInsightsSection{
+			Name:               className,
+			Headers:            []string{"Occasion", "Date", "YTD Sales", "PY Sales", "Status / Projected YoY"},
+			Rows:               classRows,
+			CurrencyStartIndex: dataInsightsColumnYTD,
+			CurrencyEndIndex:   dataInsightsColumnPY,
+			RenderRow: func(row dataInsightsRow) []interface{} {
+				return []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY, row.YoYDisplay}
+			},
+			RenderTotal: func(totalYTD, totalPY, totalProjected float64, rows []dataInsightsRow) []interface{} {
+				return []interface{}{"Total", "", totalYTD, totalPY, otherProductsClassTotalYoYDisplay(totalProjected, totalPY, rows)}
+			},
+		})
 	}
 
-	return rowStyleIDs
+	return sections
 }
 
-// writeDataInsightsSectionTable renders one seasonal section, including the section title,
+// writeDataInsightsSectionTable renders one Data Insights table, including the section title,
 // headers, detail rows, and total row. The caller supplies the row formatter so the same
 // layout code can be reused for both Counter Cards and Other Products, while optional
 // RowStyleIDs let a caller override the default row styling on a row-by-row basis.

@@ -161,10 +161,9 @@ func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 	}
 }
 
-// TestBuildOtherProductsDataInsightsRowsSeasonalBuckets confirms other products split into
-// class/occasion buckets and reuse the same holiday metadata and projection rules.
-func TestBuildOtherProductsDataInsightsRowsSeasonalBuckets(t *testing.T) {
-
+// TestBuildOtherProductsDataInsightsRowsGroupedByClass confirms other products now group into
+// one class bucket per table while still reusing the same holiday metadata and projection rules.
+func TestBuildOtherProductsDataInsightsRowsGroupedByClass(t *testing.T) {
 	t.Parallel()
 
 	entries := []*inventoryEntry{
@@ -179,48 +178,77 @@ func TestBuildOtherProductsDataInsightsRowsSeasonalBuckets(t *testing.T) {
 	}
 
 	now := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
-	rowsBySection := buildOtherProductsDataInsightsRows(entries, currentMonthsThrough(now), now)
+	rowsByClass := buildOtherProductsDataInsightsRows(entries, currentMonthsThrough(now), now)
 
-	if got := len(rowsBySection["Spring"]); got != 1 {
-		t.Fatalf("expected one Spring row, got %d", got)
+	if got := len(rowsByClass); got != 6 {
+		t.Fatalf("expected six class buckets, got %d", got)
 	}
-	if rowsBySection["Spring"][0].Class != "Gift Wrap" || rowsBySection["Spring"][0].Occasion != "INDEPENDENCE DAY" {
-		t.Fatalf("expected Spring row to carry class and occasion, got %+v", rowsBySection["Spring"])
-	}
-	if rowsBySection["Spring"][0].Date != "July 4" {
-		t.Fatalf("expected Independence Day to display July 4, got %q", rowsBySection["Spring"][0].Date)
-	}
-	if !strings.HasPrefix(rowsBySection["Spring"][0].YoYDisplay, "COMPLETE:") {
-		t.Fatalf("expected Independence Day to be complete, got %q", rowsBySection["Spring"][0].YoYDisplay)
+	if got := strings.Join(sortedOtherProductsDataInsightsClasses(rowsByClass), "|"); got != "Alpha Everyday|Coasters|Desk Notes|Gift Wrap|Napkins|UNCLASSIFIED" {
+		t.Fatalf("unexpected class order: %q", got)
 	}
 
-	if got := len(rowsBySection["Winter"]); got != 3 {
-		t.Fatalf("expected three Winter rows, got %d", got)
+	giftWrapRows := rowsByClass["Gift Wrap"]
+	if len(giftWrapRows) != 1 {
+		t.Fatalf("expected one Gift Wrap row, got %d", len(giftWrapRows))
 	}
-	if rowsBySection["Winter"][0].Class != "Coasters" || rowsBySection["Winter"][0].Occasion != "HOLIDAY" {
-		t.Fatalf("expected first Winter row to be Coasters / HOLIDAY, got %+v", rowsBySection["Winter"][0])
+	if giftWrapRows[0].Occasion != "INDEPENDENCE DAY" || giftWrapRows[0].Date != "July 4" {
+		t.Fatalf("expected Gift Wrap to keep Independence Day metadata, got %+v", giftWrapRows[0])
 	}
-	if rowsBySection["Winter"][1].Class != "Napkins" || rowsBySection["Winter"][1].Occasion != "VETERAN'S DAY" {
-		t.Fatalf("expected second Winter row to be Napkins / VETERAN'S DAY, got %+v", rowsBySection["Winter"][1])
-	}
-	if rowsBySection["Winter"][2].Class != "Napkins" || rowsBySection["Winter"][2].Occasion != "HOLIDAY" {
-		t.Fatalf("expected third Winter row to be Napkins / HOLIDAY, got %+v", rowsBySection["Winter"][2])
-	}
-	if rowsBySection["Winter"][0].Date != "December 25" || rowsBySection["Winter"][1].Date != "November 11" || rowsBySection["Winter"][2].Date != "December 25" {
-		t.Fatalf("expected Winter rows to use holiday dates, got %+v", rowsBySection["Winter"])
+	if !strings.HasPrefix(giftWrapRows[0].YoYDisplay, "COMPLETE:") {
+		t.Fatalf("expected Independence Day to be complete, got %q", giftWrapRows[0].YoYDisplay)
 	}
 
-	if got := len(rowsBySection["Everyday"]); got != 3 {
-		t.Fatalf("expected three Everyday rows, got %d", got)
+	napkinsRows := rowsByClass["Napkins"]
+	if got := len(napkinsRows); got != 2 {
+		t.Fatalf("expected two Napkins rows, got %d", got)
 	}
-	if rowsBySection["Everyday"][0].Class != "Alpha Everyday" || rowsBySection["Everyday"][1].Class != "Desk Notes" || rowsBySection["Everyday"][2].Class != "UNCLASSIFIED" {
-		t.Fatalf("expected Everyday rows to be sorted alphabetically and default blanks to UNCLASSIFIED, got %+v", rowsBySection["Everyday"])
+	if napkinsRows[0].Occasion != "VETERAN'S DAY" || napkinsRows[0].Date != "November 11" {
+		t.Fatalf("expected Napkins to sort Veterans Day before Holiday, got %+v", napkinsRows[0])
+	}
+	if napkinsRows[1].Occasion != "HOLIDAY" || napkinsRows[1].Date != "December 25" {
+		t.Fatalf("expected Napkins Holiday row to keep its winter date, got %+v", napkinsRows[1])
+	}
+
+	alphaEverydayRows := rowsByClass["Alpha Everyday"]
+	if got := len(alphaEverydayRows); got != 1 {
+		t.Fatalf("expected one Alpha Everyday row, got %d", got)
+	}
+	if alphaEverydayRows[0].Occasion != "NO OCCASION" || alphaEverydayRows[0].Date != "N/A" {
+		t.Fatalf("expected Alpha Everyday to remain an everyday row, got %+v", alphaEverydayRows[0])
+	}
+	if alphaEverydayRows[0].Section != "Everyday" {
+		t.Fatalf("expected Alpha Everyday to preserve its Everyday section, got %q", alphaEverydayRows[0].Section)
+	}
+
+	unclassifiedRows := rowsByClass["UNCLASSIFIED"]
+	if got := len(unclassifiedRows); got != 1 {
+		t.Fatalf("expected one UNCLASSIFIED row, got %d", got)
+	}
+	if unclassifiedRows[0].Class != "UNCLASSIFIED" {
+		t.Fatalf("expected blank classes to normalize to UNCLASSIFIED, got %+v", unclassifiedRows[0])
 	}
 }
 
-// TestWriteDataInsightsSheetStacksOtherProductsBySeason verifies the right-hand Data
-// Insights tables are still stacked Spring, Winter, then Everyday after the layout change.
-func TestWriteDataInsightsSheetStacksOtherProductsBySeason(t *testing.T) {
+// TestOtherProductsClassTotalYoYDisplayMixedClassUsesProjectedYoY confirms mixed class tables
+// avoid seasonal status wording on the total row because the aggregate includes everyday sales.
+func TestOtherProductsClassTotalYoYDisplayMixedClassUsesProjectedYoY(t *testing.T) {
+	t.Parallel()
+
+	rows := []dataInsightsRow{
+		{Section: "Spring", YoYDisplay: "IN PROGRESS: 25.00% YoY"},
+		{Section: "Everyday", YoYDisplay: "10.00%"},
+	}
+
+	got := otherProductsClassTotalYoYDisplay(150, 100, rows)
+	want := formatYoYFromProjectedSales(150, 100)
+	if got != want {
+		t.Fatalf("expected mixed class total display %q, got %q", want, got)
+	}
+}
+
+// TestWriteDataInsightsSheetGroupsOtherProductsByClass verifies the right-hand Data Insights
+// tables are stacked by class name, with the class shown in the table title instead of a column.
+func TestWriteDataInsightsSheetGroupsOtherProductsByClass(t *testing.T) {
 	t.Parallel()
 
 	f := excelize.NewFile()
@@ -236,37 +264,37 @@ func TestWriteDataInsightsSheetStacksOtherProductsBySeason(t *testing.T) {
 	}
 
 	const sheetName = dataInsightsSheetName
-	if got, err := f.GetCellValue(sheetName, "G5"); err != nil || got != "Spring" {
-		t.Fatalf("expected G5 to contain Spring, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G5"); err != nil || got != "Alpha Everyday" {
+		t.Fatalf("expected G5 to contain the first class title, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "G6"); err != nil || got != "Class" {
-		t.Fatalf("expected G6 to contain Class, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G6"); err != nil || got != "Occasion" {
+		t.Fatalf("expected G6 to contain Occasion, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "H6"); err != nil || got != "Occasion" {
-		t.Fatalf("expected H6 to contain Occasion, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "H6"); err != nil || got != "Date" {
+		t.Fatalf("expected H6 to contain Date, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "G7"); err != nil || got != "Gift Wrap" {
-		t.Fatalf("expected G7 to contain Gift Wrap, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G7"); err != nil || got != "NO OCCASION" {
+		t.Fatalf("expected G7 to contain the Alpha Everyday occasion, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "H7"); err != nil || got != "Mother's Day" {
-		t.Fatalf("expected H7 to contain Mother's Day, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "I8"); err != nil || got != "$60.00" {
+		t.Fatalf("expected I8 to contain the Alpha Everyday YTD total, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "J8"); err != nil || got != "$150.00" {
-		t.Fatalf("expected J8 to contain the actual Spring YTD total, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "J8"); err != nil || got != "$50.00" {
+		t.Fatalf("expected J8 to contain the Alpha Everyday PY total, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "K8"); err != nil || got != "$120.00" {
-		t.Fatalf("expected K8 to contain the actual Spring PY total, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G10"); err != nil || got != "Gift Wrap" {
+		t.Fatalf("expected G10 to contain the second class title, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "G10"); err != nil || got != "Winter" {
-		t.Fatalf("expected G10 to contain Winter, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G11"); err != nil || got != "Occasion" {
+		t.Fatalf("expected G11 to contain Occasion, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "G11"); err != nil || got != "Class" {
-		t.Fatalf("expected G11 to contain Class, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G15"); err != nil || got != "Napkins" {
+		t.Fatalf("expected G15 to contain the third class title, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "H11"); err != nil || got != "Occasion" {
-		t.Fatalf("expected H11 to contain Occasion, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G17"); err != nil || got != "VETERAN'S DAY" {
+		t.Fatalf("expected G17 to contain the first Napkins occasion, got %q (err=%v)", got, err)
 	}
-	if got, err := f.GetCellValue(sheetName, "G16"); err != nil || got != "Everyday" {
-		t.Fatalf("expected G16 to contain Everyday, got %q (err=%v)", got, err)
+	if got, err := f.GetCellValue(sheetName, "G18"); err != nil || got != "HOLIDAY" {
+		t.Fatalf("expected G18 to contain the second Napkins occasion, got %q (err=%v)", got, err)
 	}
 }
