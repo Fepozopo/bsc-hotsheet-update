@@ -2,7 +2,7 @@
 
 ## Description
 
-Hotsheet Updater is a small Go GUI application built with `nucular` that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics. The `Data Insights` sheet now shows `Counter Cards` on the left and `Other Products` on the right. The right-hand side is split into Spring, Winter, and Everyday sections, uses the same holiday-date/projection rules as the card section, and now includes both class and occasion columns so class-specific seasonal items stay separated.
+Hotsheet Updater is a small Go GUI application built with `nucular` that generates unified Excel hotsheets from a Sage 100 "Item Listing With Sales History" inventory report and an optional PO report. For each product line found in the inventory report the app produces a single hotsheet file with three operational sheets (Everyday, Winter, Spring) plus a `Data Insights` summary sheet, includes per-PO details when available, and computes MTO (months-till-out) metrics. The `Data Insights` sheet now shows `Counter Cards` on the left and `Other Products` on the right. The right-hand side renders one table per non-card class, uses the same holiday-date/projection rules as the card section, and lists each class's occasions inside that class-specific table.
 
 ## Motivation
 
@@ -63,7 +63,7 @@ Behavior notes
 - PO-only SKUs (SKUs present in PO but not in inventory) are skipped to avoid creating `UNKNOWN` product-line files.
 - Output file naming: `{ProductLine}_hotsheet_YYYYMMDD.xlsx` (for example, `BAS_hotsheet_20260423.xlsx`).
 - Each output file contains four sheets: `Everyday`, `Winter`, `Spring`, and `Data Insights`. Header comments explain the MTO calculations.
-- The `Data Insights` sheet now has two side-by-side areas: `Counter Cards` on the left and `Other Products` on the right. The right-hand side is stacked into Spring, Winter, and Everyday sections, groups non-card items by both class and occasion, and uses the same holiday-date/projection rules as the card rows.
+- The `Data Insights` sheet now has two side-by-side areas: `Counter Cards` on the left and `Other Products` on the right. The right-hand side renders one table per non-card class, with the class shown in the table title and the rows grouped by occasion within that table. It still uses the same holiday-date/projection rules as the card rows.
 - Valentine's Day remains the split-window exception: it uses the early-year and late-year selling windows rather than a single holiday date.
 
 ## Logs
