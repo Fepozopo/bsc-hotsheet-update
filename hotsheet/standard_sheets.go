@@ -121,7 +121,7 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 			cmt := excelize.Comment{
 				Cell:   cell,
 				Author: "Shane DuPrey",
-				Text:   "MTO PY = QTY Available / ((QTY Sold+Issued PY) / (salesSeason + 1)). salesSeason used: Winter=6, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length.",
+				Text:   "MTO PY = QTY Available / ((QTY Sold+Issued PY) / (salesSeason + 1)). salesSeason used: Winter=6.5, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length.",
 				Height: 180,
 				Width:  180,
 			}
@@ -148,7 +148,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 		salesSeason := 12.0
 		switch sh {
 		case "Winter":
-			salesSeason = 6.0
+			salesSeason = 6.5
 		case "Spring":
 			salesSeason = 5.0
 		default:
