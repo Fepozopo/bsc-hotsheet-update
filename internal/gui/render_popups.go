@@ -97,7 +97,6 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 	w.Row(50).Dynamic(1)
 	w.Label("", "LC")
 	w.Row(18).Dynamic(1)
-	w.Label(fmt.Sprintf("%s to update, or Esc to close.", shortcutDisplay("U")), "LC")
 	w.Row(32).Static(0, 160, 24, 120, 0)
 	w.Label("", "LC")
 	if w.ButtonText(buttonShortcutLabel("Update", "U")) {
@@ -163,7 +162,7 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		w.Row(20).Dynamic(1)
 		w.Label(fmt.Sprintf("Created files (%d):", len(s.outputs)), "LC")
 		w.Row(18).Dynamic(1)
-		w.Label(fmt.Sprintf("Double-click to open, use Up/Down and Enter, %s for folder, %s for done, or Esc to close.", shortcutDisplay("O"), shortcutDisplay("D")), "LC")
+		w.Label(fmt.Sprintf("Double-click to open or use Up/Down and Enter, Esc to close."), "LC")
 		w.Row(235).Dynamic(1)
 		if gl, gw := nucular.GroupListStart(w, len(s.outputs), "created-hotsheets", nucular.WindowBorder|nucular.WindowNoHScrollbar); gw != nil {
 			// SkipToVisible keeps large result lists from rendering every row on

@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"runtime"
 	"time"
 
 	"github.com/aarzilli/nucular"
@@ -135,13 +134,14 @@ func newPathEditor() nucular.TextEditor {
 	}
 }
 
-// shortcutModifier returns the platform-appropriate application shortcut
-// modifier: Command on macOS, Control elsewhere.
+// shortcutModifier returns the application shortcut modifier used throughout
+// the GUI.
+//
+// The requested keyboard scheme standardizes on Option/Alt across platforms, so
+// the UI and shortcut handlers both rely on the Alt modifier for every app
+// mnemonic.
 func shortcutModifier() key.Modifiers {
-	if runtime.GOOS == "darwin" {
-		return key.ModMeta
-	}
-	return key.ModControl
+	return key.ModAlt
 }
 
 // anyEditorActive reports whether one of the main form text inputs currently

@@ -1,8 +1,8 @@
 package gui
 
 import (
-	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/aarzilli/nucular"
 	"golang.org/x/mobile/event/key"
@@ -23,9 +23,9 @@ func (s *AppState) handleMainKeyboard(w *nucular.Window) {
 	switch {
 	case hasShortcut(in.Keyboard.Keys, key.CodeI) && !s.isBusy():
 		s.browseInventory()
-	case hasShortcut(in.Keyboard.Keys, key.CodeR) && !s.isBusy():
+	case hasShortcut(in.Keyboard.Keys, key.CodeP) && !s.isBusy():
 		s.browsePO()
-	case hasShortcut(in.Keyboard.Keys, key.CodeD) && !s.isBusy():
+	case hasShortcut(in.Keyboard.Keys, key.CodeO) && !s.isBusy():
 		s.browseOutputDir()
 	case hasShortcut(in.Keyboard.Keys, key.CodeQ):
 		s.quit()
@@ -36,29 +36,43 @@ func (s *AppState) handleMainKeyboard(w *nucular.Window) {
 	}
 }
 
-// buttonShortcutLabel formats a button title with the platform-appropriate
-// shortcut glyph/text.
-func buttonShortcutLabel(labelText, keyName string) string {
-	return fmt.Sprintf("%s (%s)", labelText, shortcutDisplay(keyName))
-}
-
-// shortcutHint appends a shortcut hint to a muted line of helper text.
-func shortcutHint(baseText, keyName string) string {
-	return fmt.Sprintf("%s • %s", baseText, shortcutDisplay(keyName))
-}
-
-// shortcutDisplay renders the application shortcut modifier in a user-facing
-// form appropriate for the current platform.
-func shortcutDisplay(keyName string) string {
-	keyName = strings.ToUpper(strings.TrimSpace(keyName))
-	if shortcutModifier() == key.ModMeta {
-		return "Cmd+" + keyName
+// shortcutLabel wraps the mnemonic character used by a shortcut in brackets so
+// the UI can hint at the key without rendering the full modifier combination.
+//
+// Bracketed mnemonics render consistently across the current text stack,
+// including button labels that only support plain text.
+func shortcutLabel(labelText, keyName string) string {
+	keyName = strings.TrimSpace(keyName)
+	if keyName == "" {
+		return labelText
 	}
-	return "Ctrl+" + keyName
+
+	keyRune := []rune(strings.ToLower(keyName))[0]
+	var builder strings.Builder
+	matched := false
+	for _, r := range labelText {
+		// Only the first matching rune is marked so each label exposes a single
+		// mnemonic cue instead of visually cluttering repeated letters.
+		if !matched && unicode.ToLower(r) == keyRune {
+			builder.WriteRune('[')
+			builder.WriteRune(r)
+			builder.WriteRune(']')
+			matched = true
+			continue
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String()
+}
+
+// buttonShortcutLabel formats a button title by marking the mnemonic character
+// associated with the button shortcut.
+func buttonShortcutLabel(labelText, keyName string) string {
+	return shortcutLabel(labelText, keyName)
 }
 
 // hasShortcut reports whether the current keyboard batch contains the given app
-// shortcut using the platform shortcut modifier and no extra modifiers beyond
+// shortcut using the shared Option/Alt modifier and no extra modifiers beyond
 // an optional Shift key.
 func hasShortcut(keys []key.Event, code key.Code) bool {
 	required := shortcutModifier()

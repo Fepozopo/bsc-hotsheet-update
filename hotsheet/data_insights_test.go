@@ -116,9 +116,9 @@ func TestGraduationProjectionWindow(t *testing.T) {
 	}
 }
 
-// TestBuildDataInsightsRowsWinterProjectionStartsJuly1 confirms winter holidays stay at
+// TestBuildDataInsightsRowsWinterProjectionStartsJune15 confirms winter holidays stay at
 // YTD before July 1 and switch to in-season projection afterward.
-func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
+func TestBuildDataInsightsRowsWinterProjectionStartsJune15(t *testing.T) {
 	t.Parallel()
 
 	entries := []*inventoryEntry{{
@@ -152,9 +152,9 @@ func TestBuildDataInsightsRowsWinterProjectionStartsJuly1(t *testing.T) {
 	inSeason := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
 	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(inSeason), inSeason)
 	row = rowsBySection["Winter"][0]
-	expectedProjected := 100.0 * (monthsThroughSinceDate(2026, time.July, 1, time.December, 25, time.UTC) / monthsThroughSinceDate(2026, time.July, 1, time.September, 1, time.UTC))
+	expectedProjected := 100.0 * (monthsThroughSinceDate(2026, time.June, 15, time.December, 25, time.UTC) / monthsThroughSinceDate(2026, time.June, 15, time.September, 1, time.UTC))
 	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
-		t.Fatalf("expected winter projection %.9f after July 1, got %.9f", expectedProjected, row.ProjectedDollar)
+		t.Fatalf("expected winter projection %.9f after June 15, got %.9f", expectedProjected, row.ProjectedDollar)
 	}
 	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
 		t.Fatalf("expected Christmas to remain in progress before Dec 25, got %q", row.YoYDisplay)

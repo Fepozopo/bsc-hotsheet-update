@@ -52,9 +52,9 @@ Built binaries are written to the `bin/` directory.
    - PO Report (optional): path to the PO XLSX (if omitted per-PO columns are not written).
    - Output Directory (optional): where generated files will be written (defaults to the current working directory).
 3. Click `Generate Hotsheets`. The app validates inputs, shows a modal progress popup with a determinate progress bar, and performs the generation.
-4. On success a `Created Hotsheets` modal popup lists generated files. Double-click an entry to open it, or use the Up/Down arrow keys to move through the list and press `Enter` to open the selected file. Use `Command+O` on macOS (or `Ctrl+O` on other platforms) to open the selected file's folder, `Command+D` (`Ctrl+D`) to dismiss the popup and reset the form, or press `Esc` to close the popup.
-5. Use `Command+I`, `Command+R`, and `Command+D` on macOS (or `Ctrl+I`, `Ctrl+R`, and `Ctrl+D` on other platforms) to browse for the inventory report, PO report, and output directory. On Windows these browse actions use the native Explorer-style Common Item Dialog instead of launching PowerShell. Use `Command+G` to generate hotsheets, `Command+U` to check for updates, and `Command+Q` to quit.
-6. When an update is available, use `Command+U` to update, or `Esc` to close the popup and continue using the current version.
+4. On success a `Created Hotsheets` modal popup lists generated files. Double-click an entry to open it, or use the Up/Down arrow keys to move through the list and press `Enter` to open the selected file. Hold `Option` on macOS (or `Alt` on other platforms) and press the bracketed letter in `Open Folder` or `Done` to open the selected file's folder or dismiss the popup. Press `Esc` to close the popup.
+5. Throughout the main window, hold `Option` on macOS (or `Alt` on other platforms) and press the bracketed letter in the relevant label or button. The main form uses `I` for inventory report browsing, `P` for PO report browsing, `O` for output directory browsing, `G` for generating hotsheets, `U` for checking for updates, and `Q` for quitting. On Windows the browse actions use the native Explorer-style Common Item Dialog instead of launching PowerShell.
+6. When an update is available, hold `Option` on macOS (or `Alt` on other platforms) and press the bracketed `U` in `Update`, or press `Esc` to close the popup and continue using the current version.
 
 Behavior notes
 
