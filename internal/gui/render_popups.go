@@ -23,9 +23,19 @@ func (s *AppState) openInfoPopup(title, message string) {
 // openMessagePopup renders a small centered popup for one-off informational or
 // error messages.
 func (s *AppState) openMessagePopup(title, message, dismissText string) {
+	dismissKeyName := ""
+	buttonLabel := dismissText
+	if strings.EqualFold(strings.TrimSpace(dismissText), "OK") {
+		// OK is currently the only generic message-popup action, so giving it an
+		// explicit Option/Alt+O binding makes no-update and error acknowledgements
+		// consistent with the rest of the bracketed mnemonic UI.
+		dismissKeyName = "O"
+		buttonLabel = buttonShortcutLabel(dismissText, dismissKeyName)
+	}
+
 	s.currentPopup = popupMessage
 	s.mw.PopupOpen(title, nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(560, 220), true, func(w *nucular.Window) {
-		if s.handlePopupEscape(w) {
+		if s.handleMessagePopupKeyboard(w, dismissKeyName) {
 			return
 		}
 		s.renderPopupMessage(w, message, 48)
@@ -33,7 +43,7 @@ func (s *AppState) openMessagePopup(title, message, dismissText string) {
 		w.Label("", "LC")
 		w.Row(32).Static(0, 110, 0)
 		w.Label("", "LC")
-		if w.ButtonText(dismissText) {
+		if w.ButtonText(buttonLabel) {
 			s.closePopup(w)
 		}
 		w.Label("", "LC")
@@ -104,7 +114,7 @@ func (s *AppState) renderUpdateAvailablePopup(w *nucular.Window) {
 		return
 	}
 	w.Label("", "LC")
-	if w.ButtonText("Continue") {
+	if w.ButtonText(buttonShortcutLabel("Continue", "C")) {
 		s.closePopup(w)
 	}
 	w.Label("", "LC")
@@ -162,7 +172,7 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 		w.Row(20).Dynamic(1)
 		w.Label(fmt.Sprintf("Created files (%d):", len(s.outputs)), "LC")
 		w.Row(18).Dynamic(1)
-		w.Label(fmt.Sprintf("Double-click to open or use Up/Down and Enter, Esc to close."), "LC")
+		w.Label(fmt.Sprintf("Double-click to open file or use Up/Down and Enter."), "LC")
 		w.Row(235).Dynamic(1)
 		if gl, gw := nucular.GroupListStart(w, len(s.outputs), "created-hotsheets", nucular.WindowBorder|nucular.WindowNoHScrollbar); gw != nil {
 			// SkipToVisible keeps large result lists from rendering every row on
@@ -245,9 +255,38 @@ func (s *AppState) handleUpdateAvailablePopupKeyboard(w *nucular.Window) bool {
 	case hasShortcut(in.Keyboard.Keys, key.CodeU):
 		s.beginSelfUpdate()
 		return true
+	case hasShortcut(in.Keyboard.Keys, key.CodeC):
+		s.closePopup(w)
+		return true
 	}
 
 	return false
+}
+
+// handleMessagePopupKeyboard applies keyboard shortcuts for the generic
+// message-popup confirm button and returns true when the popup is dismissed.
+func (s *AppState) handleMessagePopupKeyboard(w *nucular.Window, dismissKeyName string) bool {
+	if s.handlePopupEscape(w) {
+		return true
+	}
+	if dismissKeyName == "" {
+		return false
+	}
+
+	in := w.Input()
+	if in == nil {
+		return false
+	}
+	if !strings.EqualFold(dismissKeyName, "O") {
+		return false
+	}
+	if !hasShortcut(in.Keyboard.Keys, key.CodeO) {
+		return false
+	}
+	// The generic message popup only exposes a single confirmation action, so
+	// closing the popup here is equivalent to activating the visible button.
+	s.closePopup(w)
+	return true
 }
 
 // handlePopupEscape closes the active popup when Escape is pressed.
