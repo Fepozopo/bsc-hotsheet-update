@@ -65,7 +65,11 @@ func DetectLatestRelease(repo string) (semver.Version, string, error) {
 	if err != nil {
 		return semver.Version{}, "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to close GitHub releases response body: %v\n", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
