@@ -26,8 +26,8 @@ type inventoryEntry struct {
 	Occasion       string
 	Description    string
 	UPC            string
-	// Additional fields: royalty and dollar sales (added for new report columns)
-	RoyaltyCode   string
-	DollarSoldYTD float64
-	DollarSoldPY  float64
+	RoyaltyCode    string
+	DollarSoldYTD  float64
+	DollarSoldPY   float64
+	CardSize       string
 }

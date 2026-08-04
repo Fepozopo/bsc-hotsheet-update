@@ -65,6 +65,7 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 		"Description",
 		"UPC",
 		"Foil",
+		"Card Size",
 		"Royalty Code",
 		"Dollar Sold YTD",
 		"Dollar Sold PY",
@@ -145,7 +146,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 		// Determine the sales-season window used for MTO PY calculations.
 		// Winter and Spring use their shorter merchandising seasons, while Everyday uses
 		// the full year so the historical sales pace stays consistent with the workbook notes.
-		salesSeason := 12.0
+		var salesSeason float64
 		switch sh {
 		case "Winter":
 			salesSeason = 6.5
@@ -191,6 +192,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			e.Description,
 			e.UPC,
 			e.Foil,
+			e.CardSize,
 			e.RoyaltyCode,
 			e.DollarSoldYTD,
 			e.DollarSoldPY,
@@ -360,6 +362,8 @@ func standardSheetWidthForHeader(header string) float64 {
 	case "UPC":
 		return 15
 	case "Foil":
+		return 10
+	case "Card Size":
 		return 10
 	case "Royalty Code":
 		return 15

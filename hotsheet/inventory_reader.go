@@ -30,6 +30,7 @@ var (
 	inventoryRoyaltyCodeIdx = colToIndex("AH")
 	inventoryDollarYTDIdx   = colToIndex("AJ")
 	inventoryDollarPYIdx    = colToIndex("AL")
+	inventoryCardSizeIdx    = colToIndex("AN")
 )
 
 // loadInventoryEntries opens the inventory workbook, parses the inventory rows, and returns
@@ -119,6 +120,7 @@ func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*inv
 	item.RoyaltyCode = getCellAt(rows, valRow, inventoryRoyaltyCodeIdx)
 	item.DollarSoldYTD = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarYTDIdx))
 	item.DollarSoldPY = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarPYIdx))
+	item.CardSize = getCellAt(rows, valRow, inventoryCardSizeIdx)
 
 	if logger != nil {
 		logger.Debug("Inventory parse",
@@ -144,6 +146,7 @@ func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*inv
 			"RoyaltyCode", item.RoyaltyCode,
 			"DollarSoldYTD", item.DollarSoldYTD,
 			"DollarSoldPY", item.DollarSoldPY,
+			"CardSize", item.CardSize,
 		)
 	}
 
