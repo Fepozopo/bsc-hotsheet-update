@@ -30,6 +30,7 @@ var (
 	inventoryRoyaltyCodeIdx = colToIndex("AH")
 	inventoryDollarYTDIdx   = colToIndex("AJ")
 	inventoryDollarPYIdx    = colToIndex("AL")
+	inventoryCardSizeIdx    = colToIndex("AN")
 	inventoryInactiveIdx    = colToIndex("AP")
 )
 
@@ -117,6 +118,7 @@ func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*inv
 	item.Occasion = getCellAt(rows, valRow, inventoryOccasionIdx)
 	item.Description = getCellAt(rows, valRow, inventoryDescIdx)
 	item.UPC = getCellAt(rows, valRow, inventoryUPCIdx)
+	item.CardSize = getCellAt(rows, valRow, inventoryCardSizeIdx)
 	item.RoyaltyCode = getCellAt(rows, valRow, inventoryRoyaltyCodeIdx)
 	item.DollarSoldYTD = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarYTDIdx))
 	item.DollarSoldPY = parseInventoryDollar(getCellAt(rows, valRow, inventoryDollarPYIdx))
@@ -143,6 +145,7 @@ func parseInventoryEntry(rows [][]string, rowNum int, logger *slog.Logger) (*inv
 			"Occasion", item.Occasion,
 			"Description", item.Description,
 			"UPC", item.UPC,
+			"CardSize", item.CardSize,
 			"RoyaltyCode", item.RoyaltyCode,
 			"DollarSoldYTD", item.DollarSoldYTD,
 			"DollarSoldPY", item.DollarSoldPY,

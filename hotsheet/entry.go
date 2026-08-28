@@ -27,9 +27,9 @@ type inventoryEntry struct {
 	Occasion       string
 	Description    string
 	UPC            string
-	// Additional fields from the source report that appear in the standard-sheet output.
-	RoyaltyCode   string
-	DollarSoldYTD float64
-	DollarSoldPY  float64
-	Inactive      string
+	RoyaltyCode    string
+	DollarSoldYTD  float64
+	DollarSoldPY   float64
+	CardSize       string
+	Inactive       string
 }
