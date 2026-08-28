@@ -1,6 +1,7 @@
 package hotsheet
 
-// inventoryEntry represents a single inventory item.
+// inventoryEntry represents a single inventory item and holds the source-report and derived values
+// used to build one hotsheet row.
 type inventoryEntry struct {
 	SKU         string
 	ProductLine string
@@ -26,8 +27,9 @@ type inventoryEntry struct {
 	Occasion       string
 	Description    string
 	UPC            string
-	// Additional fields: royalty and dollar sales (added for new report columns)
+	// Additional fields from the source report that appear in the standard-sheet output.
 	RoyaltyCode   string
 	DollarSoldYTD float64
 	DollarSoldPY  float64
+	Inactive      string
 }

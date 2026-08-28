@@ -68,6 +68,7 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 		"Royalty Code",
 		"Dollar Sold YTD",
 		"Dollar Sold PY",
+		"Inactive",
 	)
 
 	mtoYtdIdx, mtoPyIdx := -1, -1
@@ -194,10 +195,11 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			e.RoyaltyCode,
 			e.DollarSoldYTD,
 			e.DollarSoldPY,
+			e.Inactive,
 		)
 
-		dollarYTDCol := len(vals) - 2
-		dollarPYCol := len(vals) - 1
+		dollarYTDCol := len(vals) - 3
+		dollarPYCol := len(vals) - 2
 
 		for c, v := range vals {
 			cell, _ := excelize.CoordinatesToCellName(c+1, rowIdx)
