@@ -34,7 +34,7 @@ func (s *AppState) isBusy() bool {
 	return s.generateInProgress || s.updateInProgress
 }
 
-// pathEditorFlags returns the text editor flags appropriate for the three path
+// pathEditorFlags returns the text editor flags appropriate for the four path
 // fields in the main form.
 //
 // While generation or self-update is in progress the fields are switched to
@@ -77,6 +77,21 @@ func (s *AppState) browsePO() {
 	s.requestRedraw()
 }
 
+// browseHistory opens the native file picker and stores the selected optional
+// sales-history report path in the history editor.
+func (s *AppState) browseHistory() {
+	path, err := pickFile()
+	if err != nil {
+		if errors.Is(err, errDialogCancelled) {
+			return
+		}
+		s.openErrorPopup("Browse Error", err.Error())
+		return
+	}
+	setEditorText(&s.historyEditor, path)
+	s.requestRedraw()
+}
+
 // browseOutputDir opens the native directory picker and stores the chosen
 // output directory path.
 func (s *AppState) browseOutputDir() {
@@ -106,6 +121,7 @@ func (s *AppState) startGenerate() {
 	}
 
 	poPath := editorText(&s.poEditor)
+	historyPath := editorText(&s.historyEditor)
 	outputDir := editorText(&s.outputEditor)
 
 	s.generateInProgress = true
@@ -114,14 +130,14 @@ func (s *AppState) startGenerate() {
 	s.openGenerateProgressPopup()
 	s.requestRedraw()
 
-	go func(inv, po, outdir string) {
-		outputs, err := hotsheet.Generate(inv, po, outdir, func(progress hotsheet.Progress) {
+	go func(inv, po, history, outdir string) {
+		outputs, err := hotsheet.Generate(inv, po, history, outdir, func(progress hotsheet.Progress) {
 			// Generate invokes this callback from the worker goroutine, so route the
 			// update through the UI event channel before touching AppState-owned UI data.
 			s.queueEvent(generateProgressEvent{Progress: progress})
 		})
 		s.queueEvent(generateCompletedEvent{Outputs: outputs, Err: err})
-	}(inventoryPath, poPath, outputDir)
+	}(inventoryPath, poPath, historyPath, outputDir)
 }
 
 // handleGenerateProgress applies a background generation progress update to the
@@ -166,11 +182,12 @@ func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	s.requestRedraw()
 }
 
-// resetInputs clears the three main path fields and resets any result-list
+// resetInputs clears the four main path fields and resets any result-list
 // selection state so the user can start a fresh run.
 func (s *AppState) resetInputs() {
 	setEditorText(&s.inventoryEditor, "")
 	setEditorText(&s.poEditor, "")
+	setEditorText(&s.historyEditor, "")
 	setEditorText(&s.outputEditor, "")
 	s.selectedOutput = -1
 	s.selectedOutputNeedsScroll = false

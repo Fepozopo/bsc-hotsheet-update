@@ -37,9 +37,10 @@ type AppState struct {
 	windowBounds          rect.Rect
 	currentPopup          popupKind
 
-	// Text editors back the three path fields in the main form.
+	// Text editors back the four path fields in the main form.
 	inventoryEditor nucular.TextEditor
 	poEditor        nucular.TextEditor
+	historyEditor   nucular.TextEditor
 	outputEditor    nucular.TextEditor
 
 	// Output selection state is tracked separately from the rendered list because
@@ -72,6 +73,7 @@ func NewAppState() *AppState {
 		lastClickedOutput: -1,
 		inventoryEditor:   newPathEditor(),
 		poEditor:          newPathEditor(),
+		historyEditor:     newPathEditor(),
 		outputEditor:      newPathEditor(),
 	}
 	return state
@@ -144,8 +146,8 @@ func shortcutModifier() key.Modifiers {
 	return key.ModAlt
 }
 
-// anyEditorActive reports whether one of the main form text inputs currently
+// anyEditorActive reports whether one of the main form path inputs currently
 // owns keyboard focus.
 func (s *AppState) anyEditorActive() bool {
-	return s.inventoryEditor.Active || s.poEditor.Active || s.outputEditor.Active
+	return s.inventoryEditor.Active || s.poEditor.Active || s.historyEditor.Active || s.outputEditor.Active
 }

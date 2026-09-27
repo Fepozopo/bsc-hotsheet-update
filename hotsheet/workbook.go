@@ -10,8 +10,8 @@ import (
 )
 
 // buildProductLineWorkbook creates one workbook for a product line, writes the standard report
-// sheets and Data Insights sheet, and saves the result to disk.
-func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO bool, logger *slog.Logger) (string, error) {
+// sheets, Data Insights, and optional Monthly History, then saves the result to disk.
+func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
 	defer func() {
 		_ = f.Close()
@@ -29,6 +29,12 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 			logger.Error("failed to create Data Insights sheet", "productLine", productLine, "err", err)
 		}
 		return "", fmt.Errorf("failed to create Data Insights sheet for %s: %w", productLine, err)
+	}
+
+	if hasHistory {
+		if err := writeMonthlyHistorySheet(f, entries); err != nil {
+			return "", fmt.Errorf("failed to create Monthly History sheet for %s: %w", productLine, err)
+		}
 	}
 
 	outPath, err := saveWorkbook(f, outputDir, productLine, dateStamp)

@@ -3,6 +3,7 @@ package hotsheet
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Fepozopo/bsc-hotsheet-update/helpers"
@@ -34,12 +35,12 @@ type ProgressCallback func(Progress)
 
 // Generate orchestrates the hotsheet report pipeline.
 //
-// It loads the source inventory data, merges optional PO information, groups
-// entries by product line, and writes one workbook per product line. If report is
-// non-nil, Generate reports determinate progress at major pipeline milestones
-// and after each product-line workbook is written. Passing nil disables progress
-// reporting.
-func Generate(inventoryPath, poPath, outputDir string, report ProgressCallback) ([]string, error) {
+// It loads inventory, merges optional PO and BSC sales-history information, groups
+// entries by product line, and writes one workbook per product line into outputDir.
+// Empty poPath or salesHistoryPath omits the corresponding optional data. If report
+// is non-nil, Generate reports progress at major pipeline milestones and after
+// each workbook is written. It returns created paths or an error.
+func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, report ProgressCallback) ([]string, error) {
 	reportGenerationProgress(report, 0, "Starting generation...")
 
 	logger, logCloser, err := newReportLogger()
@@ -50,7 +51,7 @@ func Generate(inventoryPath, poPath, outputDir string, report ProgressCallback) 
 		_ = logCloser.Close()
 	}()
 
-	logger.Info("hotsheet generation started", "inventoryPath", inventoryPath, "poPath", poPath, "outputDir", outputDir)
+	logger.Info("hotsheet generation started", "inventoryPath", inventoryPath, "poPath", poPath, "salesHistoryPath", salesHistoryPath, "outputDir", outputDir)
 	reportGenerationProgress(report, 5, "Loading inventory report...")
 
 	inventoryBySKU, err := loadInventoryEntries(inventoryPath, logger)
@@ -64,6 +65,13 @@ func Generate(inventoryPath, poPath, outputDir string, report ProgressCallback) 
 		reportGenerationProgress(report, 35, "Merging PO report...")
 		if err := mergePOData(poPath, inventoryBySKU, logger); err != nil {
 			logger.Error("failed to merge PO report", "err", err)
+		}
+	}
+	hasHistory := strings.TrimSpace(salesHistoryPath) != ""
+	if hasHistory {
+		reportGenerationProgress(report, 40, "Loading monthly sales history...")
+		if err := mergeSalesHistory(salesHistoryPath, inventoryBySKU, logger); err != nil {
+			return nil, err
 		}
 	}
 	reportGenerationProgress(report, 45, "Grouping product lines...")
@@ -82,7 +90,7 @@ func Generate(inventoryPath, poPath, outputDir string, report ProgressCallback) 
 		reportGenerationProgress(report, workbookProgress(len(outputs), totalProductLines), fmt.Sprintf("Writing %s hotsheet...", productLine))
 		sortEntriesForProductLine(entries)
 
-		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, logger)
+		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, logger)
 		if err != nil {
 			return outputs, err
 		}
