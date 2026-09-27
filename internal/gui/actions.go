@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,10 +35,9 @@ func (s *AppState) isBusy() bool {
 	return s.generateInProgress || s.updateInProgress
 }
 
-// pathEditorFlags returns the text editor flags appropriate for the four path
-// fields in the main form.
+// pathEditorFlags returns flags shared by the path and Best Sellers year editors.
 //
-// While generation or self-update is in progress the fields are switched to
+// While generation or self-update is in progress these fields are switched to
 // read-only to prevent the user from changing the underlying inputs mid-run.
 func (s *AppState) pathEditorFlags() nucular.EditFlags {
 	flags := nucular.EditField
@@ -107,8 +107,8 @@ func (s *AppState) browseOutputDir() {
 	s.requestRedraw()
 }
 
-// startGenerate validates the required inputs, shows the progress popup, and
-// launches hotsheet generation in a background goroutine.
+// startGenerate validates the required path and optional Best Sellers month
+// range, shows the progress popup, and starts generation in a background goroutine.
 func (s *AppState) startGenerate() {
 	if s.isBusy() {
 		return
@@ -123,6 +123,27 @@ func (s *AppState) startGenerate() {
 	poPath := editorText(&s.poEditor)
 	historyPath := editorText(&s.historyEditor)
 	outputDir := editorText(&s.outputEditor)
+	var bestSellersRange *hotsheet.BestSellersRange
+	if s.useBestSellersRange {
+		if historyPath == "" {
+			s.openErrorPopup("Missing Sales History", "Select a sales history report to use a Best Sellers month range")
+			return
+		}
+		fromYear, fromErr := strconv.Atoi(editorText(&s.fromYearEditor))
+		toYear, toErr := strconv.Atoi(editorText(&s.toYearEditor))
+		if fromErr != nil || toErr != nil {
+			s.openErrorPopup("Invalid Best Sellers Range", "Enter a year between 1 and 9999 for both dates")
+			return
+		}
+		bestSellersRange = &hotsheet.BestSellersRange{
+			FromYear: fromYear, FromMonth: s.fromMonth + 1,
+			ToYear: toYear, ToMonth: s.toMonth + 1,
+		}
+		if err := bestSellersRange.Validate(); err != nil {
+			s.openErrorPopup("Invalid Best Sellers Range", err.Error())
+			return
+		}
+	}
 
 	s.generateInProgress = true
 	s.generateProgress = 0
@@ -130,14 +151,14 @@ func (s *AppState) startGenerate() {
 	s.openGenerateProgressPopup()
 	s.requestRedraw()
 
-	go func(inv, po, history, outdir string) {
-		outputs, err := hotsheet.Generate(inv, po, history, outdir, func(progress hotsheet.Progress) {
+	go func(inv, po, history, outdir string, period *hotsheet.BestSellersRange) {
+		outputs, err := hotsheet.Generate(inv, po, history, outdir, period, func(progress hotsheet.Progress) {
 			// Generate invokes this callback from the worker goroutine, so route the
 			// update through the UI event channel before touching AppState-owned UI data.
 			s.queueEvent(generateProgressEvent{Progress: progress})
 		})
 		s.queueEvent(generateCompletedEvent{Outputs: outputs, Err: err})
-	}(inventoryPath, poPath, historyPath, outputDir)
+	}(inventoryPath, poPath, historyPath, outputDir, bestSellersRange)
 }
 
 // handleGenerateProgress applies a background generation progress update to the
@@ -182,13 +203,19 @@ func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	s.requestRedraw()
 }
 
-// resetInputs clears the four main path fields and resets any result-list
-// selection state so the user can start a fresh run.
+// resetInputs clears the main path fields and Best Sellers range, then resets
+// result-list selection state so the user can start a fresh run.
 func (s *AppState) resetInputs() {
 	setEditorText(&s.inventoryEditor, "")
 	setEditorText(&s.poEditor, "")
 	setEditorText(&s.historyEditor, "")
 	setEditorText(&s.outputEditor, "")
+	now := time.Now()
+	s.useBestSellersRange = false
+	s.fromMonth = 0
+	s.toMonth = int(now.Month()) - 1
+	setEditorText(&s.fromYearEditor, strconv.Itoa(now.Year()))
+	setEditorText(&s.toYearEditor, strconv.Itoa(now.Year()))
 	s.selectedOutput = -1
 	s.selectedOutputNeedsScroll = false
 	s.lastClickedOutput = -1

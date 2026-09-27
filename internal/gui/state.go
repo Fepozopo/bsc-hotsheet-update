@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/aarzilli/nucular"
@@ -43,6 +44,13 @@ type AppState struct {
 	historyEditor   nucular.TextEditor
 	outputEditor    nucular.TextEditor
 
+	// Best Sellers uses inventory YTD unless the user enables a history month range.
+	useBestSellersRange bool
+	fromMonth           int // Zero-based index into the January–December selector.
+	toMonth             int
+	fromYearEditor      nucular.TextEditor
+	toYearEditor        nucular.TextEditor
+
 	// Output selection state is tracked separately from the rendered list because
 	// the immediate-mode UI is rebuilt each frame.
 	outputs                   []string
@@ -65,8 +73,10 @@ type AppState struct {
 	latestAssetURL          string
 }
 
-// NewAppState constructs the initial GUI state.
+// NewAppState constructs the initial GUI state, defaulting the optional Best
+// Sellers range controls to January through the current month of the current year.
 func NewAppState() *AppState {
+	now := time.Now()
 	state := &AppState{
 		events:            make(chan UIEvent, 16),
 		selectedOutput:    -1,
@@ -75,7 +85,12 @@ func NewAppState() *AppState {
 		poEditor:          newPathEditor(),
 		historyEditor:     newPathEditor(),
 		outputEditor:      newPathEditor(),
+		fromYearEditor:    newYearEditor(),
+		toYearEditor:      newYearEditor(),
+		toMonth:           int(now.Month()) - 1,
 	}
+	setEditorText(&state.fromYearEditor, strconv.Itoa(now.Year()))
+	setEditorText(&state.toYearEditor, strconv.Itoa(now.Year()))
 	return state
 }
 
@@ -136,6 +151,11 @@ func newPathEditor() nucular.TextEditor {
 	}
 }
 
+// newYearEditor returns a short, single-line editor for a four-digit calendar year.
+func newYearEditor() nucular.TextEditor {
+	return nucular.TextEditor{Flags: nucular.EditField, Maxlen: 4}
+}
+
 // shortcutModifier returns the application shortcut modifier used throughout
 // the GUI.
 //
@@ -149,5 +169,5 @@ func shortcutModifier() key.Modifiers {
 // anyEditorActive reports whether one of the main form path inputs currently
 // owns keyboard focus.
 func (s *AppState) anyEditorActive() bool {
-	return s.inventoryEditor.Active || s.poEditor.Active || s.historyEditor.Active || s.outputEditor.Active
+	return s.inventoryEditor.Active || s.poEditor.Active || s.historyEditor.Active || s.outputEditor.Active || s.fromYearEditor.Active || s.toYearEditor.Active
 }

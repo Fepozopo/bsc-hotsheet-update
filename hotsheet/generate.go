@@ -37,10 +37,19 @@ type ProgressCallback func(Progress)
 //
 // It loads inventory, merges optional PO and BSC sales-history information, groups
 // entries by product line, and writes one workbook per product line into outputDir.
-// Empty poPath or salesHistoryPath omits the corresponding optional data. If report
-// is non-nil, Generate reports progress at major pipeline milestones and after
-// each workbook is written. It returns created paths or an error.
-func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, report ProgressCallback) ([]string, error) {
+// Empty poPath or salesHistoryPath omits the corresponding optional data. A nil
+// bestSellersRange uses inventory YTD sales; a non-nil range requires salesHistoryPath.
+// If report is non-nil, Generate reports progress at major pipeline milestones
+// and after each workbook is written. It returns created paths or an error.
+func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSellersRange *BestSellersRange, report ProgressCallback) ([]string, error) {
+	if bestSellersRange != nil {
+		if strings.TrimSpace(salesHistoryPath) == "" {
+			return nil, ErrBestSellersHistoryRequired
+		}
+		if err := bestSellersRange.Validate(); err != nil {
+			return nil, err
+		}
+	}
 	reportGenerationProgress(report, 0, "Starting generation...")
 
 	logger, logCloser, err := newReportLogger()
@@ -90,7 +99,7 @@ func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, report 
 		reportGenerationProgress(report, workbookProgress(len(outputs), totalProductLines), fmt.Sprintf("Writing %s hotsheet...", productLine))
 		sortEntriesForProductLine(entries)
 
-		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, logger)
+		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, bestSellersRange, logger)
 		if err != nil {
 			return outputs, err
 		}

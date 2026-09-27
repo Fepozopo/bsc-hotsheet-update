@@ -121,8 +121,8 @@ func TestMergeSalesHistoryOptionalAndInvalid(t *testing.T) {
 	}
 }
 
-// TestMonthlyHistorySheetOptional verifies that only a selected history report adds
-// the extra worksheet to a generated product-line workbook.
+// TestMonthlyHistorySheetOptional verifies that Best Sellers is always present and
+// only a selected history report adds Monthly History to a product-line workbook.
 func TestMonthlyHistorySheetOptional(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -133,7 +133,7 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 		{"supplied", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			path, err := buildProductLineWorkbook("BAS", nil, t.TempDir(), "20260101", false, tc.hasHistory, nil)
+			path, err := buildProductLineWorkbook("BAS", nil, t.TempDir(), "20260101", false, tc.hasHistory, nil, nil)
 			if err != nil {
 				t.Fatalf("hasHistory=%v: cannot build workbook: %v", tc.hasHistory, err)
 			}
@@ -142,14 +142,17 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 				t.Fatalf("hasHistory=%v: cannot read workbook: %v", tc.hasHistory, err)
 			}
 			defer func() { _ = file.Close() }()
-			found := false
+			foundHistory, foundBestSellers := false, false
 			for _, name := range file.GetSheetList() {
 				if name == monthlyHistorySheetName {
-					found = true
+					foundHistory = true
+				}
+				if name == bestSellersSheetName {
+					foundBestSellers = true
 				}
 			}
-			if found != tc.wantSheet {
-				t.Errorf("hasHistory=%v: expected Monthly History sheet present=%v, got %v (sheets=%v)", tc.hasHistory, tc.wantSheet, found, file.GetSheetList())
+			if foundHistory != tc.wantSheet || !foundBestSellers {
+				t.Errorf("hasHistory=%v: expected Monthly History present=%v and Best Sellers present=true, got Monthly History=%v, Best Sellers=%v (sheets=%v)", tc.hasHistory, tc.wantSheet, foundHistory, foundBestSellers, file.GetSheetList())
 			}
 		})
 	}

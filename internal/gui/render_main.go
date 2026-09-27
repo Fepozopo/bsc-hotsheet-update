@@ -8,10 +8,12 @@ import (
 	"github.com/aarzilli/nucular"
 )
 
+var bestSellersMonthLabels = []string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
+
 // renderMainForm draws the main application window contents.
 //
 // The layout is intentionally kept close to the original Fyne-based UI: a title,
-// four labeled path pickers, a status line, and the bottom action row.
+// four labeled path pickers, the optional Best Sellers range, a status line, and the action row.
 func (s *AppState) renderMainForm(w *nucular.Window) {
 	w.Row(30).Dynamic(1)
 	w.Label("Create Unified Hotsheets from Reports", "CC")
@@ -25,6 +27,7 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	s.renderPathField(w, shortcutLabel("PO Report (optional):", "P"), "Path to PO report (.xlsx)", &s.poEditor, s.browsePO)
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, shortcutLabel("Sales History (optional):", "H"), "Path to sales history report (.xlsx)", &s.historyEditor, s.browseHistory)
+	s.renderBestSellersRange(w)
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, shortcutLabel("Output Directory (optional):", "O"), "Directory for generated files", &s.outputEditor, s.browseOutputDir)
 	s.renderSpacer(w, 8)
@@ -32,6 +35,43 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	s.renderSpacer(w, 8)
 	s.renderMainButtons(w)
 	s.handleMainKeyboard(w)
+}
+
+// renderBestSellersRange shows a range checkbox only when history is selected.
+// Month dropdowns avoid ambiguous dates; year editors are validated before generation.
+func (s *AppState) renderBestSellersRange(w *nucular.Window) {
+	w.Row(20).Dynamic(1)
+	if strings.TrimSpace(string(s.historyEditor.Buffer)) == "" {
+		// Clearing the history path also restores the inventory YTD fallback.
+		s.useBestSellersRange = false
+		w.LabelColored("Best Sellers uses inventory YTD sales unless you select a history date range.", "LC", color.RGBA{R: 120, G: 120, B: 120, A: 255})
+		return
+	}
+	selected := s.useBestSellersRange
+	w.CheckboxText("Use a month range for Best Sellers (otherwise use inventory YTD)", &selected)
+	if !s.isBusy() {
+		s.useBestSellersRange = selected
+	}
+	if !s.useBestSellersRange {
+		return
+	}
+
+	s.fromYearEditor.Flags = s.pathEditorFlags()
+	s.toYearEditor.Flags = s.pathEditorFlags()
+	w.Row(28).Static(55, 140, 50, 95)
+	w.Label("From", "LC")
+	fromMonth := w.ComboSimple(bestSellersMonthLabels, s.fromMonth, 24)
+	w.Label("Year", "LC")
+	s.fromYearEditor.Edit(w)
+	w.Row(28).Static(55, 140, 50, 95)
+	w.Label("To", "LC")
+	toMonth := w.ComboSimple(bestSellersMonthLabels, s.toMonth, 24)
+	w.Label("Year", "LC")
+	s.toYearEditor.Edit(w)
+	if !s.isBusy() {
+		s.fromMonth = fromMonth
+		s.toMonth = toMonth
+	}
 }
 
 // renderPathField draws a single labeled path editor with its Browse button and
