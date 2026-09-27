@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -40,6 +41,7 @@ func writeSalesHistoryFixture(t *testing.T) string {
 		20: {"Quantity Sold:", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10},
 		21: {"Report Total:"},
 		22: {"Quantity Sold:", 5000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6000},
+		23: {"Run Date: 9/25/2026   3:58:16PM"},
 	}
 	for rowNum := 1; rowNum <= len(rows); rowNum++ {
 		for col, value := range rows[rowNum] {
@@ -64,8 +66,12 @@ func writeSalesHistoryFixture(t *testing.T) string {
 func TestMergeSalesHistory(t *testing.T) {
 	item := &inventoryEntry{SKU: "SKU-1", Description: "inventory description", Status: "Rundown", YTDSold: 42}
 	bySKU := map[string]*inventoryEntry{item.SKU: item}
-	if err := mergeSalesHistory(writeSalesHistoryFixture(t), bySKU, nil); err != nil {
+	runDate, err := mergeSalesHistory(writeSalesHistoryFixture(t), bySKU, nil)
+	if err != nil {
 		t.Fatalf("unexpected sales history import failure: %v", err)
+	}
+	if expected := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC); !runDate.Equal(expected) {
+		t.Fatalf("expected report run date %v, got %v", expected, runDate)
 	}
 	if item.Description != "inventory description" || item.YTDSold != 42 || item.Status != "Rundown" {
 		t.Fatalf("inventory fields changed during import for SKU-1: %+v", item)
@@ -98,8 +104,8 @@ func TestMergeSalesHistory(t *testing.T) {
 func TestMergeSalesHistoryOptionalAndInvalid(t *testing.T) {
 	item := &inventoryEntry{SKU: "SKU-1"}
 	bySKU := map[string]*inventoryEntry{"SKU-1": item}
-	if err := mergeSalesHistory("", bySKU, nil); err != nil || len(item.SalesRecords) != 0 {
-		t.Fatalf("empty optional history: expected no change and no error, got records=%v error=%v", item.SalesRecords, err)
+	if date, err := mergeSalesHistory("", bySKU, nil); err != nil || !date.IsZero() || len(item.SalesRecords) != 0 {
+		t.Fatalf("empty optional history: expected no date, records, or error; got records=%v date=%v error=%v", item.SalesRecords, date, err)
 	}
 	f := excelize.NewFile()
 	defer func() { _ = f.Close() }()
@@ -112,7 +118,7 @@ func TestMergeSalesHistoryOptionalAndInvalid(t *testing.T) {
 	if err := f.SaveAs(path); err != nil {
 		t.Fatalf("cannot save invalid history fixture: %v", err)
 	}
-	err := mergeSalesHistory(path, bySKU, nil)
+	_, err := mergeSalesHistory(path, bySKU, nil)
 	if !errors.Is(err, errMissingSalesPeriod) {
 		t.Fatalf("expected a missing sales-period error for invalid month, got %v", err)
 	}
@@ -121,8 +127,28 @@ func TestMergeSalesHistoryOptionalAndInvalid(t *testing.T) {
 	}
 }
 
+// TestMergeSalesHistoryRequiresRunDate ensures a report without a dated footer
+// cannot anchor an MTO forecast to an invented current date.
+func TestMergeSalesHistoryRequiresRunDate(t *testing.T) {
+	file := excelize.NewFile()
+	defer func() { _ = file.Close() }()
+	for cell, value := range map[string]string{"A1": "Item Code", "B1": "Period 1", "M1": "Period 12"} {
+		if err := file.SetCellValue("Sheet1", cell, value); err != nil {
+			t.Fatalf("cannot create run-date fixture at %s: %v", cell, err)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "no-run-date.xlsx")
+	if err := file.SaveAs(path); err != nil {
+		t.Fatalf("cannot save run-date fixture: %v", err)
+	}
+	date, err := mergeSalesHistory(path, map[string]*inventoryEntry{}, nil)
+	if !errors.Is(err, errMissingSalesHistoryRunDate) || !date.IsZero() {
+		t.Fatalf("no run date: expected run-date error and zero date, got date=%v error=%v", date, err)
+	}
+}
+
 // TestMonthlyHistorySheetOptional verifies that Best Sellers is always present and
-// only a selected history report adds Monthly History to a product-line workbook.
+// only a selected history report adds Monthly History and MTO to a product-line workbook.
 func TestMonthlyHistorySheetOptional(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -133,7 +159,7 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 		{"supplied", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			path, err := buildProductLineWorkbook("BAS", nil, t.TempDir(), "20260101", false, tc.hasHistory, nil, nil)
+			path, err := buildProductLineWorkbook("BAS", nil, t.TempDir(), "20260101", false, tc.hasHistory, nil, time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC), nil)
 			if err != nil {
 				t.Fatalf("hasHistory=%v: cannot build workbook: %v", tc.hasHistory, err)
 			}
@@ -142,7 +168,7 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 				t.Fatalf("hasHistory=%v: cannot read workbook: %v", tc.hasHistory, err)
 			}
 			defer func() { _ = file.Close() }()
-			foundHistory, foundBestSellers := false, false
+			foundHistory, foundBestSellers, foundMTO := false, false, false
 			for _, name := range file.GetSheetList() {
 				if name == monthlyHistorySheetName {
 					foundHistory = true
@@ -150,9 +176,12 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 				if name == bestSellersSheetName {
 					foundBestSellers = true
 				}
+				if name == mtoSheetName {
+					foundMTO = true
+				}
 			}
-			if foundHistory != tc.wantSheet || !foundBestSellers {
-				t.Errorf("hasHistory=%v: expected Monthly History present=%v and Best Sellers present=true, got Monthly History=%v, Best Sellers=%v (sheets=%v)", tc.hasHistory, tc.wantSheet, foundHistory, foundBestSellers, file.GetSheetList())
+			if foundHistory != tc.wantSheet || foundMTO != tc.wantSheet || !foundBestSellers {
+				t.Errorf("hasHistory=%v: expected Monthly History and MTO present=%v and Best Sellers present=true, got Monthly History=%v, MTO=%v, Best Sellers=%v (sheets=%v)", tc.hasHistory, tc.wantSheet, foundHistory, foundMTO, foundBestSellers, file.GetSheetList())
 			}
 		})
 	}

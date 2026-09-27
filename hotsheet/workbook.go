@@ -5,14 +5,16 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
 
 // buildProductLineWorkbook creates one workbook for a product line, writes the standard report
-// sheets, Data Insights, optional Monthly History, and Best Sellers, then saves the result.
-// A nil bestSellersRange uses inventory YTD sales.
-func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, logger *slog.Logger) (string, error) {
+// sheets, Data Insights, Best Sellers, and the optional Monthly History and MTO sheets,
+// then saves the result. A nil bestSellersRange uses inventory YTD sales; when
+// hasHistory is true, historyRunDate anchors the MTO forecasts.
+func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
 	defer func() {
 		_ = f.Close()
@@ -40,6 +42,11 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 
 	if err := writeBestSellersSheet(f, entries, bestSellersRange); err != nil {
 		return "", fmt.Errorf("failed to create Best Sellers sheet for %s: %w", productLine, err)
+	}
+	if hasHistory {
+		if err := writeMTOSheet(f, entries, historyRunDate); err != nil {
+			return "", fmt.Errorf("failed to create MTO sheet for %s: %w", productLine, err)
+		}
 	}
 
 	outPath, err := saveWorkbook(f, outputDir, productLine, dateStamp)

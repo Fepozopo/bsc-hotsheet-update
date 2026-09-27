@@ -37,8 +37,9 @@ type ProgressCallback func(Progress)
 //
 // It loads inventory, merges optional PO and BSC sales-history information, groups
 // entries by product line, and writes one workbook per product line into outputDir.
-// Empty poPath or salesHistoryPath omits the corresponding optional data. A nil
-// bestSellersRange uses inventory YTD sales; a non-nil range requires salesHistoryPath.
+// Empty poPath or salesHistoryPath omits the corresponding optional data and MTO
+// sheet. A nil bestSellersRange uses inventory YTD sales; a non-nil range requires
+// salesHistoryPath. MTO forecasts are anchored to the history report's run date.
 // If report is non-nil, Generate reports progress at major pipeline milestones
 // and after each workbook is written. It returns created paths or an error.
 func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSellersRange *BestSellersRange, report ProgressCallback) ([]string, error) {
@@ -77,9 +78,11 @@ func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSel
 		}
 	}
 	hasHistory := strings.TrimSpace(salesHistoryPath) != ""
+	var historyRunDate time.Time
 	if hasHistory {
 		reportGenerationProgress(report, 40, "Loading monthly sales history...")
-		if err := mergeSalesHistory(salesHistoryPath, inventoryBySKU, logger); err != nil {
+		historyRunDate, err = mergeSalesHistory(salesHistoryPath, inventoryBySKU, logger)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -99,7 +102,7 @@ func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSel
 		reportGenerationProgress(report, workbookProgress(len(outputs), totalProductLines), fmt.Sprintf("Writing %s hotsheet...", productLine))
 		sortEntriesForProductLine(entries)
 
-		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, bestSellersRange, logger)
+		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, bestSellersRange, historyRunDate, logger)
 		if err != nil {
 			return outputs, err
 		}

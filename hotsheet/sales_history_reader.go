@@ -6,50 +6,56 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
 
 const salesHistoryWarehouse = "BSC"
 
-var errMissingSalesPeriod = errors.New("missing sales history period")
+var (
+	errMissingSalesPeriod         = errors.New("missing sales history period")
+	errMissingSalesHistoryRunDate = errors.New("sales history report has no run date")
+)
 
 // mergeSalesHistory streams the Sage report at path into inventoryBySKU, using logger
-// for unmatched items. Only BSC year blocks are attached; item and report totals are
-// ignored. An empty path is a no-op; an unreadable or malformed report returns an error.
-func mergeSalesHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) error {
+// for unmatched items. It returns the report's run date to anchor forecasts; only
+// BSC year blocks are attached and totals are ignored. An empty path is a no-op.
+// An unreadable report or missing/malformed run date returns an error.
+func mergeSalesHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) (time.Time, error) {
 	if strings.TrimSpace(path) == "" {
-		return nil
+		return time.Time{}, nil
 	}
 
 	// Excelize's row iterator avoids holding this large, irregular worksheet in memory.
 	workbook, err := excelize.OpenFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to open sales history report %s: %w", path, err)
+		return time.Time{}, fmt.Errorf("failed to open sales history report %s: %w", path, err)
 	}
 	defer func() { _ = workbook.Close() }()
 
 	rows, err := workbook.Rows("Sheet1")
 	if err != nil {
-		return fmt.Errorf("failed to read sales history sheet: %w", err)
+		return time.Time{}, fmt.Errorf("failed to read sales history sheet: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	var item *inventoryEntry
 	var year int
 	bscWarehouse := false
+	var runDate time.Time
 	rowNum := 0
 	for rows.Next() {
 		rowNum++
 		// Raw values preserve the report's 0–100 percentage scale and numeric dollar values.
 		cells, err := rows.Columns(excelize.Options{RawCellValue: true})
 		if err != nil {
-			return fmt.Errorf("failed to read sales history row %d: %w", rowNum, err)
+			return time.Time{}, fmt.Errorf("failed to read sales history row %d: %w", rowNum, err)
 		}
 		label := strings.TrimSpace(getCell(cells, 0))
 		if rowNum == 1 {
 			if label != "Item Code" || getCell(cells, 1) != "Period 1" || getCell(cells, 12) != "Period 12" {
-				return fmt.Errorf("sales history report has unexpected period headers")
+				return time.Time{}, fmt.Errorf("sales history report has unexpected period headers")
 			}
 			continue
 		}
@@ -72,33 +78,48 @@ func mergeSalesHistory(path string, inventoryBySKU map[string]*inventoryEntry, l
 			bscWarehouse = false
 			year = 0
 		case label == "Report Total:":
-			return nil
+			// Report totals are not SKU sales. Continue to the run-date footer.
+			item = nil
+			bscWarehouse = false
+			year = 0
+		case strings.HasPrefix(label, "Run Date:"):
+			fields := strings.Fields(strings.TrimPrefix(label, "Run Date:"))
+			if len(fields) == 0 {
+				return time.Time{}, fmt.Errorf("sales history run date is empty at row %d", rowNum)
+			}
+			runDate, err = time.Parse("1/2/2006", fields[0])
+			if err != nil {
+				return time.Time{}, fmt.Errorf("invalid sales history run date at row %d: %w", rowNum, err)
+			}
 		case label == "Year:":
 			if !bscWarehouse {
 				continue
 			}
 			year, err = strconv.Atoi(strings.TrimSpace(getCell(cells, 1)))
 			if err != nil {
-				return fmt.Errorf("invalid sales history year at row %d: %w", rowNum, err)
+				return time.Time{}, fmt.Errorf("invalid sales history year at row %d: %w", rowNum, err)
 			}
 		case isSalesHistoryMetric(label) && bscWarehouse:
 			if year == 0 {
-				return fmt.Errorf("sales history metric %q at row %d has no year", label, rowNum)
+				return time.Time{}, fmt.Errorf("sales history metric %q at row %d has no year", label, rowNum)
 			}
 			record, err := parseSalesRecord(cells, year, label)
 			if err != nil {
-				return fmt.Errorf("invalid sales history row %d: %w", rowNum, err)
+				return time.Time{}, fmt.Errorf("invalid sales history row %d: %w", rowNum, err)
 			}
 			item.SalesRecords = append(item.SalesRecords, record)
 		}
 	}
 	if err := rows.Error(); err != nil {
-		return fmt.Errorf("failed to scan sales history sheet: %w", err)
+		return time.Time{}, fmt.Errorf("failed to scan sales history sheet: %w", err)
 	}
 	if rowNum == 0 {
-		return fmt.Errorf("sales history report appears empty")
+		return time.Time{}, fmt.Errorf("sales history report appears empty")
 	}
-	return nil
+	if runDate.IsZero() {
+		return time.Time{}, errMissingSalesHistoryRunDate
+	}
+	return runDate, nil
 }
 
 // isSalesHistoryMetric reports whether label names one of the five supported per-year metrics.
