@@ -130,7 +130,8 @@ func TestWriteMTOSheet(t *testing.T) {
 	f := newProductLineWorkbook()
 	defer func() { _ = f.Close() }()
 	item := &inventoryEntry{
-		SKU: "A", OnHand: 0, Status: "Carryover", RawClassDesc: "Counter Cards",
+		SKU: "A-WM", ProductLine: "BAS", OnHand: 0, Status: "Carryover",
+		ClassDesc: "Counter Cards", RawClassDesc: "Counter Cards",
 		Description: "Birthday Card", Occasion: "BIRTHDAY", Foil: "Yes", CardSize: "A7",
 	}
 	if err := writeMTOSheet(f, []*inventoryEntry{item, {SKU: "D", Status: "Discontinued"}}, asOf); err != nil {
@@ -147,7 +148,7 @@ func TestWriteMTOSheet(t *testing.T) {
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
 		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "History Coverage", "G1": "Class Description", "H1": "Description", "I1": "Occasion", "J1": "Foil", "K1": "Card Size",
-		"A2": "A", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "0 months / 0 years", "G2": "Counter Cards", "H2": "Birthday Card", "I2": "BIRTHDAY", "J2": "Yes", "K2": "A7",
+		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "0 months / 0 years", "G2": "WM - Counter Cards", "H2": "Birthday Card", "I2": "BIRTHDAY", "J2": "Yes", "K2": "A7",
 	}
 	for cell, expected := range want {
 		actual, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})

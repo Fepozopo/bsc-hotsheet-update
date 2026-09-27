@@ -16,8 +16,9 @@ var mtoHeaders = [...]string{
 }
 
 // writeMTOSheet writes active items' 12-month BSC demand and 24-month stockout
-// estimates into f as of the history report's run date. The returned error
-// identifies the first worksheet operation that fails.
+// estimates into f as of the history report's run date. Class descriptions use
+// the standard SKU prefix rules and numeric MTO cells use MTO YTD's light colors.
+// The returned error identifies the first worksheet operation that fails.
 func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) error {
 	if asOf.IsZero() {
 		return fmt.Errorf("cannot create MTO sheet without a sales history run date")
@@ -77,13 +78,13 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	if err != nil {
 		return fmt.Errorf("failed to create MTO forecast style: %w", err)
 	}
+	// There are only three numeric YTD bands; reuse each Excel style across rows.
+	mtoStyles := make(map[string]int, 3)
+	const mtoColumnIdx = 4 // Column E, zero-based like standardSheetCellFillColor.
 
 	for index, row := range buildMTORows(entries, asOf) {
 		rowNum := index + 2
-		classDesc := row.item.RawClassDesc
-		if classDesc == "" {
-			classDesc = row.item.ClassDesc
-		}
+		classDesc := applyStandardDisplayClassPrefix(row.item)
 		mtoValue := interface{}(row.mto)
 		switch row.state {
 		case mtoBeyondHorizon:
@@ -113,7 +114,20 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 			}
 		}
 		if row.state == mtoStockout {
-			if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("E%d", rowNum), fmt.Sprintf("E%d", rowNum), numberStyle); err != nil {
+			fill := standardSheetCellFillColor(row.item.Status, mtoColumnIdx, mtoColumnIdx, -1, row.mto, 0, row.mto)
+			style, ok := mtoStyles[fill]
+			if !ok {
+				style, err = f.NewStyle(&excelize.Style{
+					Alignment: centeredAlignment(), Border: thinBlackBorder(),
+					Fill: patternFill(fill), CustomNumFmt: &numberFormat,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to create MTO YTD color style: %w", err)
+				}
+				mtoStyles[fill] = style
+			}
+			cell := fmt.Sprintf("E%d", rowNum)
+			if err := f.SetCellStyle(mtoSheetName, cell, cell, style); err != nil {
 				return fmt.Errorf("failed to format MTO value row %d: %w", rowNum, err)
 			}
 		}
