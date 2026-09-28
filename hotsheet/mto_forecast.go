@@ -29,6 +29,7 @@ type mtoForecastRow struct {
 	item      *inventoryEntry
 	available int
 	demand12  float64
+	monthly   [12]float64
 	hasDemand bool
 	mto       float64
 	stockout  string
@@ -175,6 +176,7 @@ func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 		profile := buildMTOHistoryProfile(item.SalesRecords, asOf)
 		row.coverage = fmt.Sprintf("%d months / %d years", profile.months, profile.years)
 		if profile.usable {
+			row.monthly = profile.monthly
 			row.demand12, _, _ = forecastMTOWindow(profile.monthly, start, end12, float64(row.available))
 			row.hasDemand = true
 		}

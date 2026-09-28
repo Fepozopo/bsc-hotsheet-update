@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,84 @@ func TestBuildMTORows(t *testing.T) {
 	}
 }
 
+// TestMTOProposedPO verifies saved what-if formulas preserve the baseline and
+// move stockout to the next seasonal peak rather than averaging across months.
+func TestMTOProposedPO(t *testing.T) {
+	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
+	var prior, current [12]float64
+	prior[0], prior[3], current[3] = 1, 120, 120
+	f := newProductLineWorkbook()
+	defer func() { _ = f.Close() }()
+	entries := []*inventoryEntry{
+		{SKU: "SPRING", Status: "Carryover", OnHand: 60, SalesRecords: []salesRecord{
+			{Year: 2025, Metric: "Quantity Sold", Periods: prior},
+			{Year: 2026, Metric: "Quantity Sold", Periods: current},
+		}},
+		{SKU: "NEW", Status: "Active", OnHand: 0},
+	}
+	if err := writeMTOSheet(f, entries, asOf); err != nil {
+		t.Fatalf("write MTO workbook: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "scenario.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatalf("save MTO workbook: %v", err)
+	}
+	written, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("reopen MTO workbook: %v", err)
+	}
+	defer func() { _ = written.Close() }()
+	if visible, err := written.GetSheetVisible(mtoScenarioSheetName); err != nil || visible {
+		t.Fatalf("forecast helper should be hidden: visible=%v err=%v", visible, err)
+	}
+
+	for _, tc := range []struct {
+		name, month, mtoText string
+		input                interface{}
+		mtoWant              float64
+	}{
+		{"blank matches baseline", "Apr 2027", "", "", 6 + 5.0/30 + (60-1.0/3)/120},
+		{"next spring", "Apr 2028", "", 70, 18 + 5.0/30 + (130-120-2.0/3)/120},
+		{"past horizon", "Not within 24 months", ">24", 500, 0},
+		{"invalid negative", "Invalid PO units", "Invalid PO units", -1, 0},
+		{"invalid fractional", "Invalid PO units", "Invalid PO units", 1.5, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := written.SetCellValue(mtoSheetName, "F3", tc.input); err != nil {
+				t.Fatalf("set proposed PO %v: %v", tc.input, err)
+			}
+			for cell, want := range map[string]string{"H3": tc.month, "G3": tc.mtoText} {
+				got, err := written.CalcCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
+				if err != nil {
+					formula, _ := written.GetCellFormula(mtoSheetName, cell)
+					t.Fatalf("calculate %s for proposed PO %v (%s): %v", cell, tc.input, formula, err)
+				}
+				if want != "" && got != want {
+					t.Errorf("proposed PO %v, %s: expected %q, got %q", tc.input, cell, want, got)
+				}
+				if cell == "G3" && want == "" {
+					actual, parseErr := strconv.ParseFloat(got, 64)
+					if parseErr != nil || math.Abs(actual-tc.mtoWant) > 1e-9 {
+						t.Errorf("proposed PO %v, G3: expected MTO %v, got %q (parse error %v)", tc.input, tc.mtoWant, got, parseErr)
+					}
+				}
+			}
+			got, err := written.GetCellValue(mtoSheetName, "D3")
+			if err != nil || got != "Apr 2027" {
+				t.Errorf("baseline stockout after proposed PO %v: expected Apr 2027, got %q (error %v)", tc.input, got, err)
+			}
+		})
+	}
+	if err := written.SetCellValue(mtoSheetName, "F2", 5); err != nil {
+		t.Fatalf("set proposed PO for missing history: %v", err)
+	}
+	for _, cell := range []string{"G2", "H2"} {
+		if got, err := written.CalcCellValue(mtoSheetName, cell); err != nil || got != "Insufficient history" {
+			t.Errorf("missing history with 5 proposed units, %s: expected Insufficient history, got %q (error %v)", cell, got, err)
+		}
+	}
+}
+
 // TestWriteMTOSheet checks user-visible fields and filters in the saved workbook;
 // it does not assert cosmetic style IDs or hardcoded colors.
 func TestWriteMTOSheet(t *testing.T) {
@@ -147,8 +226,8 @@ func TestWriteMTOSheet(t *testing.T) {
 	}
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
-		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "History Coverage", "G1": "Class Description", "H1": "Description", "I1": "Occasion", "J1": "Foil", "K1": "Card Size",
-		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "0 months / 0 years", "G2": "WM - Counter Cards", "H2": "Birthday Card", "I2": "BIRTHDAY", "J2": "Yes", "K2": "A7",
+		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "Proposed PO Units", "G1": "MTO with Proposed PO", "H1": "Stockout Month with Proposed PO", "I1": "History Coverage", "J1": "Class Description", "K1": "Description", "L1": "Occasion", "M1": "Foil", "N1": "Card Size",
+		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "", "I2": "0 months / 0 years", "J2": "WM - Counter Cards", "K2": "Birthday Card", "L2": "BIRTHDAY", "M2": "Yes", "N2": "A7",
 	}
 	for cell, expected := range want {
 		actual, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
@@ -159,7 +238,7 @@ func TestWriteMTOSheet(t *testing.T) {
 	if actual, err := written.GetCellValue(mtoSheetName, "A3"); err != nil || actual != "" {
 		t.Errorf("A3: expected discontinued SKU omitted, got %q (error %v)", actual, err)
 	}
-	// Verify Excel stores the filter range for all eleven requested columns.
+	// Verify Excel stores the filter range for all fourteen requested columns.
 	archive, err := zip.OpenReader(path)
 	if err != nil {
 		t.Fatalf("cannot inspect MTO workbook: %v", err)
@@ -179,11 +258,11 @@ func TestWriteMTOSheet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cannot read worksheet %s: %v", member.Name, err)
 		}
-		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$K$1"`) {
+		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$N$1"`) {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected A1:K1 autofilter in saved MTO sheet")
+		t.Fatal("expected A1:N1 autofilter in saved MTO sheet")
 	}
 }
