@@ -16,7 +16,7 @@ const (
 var mtoHeaders = [...]string{
 	"SKU", "Available Quantity", "Forecast Demand", "Projected Stockout Month",
 	"MTO", "Proposed PO Units", "MTO with Proposed PO", "Stockout Month with Proposed PO",
-	"History Coverage", "Class Description", "Description", "Occasion", "Foil", "Card Size",
+	"History Coverage", "Class Description", "Occasion", "Foil", "Description", "Card Size",
 }
 
 // writeMTOSheet writes active items' 12-month BSC demand and 24-month stockout
@@ -42,7 +42,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	if err != nil {
 		return fmt.Errorf("failed to create MTO header style: %w", err)
 	}
-	widths := [...]float64{20, 21, 20, 28, 13, 20, 22, 34, 25, 22, 35, 20, 13, 13}
+	widths := [...]float64{20, 21, 20, 28, 13, 20, 22, 34, 25, 22, 20, 13, 35, 13}
 	for col, header := range mtoHeaders {
 		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
 		if err := f.SetCellValue(mtoSheetName, cell, header); err != nil {
@@ -116,7 +116,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 		}
 		values := [...]interface{}{
 			row.item.SKU, row.available, "", row.stockout, mtoValue, "", "", "",
-			row.coverage, classDesc, row.item.Description, row.item.Occasion, row.item.Foil, row.item.CardSize,
+			row.coverage, classDesc, row.item.Occasion, row.item.Foil, row.item.Description, row.item.CardSize,
 		}
 		if row.hasDemand {
 			values[2] = row.demand12

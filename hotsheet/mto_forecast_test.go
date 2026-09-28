@@ -226,8 +226,8 @@ func TestWriteMTOSheet(t *testing.T) {
 	}
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
-		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "Proposed PO Units", "G1": "MTO with Proposed PO", "H1": "Stockout Month with Proposed PO", "I1": "History Coverage", "J1": "Class Description", "K1": "Description", "L1": "Occasion", "M1": "Foil", "N1": "Card Size",
-		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "", "I2": "0 months / 0 years", "J2": "WM - Counter Cards", "K2": "Birthday Card", "L2": "BIRTHDAY", "M2": "Yes", "N2": "A7",
+		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "Proposed PO Units", "G1": "MTO with Proposed PO", "H1": "Stockout Month with Proposed PO", "I1": "History Coverage", "J1": "Class Description", "K1": "Occasion", "L1": "Foil", "M1": "Description", "N1": "Card Size",
+		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "", "I2": "0 months / 0 years", "J2": "WM - Counter Cards", "K2": "BIRTHDAY", "L2": "Yes", "M2": "Birthday Card", "N2": "A7",
 	}
 	for cell, expected := range want {
 		actual, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
