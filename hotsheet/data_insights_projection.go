@@ -25,7 +25,7 @@ var dataInsightsDateMap = map[string]occasionDateInfo{
 	"VALENTINES DAY":    {Display: "February 14", Month: time.February, Day: 14, SortKey: 214},
 	"ST PATRICKS DAY":   {Display: "March 17", Month: time.March, Day: 17, SortKey: 317},
 	"ST. PATRICK'S DAY": {Display: "March 17", Month: time.March, Day: 17, SortKey: 317},
-	"EASTER":            {Display: "April 5", Month: time.April, Day: 4, SortKey: 405},
+	"EASTER":            {Display: "April 5", Month: time.April, Day: 5, SortKey: 405},
 	"PASSOVER":          {Display: "April 21", Month: time.April, Day: 21, SortKey: 421},
 	"MOTHER'S DAY":      {Display: "May 10", Month: time.May, Day: 10, SortKey: 510},
 	"MOTHERS DAY":       {Display: "May 10", Month: time.May, Day: 10, SortKey: 510},
