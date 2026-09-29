@@ -20,10 +20,11 @@ var mtoHeaders = [...]string{
 }
 
 // writeMTOSheet writes active items' 12-month BSC demand and 24-month stockout
-// estimates into f as of the history report's run date. Hidden forecast segments
-// power live PO what-if formulas without altering baseline quantities. Class
-// descriptions use standard SKU prefixes and numeric baseline MTO cells use
-// MTO YTD's light colors.
+// estimates into f as of the history report's run date. Missing calendar months
+// use the observed-month mean once two completed months are available. Hidden
+// forecast segments power live PO what-if formulas without altering baseline
+// quantities. Class descriptions use standard SKU prefixes and numeric baseline
+// MTO cells use MTO YTD's light colors.
 // The returned error identifies the first worksheet operation that fails.
 func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) error {
 	if asOf.IsZero() {
@@ -59,11 +60,11 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	// Header comments keep the source date and assumptions visible without
 	// displacing the filterable first-row column headers.
 	comments := [...]excelize.Comment{
-		{Cell: "C1", Author: "Hotsheet Generator", Text: "Projected BSC units sold for 12 calendar months after the report run date " + asOf.Format("Jan 2, 2006") + ". Recent completed same-month sales are weighted toward newer years. Partial months are estimated uniformly by day."},
+		{Cell: "C1", Author: "Hotsheet Generator", Text: "Projected BSC units sold for 12 calendar months after the report run date " + asOf.Format("Jan 2, 2006") + ". Recent completed same-month sales are weighted toward newer years. With at least two completed sales months, missing calendar months use the average of observed months. Partial months are estimated uniformly by day."},
 		{Cell: "E1", Author: "Hotsheet Generator", Text: fmt.Sprintf("Available = on hand + all undated POs - sales orders - backorders. MTO simulates BSC units sold for up to %d months. Undated POs are assumed available immediately; stockout within a month assumes uniform demand.", mtoHorizonMonths)},
 		{Cell: "F1", Author: "Hotsheet Generator", Text: "Enter additional, nonnegative whole units to simulate a PO. Existing POs are already included in Available Quantity. Proposed units are assumed available immediately; this input does not create an order."},
 		{Cell: "G1", Author: "Hotsheet Generator", Text: "Recalculates MTO with Available Quantity plus Proposed PO Units using the same monthly BSC forecast and 24-month horizon as the baseline MTO. Blank means zero additional units."},
-		{Cell: "I1", Author: "Hotsheet Generator", Text: "Completed BSC sales months and years from the first observed positive-sale month through the last completed month. Zero-sale months after that first sale count. Missing years and partial months do not."},
+		{Cell: "I1", Author: "Hotsheet Generator", Text: "Completed BSC sales months and years from the first observed positive-sale month through the last completed month. Zero-sale months after that first sale count. Missing years and partial months do not. Forecasts based on fewer than 12 observed calendar months use the completed-month average for missing calendar months."},
 	}
 	for _, comment := range comments {
 		if err := f.AddComment(mtoSheetName, comment); err != nil {

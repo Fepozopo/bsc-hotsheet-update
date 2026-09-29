@@ -42,8 +42,8 @@ func TestBuildMTOHistoryProfile(t *testing.T) {
 	}
 }
 
-// TestBuildMTOHistoryProfileInsufficient verifies that a launch in a partial
-// month or missing post-launch seasonal months cannot produce a full-year forecast.
+// TestBuildMTOHistoryProfileInsufficient verifies that a partial-month launch
+// or fewer than two completed months cannot produce a demand forecast.
 func TestBuildMTOHistoryProfileInsufficient(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
@@ -54,12 +54,64 @@ func TestBuildMTOHistoryProfileInsufficient(t *testing.T) {
 	}{
 		{"no history", nil, 0, 0},
 		{"only positive sale is in incomplete September", []salesRecord{{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 0, 7}}}, 0, 0},
-		{"launched in June", []salesRecord{{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0}}}, 7, 1},
+		{"one completed month", []salesRecord{{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 6}}}, 1, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			profile := buildMTOHistoryProfile(tc.records, asOf)
 			if profile.usable || profile.months != tc.months || profile.years != tc.years {
 				t.Errorf("%s: expected unusable profile with %d months and %d years, got %+v", tc.name, tc.months, tc.years, profile)
+			}
+		})
+	}
+}
+
+// TestBuildMTOHistoryProfileFillsMissingMonths checks that a limited-history
+// forecast uses a completed-month mean only where seasonal history is absent.
+func TestBuildMTOHistoryProfileFillsMissingMonths(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		asOf    time.Time
+		records []salesRecord
+		months  int
+		want    map[time.Month]float64
+	}{
+		{
+			name:    "two completed months",
+			asOf:    time.Date(2026, time.March, 25, 0, 0, 0, 0, time.UTC),
+			records: []salesRecord{{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{20, 40, 999}}},
+			months:  2,
+			want: map[time.Month]float64{
+				time.January: 20, time.February: 40, time.March: 30, time.December: 30,
+			},
+		},
+		{
+			name:    "zero-sale completed month counts in mean",
+			asOf:    time.Date(2026, time.August, 25, 0, 0, 0, 0, time.UTC),
+			records: []salesRecord{{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 0, 0, 0, 20, 40, 0, 999}}},
+			months:  3,
+			want: map[time.Month]float64{
+				time.January: 20, time.May: 20, time.June: 40, time.July: 0, time.August: 20,
+			},
+		},
+		{
+			name:    "five completed months keep their own rates",
+			asOf:    time.Date(2026, time.June, 25, 0, 0, 0, 0, time.UTC),
+			records: []salesRecord{{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 20, 30, 40, 50, 999}}},
+			months:  5,
+			want: map[time.Month]float64{
+				time.January: 10, time.February: 20, time.March: 30, time.April: 40, time.May: 50, time.June: 30, time.December: 30,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile := buildMTOHistoryProfile(tc.records, tc.asOf)
+			if !profile.usable || profile.months != tc.months || profile.years != len(tc.records) {
+				t.Fatalf("%s: expected usable profile with %d months across %d years, got %+v", tc.name, tc.months, len(tc.records), profile)
+			}
+			for month, want := range tc.want {
+				if got := profile.monthly[month-1]; math.Abs(got-want) > 1e-9 {
+					t.Errorf("%s month %s: expected %v units, got %v", tc.name, month, want, got)
+				}
 			}
 		})
 	}
@@ -121,6 +173,63 @@ func TestBuildMTORows(t *testing.T) {
 	}
 	if rows[2].state != mtoBeyondHorizon || rows[3].state != mtoInsufficientHistory || rows[3].hasDemand {
 		t.Errorf("expected F beyond 24 months and C with insufficient history, got F=%+v C=%+v", rows[2], rows[3])
+	}
+}
+
+// TestBuildMTORowsLimitedHistory verifies that fallback months affect both
+// the projected demand and the baseline stockout for a newly launched item.
+func TestBuildMTORowsLimitedHistory(t *testing.T) {
+	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
+	item := &inventoryEntry{SKU: "NEW", Status: "Active", OnHand: 10, SalesRecords: []salesRecord{
+		{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 20, 40, 999}},
+	}}
+	rows := buildMTORows([]*inventoryEntry{item}, asOf)
+	if len(rows) != 1 {
+		t.Fatalf("one active item: expected one MTO row, got %d", len(rows))
+	}
+	row := rows[0]
+	if !row.hasDemand || row.state != mtoStockout || row.stockout != "Oct 2026" || row.coverage != "2 months / 1 years" || math.Abs(row.demand12-360) > 1e-9 || math.Abs(row.mto-1.0/3) > 1e-9 {
+		t.Errorf("two completed months, available 10: expected 360 forecast units, Oct 2026 stockout at 1/3 month and 2 months / 1 years of coverage, got %+v", row)
+	}
+}
+
+// TestMTOLimitedHistoryWorkbook checks that the saved sheet displays a
+// limited-history forecast and its proposed-PO scenario uses the same fallback.
+func TestMTOLimitedHistoryWorkbook(t *testing.T) {
+	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
+	item := &inventoryEntry{SKU: "NEW", Status: "Active", OnHand: 10, SalesRecords: []salesRecord{
+		{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 20, 40, 999}},
+	}}
+	f := newProductLineWorkbook()
+	defer func() { _ = f.Close() }()
+	if err := writeMTOSheet(f, []*inventoryEntry{item}, asOf); err != nil {
+		t.Fatalf("write MTO for two completed months: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "limited-history.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatalf("save MTO for two completed months: %v", err)
+	}
+	written, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("reopen MTO for two completed months: %v", err)
+	}
+	defer func() { _ = written.Close() }()
+	for cell, want := range map[string]string{"C2": "360", "D2": "Oct 2026", "I2": "2 months / 1 years"} {
+		got, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
+		if err != nil || got != want {
+			t.Errorf("two completed months, %s: expected %q, got %q (error %v)", cell, want, got, err)
+		}
+	}
+	if err := written.SetCellValue(mtoSheetName, "F2", 30); err != nil {
+		t.Fatalf("set proposed PO units to 30: %v", err)
+	}
+	if got, err := written.CalcCellValue(mtoSheetName, "H2"); err != nil || got != "Nov 2026" {
+		t.Errorf("two completed months, 30 proposed units: expected Nov 2026 stockout, got %q (error %v)", got, err)
+	}
+	got, err := written.CalcCellValue(mtoSheetName, "G2", excelize.Options{RawCellValue: true})
+	actual, parseErr := strconv.ParseFloat(got, 64)
+	if err != nil || parseErr != nil || math.Abs(actual-4.0/3) > 1e-9 {
+		t.Errorf("two completed months, 30 proposed units: expected MTO 4/3, got %q (calculation error %v, parse error %v)", got, err, parseErr)
 	}
 }
 

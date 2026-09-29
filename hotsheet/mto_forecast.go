@@ -8,13 +8,14 @@ import (
 )
 
 const (
-	mtoForecastMonths = 12
-	mtoHorizonMonths  = 24
-	mtoHistoryYears   = 3
+	mtoForecastMonths   = 12
+	mtoHorizonMonths    = 24
+	mtoHistoryYears     = 3
+	mtoMinHistoryMonths = 2
 )
 
 // mtoForecastState distinguishes an estimated stockout from a longer runway or
-// insufficient complete sales history; it controls both display and row order.
+// insufficient completed sales history; it controls both display and row order.
 type mtoForecastState uint8
 
 const (
@@ -53,10 +54,11 @@ type mtoHistoryProfile struct {
 	usable  bool
 }
 
-// buildMTOHistoryProfile builds a seasonal profile from BSC Quantity Sold records
-// completed before asOf. Months before the first positive sale and the current
-// partial month are excluded; completed zero months after that sale are included.
-// It requires at least one observation for every calendar month before forecasting.
+// buildMTOHistoryProfile builds monthly BSC Quantity Sold forecasts from records
+// completed by asOf. Months before the first positive sale and the current partial
+// month are excluded; completed zero months after that sale count. With at least
+// two completed observations, missing calendar months use the mean of all observed
+// months; observed calendar months retain their recent-year weighted estimates.
 func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryProfile {
 	var profile mtoHistoryProfile
 	firstSale := 0
@@ -81,6 +83,7 @@ func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryPro
 	}
 
 	var observed [12][]observedMonth
+	var totalUnits float64
 	seenYears := make(map[int]struct{})
 	for _, record := range records {
 		if record.Metric != "Quantity Sold" {
@@ -93,17 +96,25 @@ func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryPro
 			}
 			// Sold units represent demand; corrections cannot create negative
 			// future depletion. Zero sales after the first sale remain observed.
-			observed[index] = append(observed[index], observedMonth{year: record.Year, units: max(units, 0)})
+			units = max(units, 0)
+			observed[index] = append(observed[index], observedMonth{year: record.Year, units: units})
+			totalUnits += units
 			profile.months++
 			seenYears[record.Year] = struct{}{}
 		}
 	}
 	profile.years = len(seenYears)
-	profile.usable = true
+	profile.usable = profile.months >= mtoMinHistoryMonths
+	if !profile.usable {
+		return profile
+	}
+	// Without a same-calendar-month observation, a cross-month mean supplies a
+	// provisional estimate while leaving measured seasonal months untouched.
+	fallback := totalUnits / float64(profile.months)
 	for index := range observed {
 		months := observed[index]
 		if len(months) == 0 {
-			profile.usable = false
+			profile.monthly[index] = fallback
 			continue
 		}
 		sort.Slice(months, func(i, j int) bool { return months[i].year > months[j].year })
