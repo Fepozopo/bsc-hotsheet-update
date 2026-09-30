@@ -8,8 +8,8 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// TestStandardSheetsCommitted verifies the renamed column and its calculated
-// quantity and availability with and without the optional PO detail columns.
+// TestStandardSheetsCommitted verifies All Products' committed quantity and availability
+// with and without the optional PO detail columns.
 func TestStandardSheetsCommitted(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -25,11 +25,11 @@ func TestStandardSheetsCommitted(t *testing.T) {
 			f := newProductLineWorkbook()
 			defer func() { _ = f.Close() }()
 			headers, mtoYtdIdx, mtoPyIdx := buildStandardSheetHeaders(tc.hasPO)
-			if err := writeStandardSheetHeaders(f, "Everyday", headers, tc.hasPO); err != nil {
+			if err := writeStandardSheetHeaders(f, allProductsSheetName, headers, tc.hasPO); err != nil {
 				t.Fatalf("cannot write headers for %s: %v", tc.name, err)
 			}
 			item := &inventoryEntry{SKU: "A", Occasion: "EVERYDAY", OnHand: 12, OnPO: 9, OnSO: 3, OnBO: 4}
-			if err := writeStandardSheetRows(f, "Everyday", []*inventoryEntry{item}, tc.hasPO, 6, mtoYtdIdx, mtoPyIdx); err != nil {
+			if err := writeStandardSheetRows(f, allProductsSheetName, []*inventoryEntry{item}, tc.hasPO, 6, mtoYtdIdx, mtoPyIdx); err != nil {
 				t.Fatalf("cannot write rows for %s: %v", tc.name, err)
 			}
 			for cell, expected := range map[string]string{
@@ -38,7 +38,7 @@ func TestStandardSheetsCommitted(t *testing.T) {
 				tc.availableCol + "2": "14",
 			} {
 				// RawCellValue checks the stored numeric output rather than Excel's display formatting.
-				got, err := f.GetCellValue("Everyday", cell, excelize.Options{RawCellValue: true})
+				got, err := f.GetCellValue(allProductsSheetName, cell, excelize.Options{RawCellValue: true})
 				if err != nil || got != expected {
 					t.Errorf("%s cell %s: expected %q, got %q (error %v)", tc.name, cell, expected, got, err)
 				}
@@ -47,10 +47,10 @@ func TestStandardSheetsCommitted(t *testing.T) {
 	}
 }
 
-// TestMTOYTDSheet checks that each product-line workbook has a combined sheet after
-// the seasonal tabs, with eligible products sorted by MTO YTD, a mapped Season column
-// before Occasion, and otherwise unchanged seasonal rows.
-func TestMTOYTDSheet(t *testing.T) {
+// TestInventorySheets checks the saved workbook's two inventory tabs: All Products
+// retains every input row and YTD Stock Priority excludes retired items and sorts by MTO.
+// Both tabs show the original season mapping before Occasion with and without PO details.
+func TestInventorySheets(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		hasPO       bool
@@ -80,62 +80,50 @@ func TestMTOYTDSheet(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = f.Close() })
 
-			wantSheets := []string{"Everyday", "Winter", "Spring", "MTO‑YTD", "Data Insights", "Best Sellers"}
+			wantSheets := []string{"All Products", "YTD Stock Priority", "Data Insights", "Best Sellers"}
 			if got := f.GetSheetList(); !reflect.DeepEqual(got, wantSheets) {
 				t.Fatalf("hasPO=%v: expected sheets %v, got %v", tc.hasPO, wantSheets, got)
 			}
-			// GetRows reads the saved cell values, including the calculated MTO columns.
-			combined, err := f.GetRows(mtoYTDSheetName, excelize.Options{RawCellValue: true})
+			// GetRows reads the stored values, including the calculated MTO columns.
+			allRows, err := f.GetRows(allProductsSheetName, excelize.Options{RawCellValue: true})
 			if err != nil {
-				t.Fatalf("hasPO=%v: cannot read combined rows: %v", tc.hasPO, err)
+				t.Fatalf("hasPO=%v: cannot read All Products: %v", tc.hasPO, err)
+			}
+			priorityRows, err := f.GetRows(ytdStockPrioritySheetName, excelize.Options{RawCellValue: true})
+			if err != nil {
+				t.Fatalf("hasPO=%v: cannot read YTD Stock Priority: %v", tc.hasPO, err)
+			}
+			if len(allRows) != len(entries)+1 {
+				t.Fatalf("hasPO=%v: expected %d All Products rows, got %d (%v)", tc.hasPO, len(entries)+1, len(allRows), allRows)
+			}
+			if len(priorityRows) == 0 {
+				t.Fatalf("hasPO=%v: expected YTD Stock Priority header, got no rows", tc.hasPO)
+			}
+			if !reflect.DeepEqual(allRows[0], priorityRows[0]) || len(allRows[0]) <= tc.seasonIndex+1 ||
+				allRows[0][tc.seasonIndex] != "Season" || allRows[0][tc.seasonIndex+1] != "Occasion" {
+				t.Fatalf("hasPO=%v: expected identical headers with Season before Occasion at index %d, got %v and %v", tc.hasPO, tc.seasonIndex, allRows[0], priorityRows[0])
+			}
+			seasonBySKU := map[string]string{
+				"C": "Spring", "A": "Everyday", "R": "Everyday", "E": "Winter",
+				"B": "Winter", "F": "Everyday", "D": "Spring", "X": "Winter",
+			}
+			allBySKU := make(map[string][]string, len(entries))
+			for i, item := range entries {
+				row := allRows[i+1]
+				if len(row) <= tc.seasonIndex || row[0] != item.SKU || row[tc.seasonIndex] != seasonBySKU[item.SKU] {
+					t.Fatalf("hasPO=%v: expected SKU %s / Season %s at All Products row %d, got %v", tc.hasPO, item.SKU, seasonBySKU[item.SKU], i+2, row)
+				}
+				allBySKU[item.SKU] = row
 			}
 			// F has more stock than B but much faster YTD sales, so its MTO is lower.
-			wantSKUs := []string{"D", "F", "B", "C", "E", "A"}
-			seasonBySKU := map[string]string{"D": "Spring", "F": "Everyday", "B": "Winter", "C": "Spring", "E": "Winter", "A": "Everyday"}
-			if len(combined) != len(wantSKUs)+1 {
-				t.Fatalf("hasPO=%v: expected %d combined rows, got %d (%v)", tc.hasPO, len(wantSKUs)+1, len(combined), combined)
+			wantPrioritySKUs := []string{"D", "F", "B", "C", "E", "A"}
+			if len(priorityRows) != len(wantPrioritySKUs)+1 {
+				t.Fatalf("hasPO=%v: expected %d priority rows, got %d (%v)", tc.hasPO, len(wantPrioritySKUs)+1, len(priorityRows), priorityRows)
 			}
-			seasonal := make(map[string][][]string)
-			for _, name := range []string{"Everyday", "Winter", "Spring"} {
-				seasonal[name], err = f.GetRows(name, excelize.Options{RawCellValue: true})
-				if err != nil {
-					t.Fatalf("hasPO=%v: cannot read %s rows: %v", tc.hasPO, name, err)
-				}
-				if len(combined[0]) != len(seasonal[name][0])+1 || len(combined[0]) <= tc.seasonIndex+1 {
-					t.Fatalf("hasPO=%v: expected %s header plus Season, got %v vs %v", tc.hasPO, name, combined[0], seasonal[name][0])
-				}
-				if combined[0][tc.seasonIndex] != "Season" || combined[0][tc.seasonIndex+1] != "Occasion" {
-					t.Errorf("hasPO=%v: expected Season then Occasion at index %d, got %v", tc.hasPO, tc.seasonIndex, combined[0])
-				}
-				withoutSeason := append([]string(nil), combined[0][:tc.seasonIndex]...)
-				withoutSeason = append(withoutSeason, combined[0][tc.seasonIndex+1:]...)
-				if !reflect.DeepEqual(withoutSeason, seasonal[name][0]) {
-					t.Errorf("hasPO=%v: expected %s header %v plus Season, got %v", tc.hasPO, name, seasonal[name][0], combined[0])
-				}
-			}
-			for i, sku := range wantSKUs {
-				row := combined[i+1]
-				if len(row) == 0 || row[0] != sku {
-					t.Fatalf("hasPO=%v: expected combined SKU %s at row %d, got %v", tc.hasPO, sku, i+2, row)
-				}
-				season := seasonBySKU[sku]
-				var matched []string
-				for _, seasonalRow := range seasonal[season][1:] {
-					if len(seasonalRow) > 0 && seasonalRow[0] == sku {
-						matched = seasonalRow
-						break
-					}
-				}
-				if len(row) <= tc.seasonIndex {
-					t.Fatalf("hasPO=%v, SKU=%s: expected Season at index %d, got row %v", tc.hasPO, sku, tc.seasonIndex, row)
-				}
-				if row[tc.seasonIndex] != season {
-					t.Errorf("hasPO=%v, SKU=%s: expected Season %s, got %q", tc.hasPO, sku, season, row[tc.seasonIndex])
-				}
-				withoutSeason := append([]string(nil), row[:tc.seasonIndex]...)
-				withoutSeason = append(withoutSeason, row[tc.seasonIndex+1:]...)
-				if !reflect.DeepEqual(withoutSeason, matched) {
-					t.Errorf("hasPO=%v, SKU=%s: expected %s row %v plus Season, got combined row %v", tc.hasPO, sku, season, matched, row)
+			for i, sku := range wantPrioritySKUs {
+				row := priorityRows[i+1]
+				if len(row) == 0 || row[0] != sku || !reflect.DeepEqual(row, allBySKU[sku]) {
+					t.Errorf("hasPO=%v: expected YTD Stock Priority row %d to match All Products SKU %s (%v), got %v", tc.hasPO, i+2, sku, allBySKU[sku], row)
 				}
 			}
 		})

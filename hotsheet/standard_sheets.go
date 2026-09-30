@@ -9,52 +9,46 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// mtoYTDSheetName names the combined, ascending-MTO worksheet.
-const mtoYTDSheetName = "MTO‑YTD"
+const (
+	allProductsSheetName      = "All Products"
+	ytdStockPrioritySheetName = "YTD Stock Priority"
+)
 
-// standardSheetNames keeps the seasonal tabs first and the combined MTO‑YTD tab last.
-var standardSheetNames = []string{"Everyday", "Winter", "Spring", mtoYTDSheetName}
+// standardSheetNames lists the inventory tabs in workbook order.
+var standardSheetNames = []string{allProductsSheetName, ytdStockPrioritySheetName}
 
-// writeStandardSheets writes the seasonal tabs and the combined MTO‑YTD tab with shared
-// formatting and per-sheet headers, widths, and filters. Given a workbook, inventory entries, and
-// whether PO details are present, it returns a write error if any sheet cannot be completed.
-// The combined tab excludes rundown and discontinued items and sorts by displayed MTO YTD.
+// writeStandardSheets writes all inventory items to All Products and eligible items to
+// YTD Stock Priority, sharing headers, formatting, widths, and filters. The PO flag controls
+// detail columns; an error is returned if either worksheet cannot be written.
+// YTD Stock Priority excludes rundown and discontinued items and sorts by MTO YTD.
 func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool) error {
 	headers, mtoYtdIdx, mtoPyIdx := buildStandardSheetHeaders(hasPO)
-	combinedHeaders := make([]string, 0, len(headers)+1)
-	for _, header := range headers {
-		if header == "Occasion" {
-			combinedHeaders = append(combinedHeaders, "Season")
-		}
-		combinedHeaders = append(combinedHeaders, header)
-	}
-
 	monthsThrough := currentMonthsThrough(time.Now())
-	combinedEntries := make([]*inventoryEntry, 0, len(entries))
+	priorityEntries := make([]*inventoryEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Status != "Rundown" && entry.Status != "Discontinued" {
-			combinedEntries = append(combinedEntries, entry)
+			priorityEntries = append(priorityEntries, entry)
 		}
 	}
-	// Sorting a separate slice preserves the input order used by the seasonal tabs.
-	sort.SliceStable(combinedEntries, func(i, j int) bool {
-		return standardMTOYTD(combinedEntries[i], monthsThrough) < standardMTOYTD(combinedEntries[j], monthsThrough)
+	// Sorting a separate slice preserves the original inventory order on All Products.
+	sort.SliceStable(priorityEntries, func(i, j int) bool {
+		return standardMTOYTD(priorityEntries[i], monthsThrough) < standardMTOYTD(priorityEntries[j], monthsThrough)
 	})
 	for _, sheetName := range standardSheetNames {
-		sheetEntries, sheetHeaders := entries, headers
-		if sheetName == mtoYTDSheetName {
-			sheetEntries, sheetHeaders = combinedEntries, combinedHeaders
+		sheetEntries := entries
+		if sheetName == ytdStockPrioritySheetName {
+			sheetEntries = priorityEntries
 		}
-		if err := writeStandardSheetHeaders(f, sheetName, sheetHeaders, hasPO); err != nil {
+		if err := writeStandardSheetHeaders(f, sheetName, headers, hasPO); err != nil {
 			return err
 		}
 		if err := writeStandardSheetRows(f, sheetName, sheetEntries, hasPO, monthsThrough, mtoYtdIdx, mtoPyIdx); err != nil {
 			return err
 		}
-		if err := applyStandardSheetWidths(f, sheetName, sheetHeaders); err != nil {
+		if err := applyStandardSheetWidths(f, sheetName, headers); err != nil {
 			return err
 		}
-		if err := applyStandardSheetFilters(f, sheetName, sheetHeaders); err != nil {
+		if err := applyStandardSheetFilters(f, sheetName, headers); err != nil {
 			return err
 		}
 	}
@@ -62,9 +56,8 @@ func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool
 	return nil
 }
 
-// buildStandardSheetHeaders returns the seasonal header row, including Quantity Committed
-// (sales orders plus back orders), and the indexes of the two MTO columns. The combined
-// sheet adds Season separately before Occasion.
+// buildStandardSheetHeaders returns the inventory header row, including Season before
+// Occasion and Quantity Committed (sales orders plus back orders), plus MTO column indexes.
 func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 	headers := []string{"Item Code", "QTY on Hand"}
 	if hasPO {
@@ -85,6 +78,7 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 		"QTY Sold+Issued PY",
 		"Class",
 		"Status",
+		"Season",
 		"Occasion",
 		"Description",
 		"UPC",
@@ -158,9 +152,9 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 	return nil
 }
 
-// writeStandardSheetRows writes one seasonal worksheet or the combined MTO‑YTD worksheet
-// from the supplied entries, adding the mapped Season before Occasion only on MTO‑YTD.
-// Sales orders plus back orders are included in availability and YTD pace.
+// writeStandardSheetRows writes the supplied inventory entries on one named worksheet,
+// including their mapped Season before Occasion. Sales orders plus back orders are included
+// in availability and YTD pace.
 // The PO flag controls the columns, monthsThrough anchors MTO YTD, and the MTO column indexes
 // select conditional coloring; an error is returned if a cell or style cannot be written.
 // Season-specific MTO PY and class-prefix behavior are preserved.
@@ -168,9 +162,6 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 	rowIdx := 2
 	for _, e := range entries {
 		sh := mapOccasion(e.Occasion)
-		if sheetName != mtoYTDSheetName && sh != sheetName {
-			continue
-		}
 
 		// Determine the sales-season window used for MTO PY calculations.
 		// Winter and Spring use their shorter merchandising seasons, while Everyday uses
@@ -216,11 +207,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			totalSoldPY,
 			classDesc,
 			e.Status,
-		)
-		if sheetName == mtoYTDSheetName {
-			vals = append(vals, sh)
-		}
-		vals = append(vals,
+			sh,
 			e.Occasion,
 			e.Description,
 			e.UPC,
