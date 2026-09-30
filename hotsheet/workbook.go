@@ -11,7 +11,7 @@ import (
 )
 
 // buildProductLineWorkbook creates one workbook for a product line, writes the standard report
-// sheets, Data Insights, Best Sellers, and the optional Monthly History and MTO sheets,
+// sheets, the combined MTO‑YTD sheet, Data Insights, Best Sellers, and the optional Monthly History and MTO sheets,
 // then saves the result. A nil bestSellersRange uses inventory YTD sales; when
 // hasHistory is true, historyRunDate anchors the MTO forecasts.
 func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
@@ -60,13 +60,15 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 	return outPath, nil
 }
 
-// newProductLineWorkbook creates the workbook shell used for each product-line export.
+// newProductLineWorkbook returns a workbook with the seasonal tabs followed by MTO‑YTD;
+// later writers append Data Insights, Best Sellers, and optional report tabs.
 func newProductLineWorkbook() *excelize.File {
 	f := excelize.NewFile()
 	idx, _ := f.NewSheet("Everyday")
 	f.SetActiveSheet(idx)
 	_, _ = f.NewSheet("Winter")
 	_, _ = f.NewSheet("Spring")
+	_, _ = f.NewSheet(mtoYTDSheetName)
 	// Delete the default Sheet1 if it still exists so the output matches the existing workbook layout.
 	if idxSheet, _ := f.GetSheetIndex("Sheet1"); idxSheet != -1 {
 		_ = f.DeleteSheet("Sheet1")

@@ -1,7 +1,9 @@
 package hotsheet
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -39,6 +41,83 @@ func TestStandardSheetsCommitted(t *testing.T) {
 				got, err := f.GetCellValue("Everyday", cell, excelize.Options{RawCellValue: true})
 				if err != nil || got != expected {
 					t.Errorf("%s cell %s: expected %q, got %q (error %v)", tc.name, cell, expected, got, err)
+				}
+			}
+		})
+	}
+}
+
+// TestMTOYTDSheet checks that each product-line workbook has a combined sheet after
+// the seasonal tabs, with active products in ascending MTO YTD order and unchanged rows.
+func TestMTOYTDSheet(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		hasPO bool
+	}{
+		{name: "without PO details"},
+		{name: "with PO details", hasPO: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entries := []*inventoryEntry{
+				{SKU: "C", Occasion: "EASTER", Status: "Active", OnHand: 15, YTDSold: 10},
+				{SKU: "A", Occasion: "BIRTHDAY", Status: "Carryover", OnHand: 30, YTDSold: 10},
+				{SKU: "R", Occasion: "BIRTHDAY", Status: "Rundown", OnHand: -100},
+				{SKU: "E", Occasion: "CHRISTMAS", OnHand: 15, YTDSold: 10},
+				{SKU: "B", Occasion: "CHRISTMAS", Status: "Active", OnHand: 5, YTDSold: 10},
+				{SKU: "F", Occasion: "BIRTHDAY", Status: "Active", OnHand: 40, YTDSold: 1000},
+				{SKU: "D", Occasion: "EASTER", Status: "Active"},
+				{SKU: "X", Occasion: "CHRISTMAS", Status: "Discontinued", OnHand: -100},
+			}
+			path, err := buildProductLineWorkbook("BAS", entries, t.TempDir(), "20260101", tc.hasPO, false, nil, time.Time{}, nil)
+			if err != nil {
+				t.Fatalf("hasPO=%v: cannot build workbook: %v", tc.hasPO, err)
+			}
+			f, err := excelize.OpenFile(path)
+			if err != nil {
+				t.Fatalf("hasPO=%v: cannot open workbook %s: %v", tc.hasPO, path, err)
+			}
+			t.Cleanup(func() { _ = f.Close() })
+
+			wantSheets := []string{"Everyday", "Winter", "Spring", "MTO‑YTD", "Data Insights", "Best Sellers"}
+			if got := f.GetSheetList(); !reflect.DeepEqual(got, wantSheets) {
+				t.Fatalf("hasPO=%v: expected sheets %v, got %v", tc.hasPO, wantSheets, got)
+			}
+			// GetRows reads the saved cell values, including the shared header and calculated MTO columns.
+			combined, err := f.GetRows(mtoYTDSheetName, excelize.Options{RawCellValue: true})
+			if err != nil {
+				t.Fatalf("hasPO=%v: cannot read combined rows: %v", tc.hasPO, err)
+			}
+			// F has more stock than B but much faster YTD sales, so its MTO is lower.
+			wantSKUs := []string{"D", "F", "B", "C", "E", "A"}
+			seasonBySKU := map[string]string{"D": "Spring", "F": "Everyday", "B": "Winter", "C": "Spring", "E": "Winter", "A": "Everyday"}
+			if len(combined) != len(wantSKUs)+1 {
+				t.Fatalf("hasPO=%v: expected %d combined rows, got %d (%v)", tc.hasPO, len(wantSKUs)+1, len(combined), combined)
+			}
+			seasonal := make(map[string][][]string)
+			for _, name := range []string{"Everyday", "Winter", "Spring"} {
+				seasonal[name], err = f.GetRows(name, excelize.Options{RawCellValue: true})
+				if err != nil {
+					t.Fatalf("hasPO=%v: cannot read %s rows: %v", tc.hasPO, name, err)
+				}
+				if !reflect.DeepEqual(combined[0], seasonal[name][0]) {
+					t.Errorf("hasPO=%v: expected %s header %v, got %v", tc.hasPO, name, seasonal[name][0], combined[0])
+				}
+			}
+			for i, sku := range wantSKUs {
+				row := combined[i+1]
+				if len(row) == 0 || row[0] != sku {
+					t.Fatalf("hasPO=%v: expected combined SKU %s at row %d, got %v", tc.hasPO, sku, i+2, row)
+				}
+				season := seasonBySKU[sku]
+				var matched []string
+				for _, seasonalRow := range seasonal[season][1:] {
+					if len(seasonalRow) > 0 && seasonalRow[0] == sku {
+						matched = seasonalRow
+						break
+					}
+				}
+				if !reflect.DeepEqual(row, matched) {
+					t.Errorf("hasPO=%v, SKU=%s: expected %s row %v, got combined row %v", tc.hasPO, sku, season, matched, row)
 				}
 			}
 		})
