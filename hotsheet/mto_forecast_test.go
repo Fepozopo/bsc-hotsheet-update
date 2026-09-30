@@ -311,8 +311,8 @@ func TestMTOProposedPO(t *testing.T) {
 	}
 }
 
-// TestWriteMTOSheet checks user-visible fields and filters in the saved workbook;
-// it does not assert cosmetic style IDs or hardcoded colors.
+// TestWriteMTOSheet checks user-visible fields, occasion-mapped seasons and
+// filters in the saved workbook without asserting cosmetic styles or colors.
 func TestWriteMTOSheet(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	f := newProductLineWorkbook()
@@ -322,7 +322,10 @@ func TestWriteMTOSheet(t *testing.T) {
 		ClassDesc: "Counter Cards", RawClassDesc: "Counter Cards",
 		Description: "Birthday Card", Occasion: "BIRTHDAY", Foil: "Yes", CardSize: "A7",
 	}
-	if err := writeMTOSheet(f, []*inventoryEntry{item, {SKU: "D", Status: "Discontinued"}}, asOf); err != nil {
+	if err := writeMTOSheet(f, []*inventoryEntry{item,
+		{SKU: "C-WIN", Occasion: "CHRISTMAS", Status: "Active"},
+		{SKU: "S-SPR", Occasion: "EASTER", Status: "Active"},
+		{SKU: "D", Status: "Discontinued"}}, asOf); err != nil {
 		t.Fatalf("cannot write MTO sheet: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "mto.xlsx")
@@ -335,8 +338,10 @@ func TestWriteMTOSheet(t *testing.T) {
 	}
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
-		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "Proposed PO Units", "G1": "MTO with Proposed PO", "H1": "Stockout Month with Proposed PO", "I1": "History Coverage", "J1": "Class Description", "K1": "Occasion", "L1": "Foil", "M1": "Description", "N1": "Card Size",
-		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "", "I2": "0 months / 0 years", "J2": "WM - Counter Cards", "K2": "BIRTHDAY", "L2": "Yes", "M2": "Birthday Card", "N2": "A7",
+		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "Proposed PO Units", "G1": "MTO with Proposed PO", "H1": "Stockout Month with Proposed PO", "I1": "History Coverage", "J1": "Class Description", "K1": "Season", "L1": "Occasion", "M1": "Foil", "N1": "Description", "O1": "Card Size",
+		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "", "I2": "0 months / 0 years", "J2": "WM - Counter Cards", "K2": "Everyday", "L2": "BIRTHDAY", "M2": "Yes", "N2": "Birthday Card", "O2": "A7",
+		"A3": "C-WIN", "K3": "Winter", "L3": "CHRISTMAS",
+		"A4": "S-SPR", "K4": "Spring", "L4": "EASTER",
 	}
 	for cell, expected := range want {
 		actual, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
@@ -344,10 +349,10 @@ func TestWriteMTOSheet(t *testing.T) {
 			t.Errorf("cell %s: expected %q, got %q (error %v)", cell, expected, actual, err)
 		}
 	}
-	if actual, err := written.GetCellValue(mtoSheetName, "A3"); err != nil || actual != "" {
-		t.Errorf("A3: expected discontinued SKU omitted, got %q (error %v)", actual, err)
+	if actual, err := written.GetCellValue(mtoSheetName, "A5"); err != nil || actual != "" {
+		t.Errorf("A5: expected discontinued SKU omitted, got %q (error %v)", actual, err)
 	}
-	// Verify Excel stores the filter range for all fourteen requested columns.
+	// Verify Excel stores the filter range through the final Card Size column.
 	archive, err := zip.OpenReader(path)
 	if err != nil {
 		t.Fatalf("cannot inspect MTO workbook: %v", err)
@@ -367,11 +372,11 @@ func TestWriteMTOSheet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cannot read worksheet %s: %v", member.Name, err)
 		}
-		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$N$1"`) {
+		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$O$1"`) {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected A1:N1 autofilter in saved MTO sheet")
+		t.Fatal("expected A1:O1 autofilter in saved MTO sheet")
 	}
 }

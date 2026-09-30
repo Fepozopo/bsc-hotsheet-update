@@ -16,15 +16,16 @@ const (
 var mtoHeaders = [...]string{
 	"SKU", "Available Quantity", "Forecast Demand", "Projected Stockout Month",
 	"MTO", "Proposed PO Units", "MTO with Proposed PO", "Stockout Month with Proposed PO",
-	"History Coverage", "Class Description", "Occasion", "Foil", "Description", "Card Size",
+	"History Coverage", "Class Description", "Season", "Occasion", "Foil", "Description", "Card Size",
 }
 
 // writeMTOSheet writes active items' 12-month BSC shipped demand and 24-month
 // stockout estimates into f as of the sales-history report's run date. Missing calendar months
 // use the observed-month mean once two completed months are available. Hidden
 // forecast segments power live PO what-if formulas without altering baseline
-// quantities. Class descriptions use standard SKU prefixes and numeric baseline
-// MTO cells use MTO YTD's light colors.
+// quantities. Class descriptions use standard SKU prefixes; Season uses the
+// same occasion mapping as the inventory tabs. Numeric baseline MTO cells use
+// MTO YTD's light colors.
 // The returned error identifies the first worksheet operation that fails.
 func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) error {
 	if asOf.IsZero() {
@@ -43,7 +44,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	if err != nil {
 		return fmt.Errorf("failed to create MTO header style: %w", err)
 	}
-	widths := [...]float64{20, 21, 20, 28, 13, 20, 22, 34, 25, 22, 20, 13, 35, 13}
+	widths := [...]float64{20, 21, 20, 28, 13, 20, 22, 34, 25, 22, 15, 20, 13, 35, 13}
 	for col, header := range mtoHeaders {
 		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
 		if err := f.SetCellValue(mtoSheetName, cell, header); err != nil {
@@ -117,7 +118,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 		}
 		values := [...]interface{}{
 			row.item.SKU, row.available, "", row.stockout, mtoValue, "", "", "",
-			row.coverage, classDesc, row.item.Occasion, row.item.Foil, row.item.Description, row.item.CardSize,
+			row.coverage, classDesc, mapOccasion(row.item.Occasion), row.item.Occasion, row.item.Foil, row.item.Description, row.item.CardSize,
 		}
 		if row.hasDemand {
 			values[2] = row.demand12
@@ -128,7 +129,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 				return fmt.Errorf("failed to write MTO cell %s: %w", cell, err)
 			}
 		}
-		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("N%d", rowNum), bodyStyle); err != nil {
+		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("O%d", rowNum), bodyStyle); err != nil {
 			return fmt.Errorf("failed to style MTO row %d: %w", rowNum, err)
 		}
 		if row.hasDemand {
@@ -198,7 +199,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 		}
 	}
 	// Excelize adds an Excel dropdown to every column header for filtering.
-	if err := f.AutoFilter(mtoSheetName, "A1:N1", nil); err != nil {
+	if err := f.AutoFilter(mtoSheetName, "A1:O1", nil); err != nil {
 		return fmt.Errorf("failed to set MTO autofilter: %w", err)
 	}
 	if err := f.SetSheetVisible(mtoScenarioSheetName, false); err != nil {
