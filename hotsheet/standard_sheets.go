@@ -16,16 +16,17 @@ const mtoYTDSheetName = "MTO‑YTD"
 var standardSheetNames = []string{"Everyday", "Winter", "Spring", mtoYTDSheetName}
 
 // writeStandardSheets writes the seasonal tabs and the combined MTO‑YTD tab with shared
-// headers, row formatting, widths, and filters. Given a workbook, inventory entries, and
+// formatting and per-sheet headers, widths, and filters. Given a workbook, inventory entries, and
 // whether PO details are present, it returns a write error if any sheet cannot be completed.
 // The combined tab excludes rundown and discontinued items and sorts by displayed MTO YTD.
 func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool) error {
 	headers, mtoYtdIdx, mtoPyIdx := buildStandardSheetHeaders(hasPO)
-
-	for _, sheetName := range standardSheetNames {
-		if err := writeStandardSheetHeaders(f, sheetName, headers, hasPO); err != nil {
-			return err
+	combinedHeaders := make([]string, 0, len(headers)+1)
+	for _, header := range headers {
+		if header == "Occasion" {
+			combinedHeaders = append(combinedHeaders, "Season")
 		}
+		combinedHeaders = append(combinedHeaders, header)
 	}
 
 	monthsThrough := currentMonthsThrough(time.Now())
@@ -40,27 +41,30 @@ func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool
 		return standardMTOYTD(combinedEntries[i], monthsThrough) < standardMTOYTD(combinedEntries[j], monthsThrough)
 	})
 	for _, sheetName := range standardSheetNames {
-		sheetEntries := entries
+		sheetEntries, sheetHeaders := entries, headers
 		if sheetName == mtoYTDSheetName {
-			sheetEntries = combinedEntries
+			sheetEntries, sheetHeaders = combinedEntries, combinedHeaders
+		}
+		if err := writeStandardSheetHeaders(f, sheetName, sheetHeaders, hasPO); err != nil {
+			return err
 		}
 		if err := writeStandardSheetRows(f, sheetName, sheetEntries, hasPO, monthsThrough, mtoYtdIdx, mtoPyIdx); err != nil {
 			return err
 		}
-	}
-
-	if err := applyStandardSheetWidths(f, headers); err != nil {
-		return err
-	}
-	if err := applyStandardSheetFilters(f, headers); err != nil {
-		return err
+		if err := applyStandardSheetWidths(f, sheetName, sheetHeaders); err != nil {
+			return err
+		}
+		if err := applyStandardSheetFilters(f, sheetName, sheetHeaders); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// buildStandardSheetHeaders returns the header row shared by the seasonal and MTO‑YTD sheets,
-// including Quantity Committed (sales orders plus back orders), and the MTO column indexes.
+// buildStandardSheetHeaders returns the seasonal header row, including Quantity Committed
+// (sales orders plus back orders), and the indexes of the two MTO columns. The combined
+// sheet adds Season separately before Occasion.
 func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 	headers := []string{"Item Code", "QTY on Hand"}
 	if hasPO {
@@ -104,8 +108,8 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 	return headers, mtoYtdIdx, mtoPyIdx
 }
 
-// writeStandardSheetHeaders writes the shared header row, applies the existing header style,
-// and attaches explanatory MTO comments to the corresponding columns on the given sheet.
+// writeStandardSheetHeaders writes the supplied sheet's headers with the standard style
+// and attaches explanatory MTO comments to their corresponding columns.
 func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []string, hasPO bool) error {
 	_ = hasPO // The header layout already captures whether PO columns should be present.
 
@@ -155,7 +159,8 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 }
 
 // writeStandardSheetRows writes one seasonal worksheet or the combined MTO‑YTD worksheet
-// from the supplied entries, using sales orders plus back orders in availability and YTD pace.
+// from the supplied entries, adding the mapped Season before Occasion only on MTO‑YTD.
+// Sales orders plus back orders are included in availability and YTD pace.
 // The PO flag controls the columns, monthsThrough anchors MTO YTD, and the MTO column indexes
 // select conditional coloring; an error is returned if a cell or style cannot be written.
 // Season-specific MTO PY and class-prefix behavior are preserved.
@@ -211,6 +216,11 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			totalSoldPY,
 			classDesc,
 			e.Status,
+		)
+		if sheetName == mtoYTDSheetName {
+			vals = append(vals, sh)
+		}
+		vals = append(vals,
 			e.Occasion,
 			e.Description,
 			e.UPC,
@@ -354,14 +364,13 @@ func standardSheetCellFillColor(status string, columnIdx, mtoYtdIdx, mtoPyIdx in
 	return fillColor
 }
 
-// applyStandardSheetWidths sets the shared column widths on the seasonal and MTO‑YTD tabs.
-func applyStandardSheetWidths(f *excelize.File, headers []string) error {
-	for _, sheetName := range standardSheetNames {
-		for i, h := range headers {
-			col, _ := excelize.ColumnNumberToName(i + 1)
-			if err := f.SetColWidth(sheetName, col, col, standardSheetWidthForHeader(h)); err != nil {
-				return fmt.Errorf("failed to set width for %s column %s: %w", sheetName, col, err)
-			}
+// applyStandardSheetWidths sets the column widths for one sheet's headers, including any
+// extra combined-sheet columns; it returns a width-setting error if Excelize fails.
+func applyStandardSheetWidths(f *excelize.File, sheetName string, headers []string) error {
+	for i, h := range headers {
+		col, _ := excelize.ColumnNumberToName(i + 1)
+		if err := f.SetColWidth(sheetName, col, col, standardSheetWidthForHeader(h)); err != nil {
+			return fmt.Errorf("failed to set width for %s column %s: %w", sheetName, col, err)
 		}
 	}
 	return nil
@@ -390,7 +399,7 @@ func standardSheetWidthForHeader(header string) float64 {
 		return 20
 	case "Class":
 		return 20
-	case "Status":
+	case "Status", "Season":
 		return 15
 	case "Occasion":
 		return 20
@@ -411,16 +420,15 @@ func standardSheetWidthForHeader(header string) float64 {
 	}
 }
 
-// applyStandardSheetFilters applies the shared autofilter range to seasonal and MTO‑YTD tabs.
-func applyStandardSheetFilters(f *excelize.File, headers []string) error {
+// applyStandardSheetFilters filters all columns for the given sheet's headers, returning
+// an error if the header list is empty or Excelize cannot set the filter.
+func applyStandardSheetFilters(f *excelize.File, sheetName string, headers []string) error {
 	if len(headers) == 0 {
 		return fmt.Errorf("cannot apply autofilter to empty standard header set")
 	}
 	lastCol, _ := excelize.ColumnNumberToName(len(headers))
-	for _, sheetName := range standardSheetNames {
-		if err := f.AutoFilter(sheetName, fmt.Sprintf("A1:%s1", lastCol), nil); err != nil {
-			return fmt.Errorf("failed to set autofilter for %s: %w", sheetName, err)
-		}
+	if err := f.AutoFilter(sheetName, fmt.Sprintf("A1:%s1", lastCol), nil); err != nil {
+		return fmt.Errorf("failed to set autofilter for %s: %w", sheetName, err)
 	}
 	return nil
 }

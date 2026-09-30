@@ -48,14 +48,16 @@ func TestStandardSheetsCommitted(t *testing.T) {
 }
 
 // TestMTOYTDSheet checks that each product-line workbook has a combined sheet after
-// the seasonal tabs, with active products in ascending MTO YTD order and unchanged rows.
+// the seasonal tabs, with eligible products sorted by MTO YTD, a mapped Season column
+// before Occasion, and otherwise unchanged seasonal rows.
 func TestMTOYTDSheet(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		hasPO bool
+		name        string
+		hasPO       bool
+		seasonIndex int
 	}{
-		{name: "without PO details"},
-		{name: "with PO details", hasPO: true},
+		{name: "without PO details", seasonIndex: 11},
+		{name: "with PO details", hasPO: true, seasonIndex: 15},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			entries := []*inventoryEntry{
@@ -64,7 +66,7 @@ func TestMTOYTDSheet(t *testing.T) {
 				{SKU: "R", Occasion: "BIRTHDAY", Status: "Rundown", OnHand: -100},
 				{SKU: "E", Occasion: "CHRISTMAS", OnHand: 15, YTDSold: 10},
 				{SKU: "B", Occasion: "CHRISTMAS", Status: "Active", OnHand: 5, YTDSold: 10},
-				{SKU: "F", Occasion: "BIRTHDAY", Status: "Active", OnHand: 40, YTDSold: 1000},
+				{SKU: "F", Status: "Active", OnHand: 40, YTDSold: 1000},
 				{SKU: "D", Occasion: "EASTER", Status: "Active"},
 				{SKU: "X", Occasion: "CHRISTMAS", Status: "Discontinued", OnHand: -100},
 			}
@@ -82,7 +84,7 @@ func TestMTOYTDSheet(t *testing.T) {
 			if got := f.GetSheetList(); !reflect.DeepEqual(got, wantSheets) {
 				t.Fatalf("hasPO=%v: expected sheets %v, got %v", tc.hasPO, wantSheets, got)
 			}
-			// GetRows reads the saved cell values, including the shared header and calculated MTO columns.
+			// GetRows reads the saved cell values, including the calculated MTO columns.
 			combined, err := f.GetRows(mtoYTDSheetName, excelize.Options{RawCellValue: true})
 			if err != nil {
 				t.Fatalf("hasPO=%v: cannot read combined rows: %v", tc.hasPO, err)
@@ -99,8 +101,16 @@ func TestMTOYTDSheet(t *testing.T) {
 				if err != nil {
 					t.Fatalf("hasPO=%v: cannot read %s rows: %v", tc.hasPO, name, err)
 				}
-				if !reflect.DeepEqual(combined[0], seasonal[name][0]) {
-					t.Errorf("hasPO=%v: expected %s header %v, got %v", tc.hasPO, name, seasonal[name][0], combined[0])
+				if len(combined[0]) != len(seasonal[name][0])+1 || len(combined[0]) <= tc.seasonIndex+1 {
+					t.Fatalf("hasPO=%v: expected %s header plus Season, got %v vs %v", tc.hasPO, name, combined[0], seasonal[name][0])
+				}
+				if combined[0][tc.seasonIndex] != "Season" || combined[0][tc.seasonIndex+1] != "Occasion" {
+					t.Errorf("hasPO=%v: expected Season then Occasion at index %d, got %v", tc.hasPO, tc.seasonIndex, combined[0])
+				}
+				withoutSeason := append([]string(nil), combined[0][:tc.seasonIndex]...)
+				withoutSeason = append(withoutSeason, combined[0][tc.seasonIndex+1:]...)
+				if !reflect.DeepEqual(withoutSeason, seasonal[name][0]) {
+					t.Errorf("hasPO=%v: expected %s header %v plus Season, got %v", tc.hasPO, name, seasonal[name][0], combined[0])
 				}
 			}
 			for i, sku := range wantSKUs {
@@ -116,8 +126,16 @@ func TestMTOYTDSheet(t *testing.T) {
 						break
 					}
 				}
-				if !reflect.DeepEqual(row, matched) {
-					t.Errorf("hasPO=%v, SKU=%s: expected %s row %v, got combined row %v", tc.hasPO, sku, season, matched, row)
+				if len(row) <= tc.seasonIndex {
+					t.Fatalf("hasPO=%v, SKU=%s: expected Season at index %d, got row %v", tc.hasPO, sku, tc.seasonIndex, row)
+				}
+				if row[tc.seasonIndex] != season {
+					t.Errorf("hasPO=%v, SKU=%s: expected Season %s, got %q", tc.hasPO, sku, season, row[tc.seasonIndex])
+				}
+				withoutSeason := append([]string(nil), row[:tc.seasonIndex]...)
+				withoutSeason = append(withoutSeason, row[tc.seasonIndex+1:]...)
+				if !reflect.DeepEqual(withoutSeason, matched) {
+					t.Errorf("hasPO=%v, SKU=%s: expected %s row %v plus Season, got combined row %v", tc.hasPO, sku, season, matched, row)
 				}
 			}
 		})
