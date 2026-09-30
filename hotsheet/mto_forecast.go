@@ -171,8 +171,9 @@ func monthsAfter(start time.Time, months int) time.Time {
 }
 
 // buildMTORows forecasts active inventory entries as of the report date, including
-// undated POs in available stock and only BSC units sold in demand. It returns
-// rows ordered by earliest stockout, then >24-month and insufficient-history items.
+// undated POs in available stock and subtracting committed quantity (sales orders
+// plus back orders). Only BSC units sold count as demand. It returns rows ordered
+// by earliest stockout, then >24-month and insufficient-history items.
 func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 	rows := make([]mtoForecastRow, 0, len(entries))
 	// Inventory quantities are a report-date snapshot; project from the next day.
@@ -183,7 +184,8 @@ func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 		case "rundown", "discontinued":
 			continue
 		}
-		row := mtoForecastRow{item: item, available: item.OnHand + item.OnPO - item.OnSO - item.OnBO}
+		committed := item.OnSO + item.OnBO
+		row := mtoForecastRow{item: item, available: item.OnHand + item.OnPO - committed}
 		profile := buildMTOHistoryProfile(item.SalesRecords, asOf)
 		row.coverage = fmt.Sprintf("%d months / %d years", profile.months, profile.years)
 		if profile.usable {

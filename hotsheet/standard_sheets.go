@@ -39,8 +39,8 @@ func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool
 	return nil
 }
 
-// buildStandardSheetHeaders returns the header row used by the three standard report sheets and
-// the indexes of the MTO columns used for conditional formatting.
+// buildStandardSheetHeaders returns the header row used by the three standard report sheets,
+// including Quantity Committed (sales orders plus back orders), and the MTO column indexes.
 func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 	headers := []string{"Item Code", "QTY on Hand"}
 	if hasPO {
@@ -53,7 +53,7 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 	}
 	headers = append(headers,
 		"Total QTY on PO",
-		"QTY on SO+BO",
+		"Quantity Committed",
 		"QTY Available",
 		"MTO YTD",
 		"MTO PY",
@@ -113,7 +113,7 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 			cmt := excelize.Comment{
 				Cell:   cell,
 				Author: "Shane DuPrey",
-				Text:   "MTO YTD = QTY Available / ((QTY Sold+Issued YTD + QTY on SO+BO) / (monthsThrough + 1)). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace including current sales orders/backorders.",
+				Text:   "MTO YTD = QTY Available / ((QTY Sold+Issued YTD + Quantity Committed) / (monthsThrough + 1)). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace including current sales orders/backorders.",
 				Height: 190,
 				Width:  200,
 			}
@@ -134,8 +134,9 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 	return nil
 }
 
-// writeStandardSheetRows writes the report rows for one standard worksheet, preserving the
-// current derived values, class-prefix behavior, and conditional coloring rules.
+// writeStandardSheetRows writes the report rows for one standard worksheet, using
+// sales orders plus back orders as committed quantity in availability and YTD pace.
+// It preserves class-prefix behavior and conditional coloring rules.
 func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inventoryEntry, hasPO bool, monthsThrough float64, mtoYtdIdx, mtoPyIdx int) error {
 	rowIdx := 2
 	for _, e := range entries {
@@ -158,13 +159,13 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 		}
 
 		// Calculate the derived values used by the standard report layout.
-		onSOBO := e.OnSO + e.OnBO
+		committed := e.OnSO + e.OnBO
 		totalInventory := e.OnHand + e.OnPO
-		totalAvail := totalInventory - onSOBO
+		totalAvail := totalInventory - committed
 
 		totalSoldYTD := e.YTDSold + max(e.YTDIssued, 0)
 		totalSoldPY := e.SoldPY + max(e.IssuedPY, 0)
-		soldPerMonthYTD := (float64(totalSoldYTD) + float64(onSOBO)) / monthsThrough
+		soldPerMonthYTD := (float64(totalSoldYTD) + float64(committed)) / monthsThrough
 		soldPerMonthPY := float64(totalSoldPY) / salesSeason
 
 		mtoYTD := float64(totalAvail) / (soldPerMonthYTD + 1)
@@ -181,7 +182,7 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 		}
 		vals = append(vals,
 			e.OnPO,
-			onSOBO,
+			committed,
 			totalAvail,
 			mtoYTD,
 			mtoPY,
@@ -345,8 +346,8 @@ func standardSheetWidthForHeader(header string) float64 {
 		return 12
 	case "Total QTY on PO":
 		return 15
-	case "QTY on SO+BO":
-		return 15
+	case "Quantity Committed":
+		return 22
 	case "QTY Available":
 		return 15
 	case "MTO YTD", "MTO PY":

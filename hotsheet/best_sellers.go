@@ -149,7 +149,8 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 		if classDesc == "" {
 			classDesc = item.ClassDesc
 		}
-		values := [...]interface{}{item.SKU, item.Description, row.quantity, row.dollars, item.OnHand, item.OnSO + item.OnBO, item.OnPO, item.RoyaltyCode, classDesc, item.Occasion, item.Foil, item.Status}
+		committed := item.OnSO + item.OnBO
+		values := [...]interface{}{item.SKU, item.Description, row.quantity, row.dollars, item.OnHand, committed, item.OnPO, item.RoyaltyCode, classDesc, item.Occasion, item.Foil, item.Status}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
 			if err := f.SetCellValue(bestSellersSheetName, cell, value); err != nil {
