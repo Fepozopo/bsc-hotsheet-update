@@ -1,6 +1,7 @@
 package hotsheet
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -33,16 +34,22 @@ type Progress struct {
 // instead of mutating UI-owned state directly.
 type ProgressCallback func(Progress)
 
+// ErrIssueHistorySalesRequired indicates that issue history cannot be used
+// without the sales history report it supplements.
+var ErrIssueHistorySalesRequired = errors.New("a sales history report is required when providing issue history")
+
 // Generate orchestrates the hotsheet report pipeline.
 //
-// It loads inventory, merges optional PO and BSC sales-history information, groups
-// entries by product line, and writes one workbook per product line into outputDir.
-// Empty poPath or salesHistoryPath omits the corresponding optional data and MTO
-// sheet. A nil bestSellersRange uses inventory YTD sales; a non-nil range requires
-// salesHistoryPath. MTO forecasts are anchored to the history report's run date.
-// If report is non-nil, Generate reports progress at major pipeline milestones
-// and after each workbook is written. It returns created paths or an error.
-func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSellersRange *BestSellersRange, report ProgressCallback) ([]string, error) {
+// It loads inventory, merges optional PO and BSC sales and issue history, groups
+// entries by product line, and writes one workbook per line into outputDir. An
+// issueHistoryPath requires salesHistoryPath; empty optional paths omit their data.
+// A nil bestSellersRange uses inventory YTD shipments; a range uses history months.
+// MTO forecasts use the sales report's run date. If report is non-nil, it receives
+// progress milestones. Generate returns created paths or an error.
+func Generate(inventoryPath, poPath, salesHistoryPath, issueHistoryPath, outputDir string, bestSellersRange *BestSellersRange, report ProgressCallback) ([]string, error) {
+	if strings.TrimSpace(issueHistoryPath) != "" && strings.TrimSpace(salesHistoryPath) == "" {
+		return nil, ErrIssueHistorySalesRequired
+	}
 	if bestSellersRange != nil {
 		if strings.TrimSpace(salesHistoryPath) == "" {
 			return nil, ErrBestSellersHistoryRequired
@@ -61,7 +68,7 @@ func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSel
 		_ = logCloser.Close()
 	}()
 
-	logger.Info("hotsheet generation started", "inventoryPath", inventoryPath, "poPath", poPath, "salesHistoryPath", salesHistoryPath, "outputDir", outputDir)
+	logger.Info("hotsheet generation started", "inventoryPath", inventoryPath, "poPath", poPath, "salesHistoryPath", salesHistoryPath, "issueHistoryPath", issueHistoryPath, "outputDir", outputDir)
 	reportGenerationProgress(report, 5, "Loading inventory report...")
 
 	inventoryBySKU, err := loadInventoryEntries(inventoryPath, logger)
@@ -83,6 +90,13 @@ func Generate(inventoryPath, poPath, salesHistoryPath, outputDir string, bestSel
 		reportGenerationProgress(report, 40, "Loading monthly sales history...")
 		historyRunDate, err = mergeSalesHistory(salesHistoryPath, inventoryBySKU, logger)
 		if err != nil {
+			return nil, err
+		}
+	}
+	hasIssue := strings.TrimSpace(issueHistoryPath) != ""
+	if hasIssue {
+		reportGenerationProgress(report, 42, "Loading monthly issue history...")
+		if err := mergeIssueHistory(issueHistoryPath, inventoryBySKU, logger); err != nil {
 			return nil, err
 		}
 	}

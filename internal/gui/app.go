@@ -12,9 +12,10 @@ import (
 
 const (
 	// defaultWindowWidth and defaultWindowHeight define the initial size of the
-	// top-level window before the user resizes it.
+	// top-level window before the user resizes it. The extra height keeps the
+	// issue-history field and Best Sellers month selectors visible together.
 	defaultWindowWidth  = 900
-	defaultWindowHeight = 600
+	defaultWindowHeight = 700
 
 	// defaultUIScale increases the effective size of the Nucular widgets so the
 	// UI is comfortably readable on modern high-DPI displays.

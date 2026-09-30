@@ -1,7 +1,7 @@
 package hotsheet
 
 // inventoryEntry represents a single inventory item and holds the source-report and derived values
-// used to build its hotsheet rows, including optional BSC monthly sales history.
+// used to build its hotsheet rows, including optional BSC monthly sales and issue history.
 type inventoryEntry struct {
 	SKU         string
 	ProductLine string
@@ -32,12 +32,14 @@ type inventoryEntry struct {
 	DollarSoldPY   float64
 	CardSize       string
 	Inactive       string
-	// SalesRecords contain only BSC warehouse year/metric rows from the optional history report.
+	// SalesRecords contain BSC warehouse year/metric rows from optional sales and
+	// issue history; issued values are clamped to zero per month at import.
 	SalesRecords []salesRecord
 }
 
-// salesRecord holds one metric for one calendar year, with periods 1–12 mapped to January–December.
-// Periods retain the source's numeric scale, including 0–100 for gross profit percentages.
+// salesRecord holds a BSC sales or issued metric for one calendar year, with
+// periods 1–12 mapped to January–December. Sales values retain the source scale
+// (including 0–100 for gross profit percentages); issued values are nonnegative.
 type salesRecord struct {
 	Year    int
 	Metric  string

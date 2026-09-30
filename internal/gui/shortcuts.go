@@ -27,6 +27,8 @@ func (s *AppState) handleMainKeyboard(w *nucular.Window) {
 		s.browsePO()
 	case hasShortcut(in.Keyboard.Keys, key.CodeH) && !s.isBusy():
 		s.browseHistory()
+	case hasShortcut(in.Keyboard.Keys, key.CodeS) && !s.isBusy() && editorText(&s.historyEditor) != "":
+		s.browseIssueHistory()
 	case hasShortcut(in.Keyboard.Keys, key.CodeO) && !s.isBusy():
 		s.browseOutputDir()
 	case hasShortcut(in.Keyboard.Keys, key.CodeQ):

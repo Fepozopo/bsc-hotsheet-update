@@ -37,24 +37,24 @@ func TestBestSellersRangeValidate(t *testing.T) {
 	}
 }
 
-// TestBestSellerRows checks source selection, inclusive monthly totals, zero-sale
-// items, and deterministic descending-quantity order without changing input order.
+// TestBestSellerRows checks inventory YTD shipments, inclusive monthly totals,
+// zero-shipment items, and deterministic order without changing input order.
 func TestBestSellerRows(t *testing.T) {
 	items := []*inventoryEntry{
-		{SKU: "B", YTDSold: 10, DollarSoldYTD: 100, SalesRecords: []salesRecord{
+		{SKU: "B", YTDSold: 10, YTDIssued: 2, DollarSoldYTD: 100, SalesRecords: []salesRecord{
 			{Year: 2024, Metric: "Quantity Sold", Periods: [12]float64{0, 8}},
 			{Year: 2024, Metric: "Dollars Sold", Periods: [12]float64{0, 80}},
 			{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{1}},
 			{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{10}},
 		}},
-		{SKU: "A", YTDSold: 3, DollarSoldYTD: 30, SalesRecords: []salesRecord{
+		{SKU: "A", YTDSold: 3, YTDIssued: 3, DollarSoldYTD: 30, SalesRecords: []salesRecord{
 			{Year: 2024, Metric: "Quantity Sold", Periods: [12]float64{1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3}},
 			{Year: 2024, Metric: "Dollars Sold", Periods: [12]float64{10, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 30}},
 			{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{4, 5, 6}},
 			{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{40, 50, 60}},
 			{Year: 2025, Metric: "Quantity Returned", Periods: [12]float64{999}},
 		}},
-		{SKU: "C", YTDSold: 0, DollarSoldYTD: 0},
+		{SKU: "C", YTDSold: 0, YTDIssued: -5, DollarSoldYTD: 0},
 	}
 	cases := []struct {
 		name   string
@@ -63,7 +63,7 @@ func TestBestSellerRows(t *testing.T) {
 		quant  [3]float64
 		dollar [3]float64
 	}{
-		{"inventory YTD despite history", nil, [3]string{"B", "A", "C"}, [3]float64{10, 3, 0}, [3]float64{100, 30, 0}},
+		{"inventory YTD shipped despite history", nil, [3]string{"B", "A", "C"}, [3]float64{12, 6, 0}, [3]float64{100, 30, 0}},
 		{"inclusive same-year endpoints", &BestSellersRange{2025, 1, 2025, 2}, [3]string{"A", "B", "C"}, [3]float64{9, 1, 0}, [3]float64{90, 10, 0}},
 		{"inclusive cross-year endpoints", &BestSellersRange{2024, 2, 2025, 2}, [3]string{"A", "B", "C"}, [3]float64{14, 9, 0}, [3]float64{140, 90, 0}},
 		{"no records in period", &BestSellersRange{2026, 1, 2026, 12}, [3]string{"A", "B", "C"}, [3]float64{0, 0, 0}, [3]float64{0, 0, 0}},
@@ -75,8 +75,8 @@ func TestBestSellerRows(t *testing.T) {
 				t.Fatalf("period %+v: expected %d rows, got %d", tc.period, len(tc.order), len(rows))
 			}
 			for i, row := range rows {
-				if row.item.SKU != tc.order[i] || row.quantity != tc.quant[i] || row.dollars != tc.dollar[i] {
-					t.Errorf("period %+v row %d: expected SKU=%s quantity=%v dollars=%v, got SKU=%s quantity=%v dollars=%v", tc.period, i, tc.order[i], tc.quant[i], tc.dollar[i], row.item.SKU, row.quantity, row.dollars)
+				if row.item.SKU != tc.order[i] || row.shipped != tc.quant[i] || row.dollars != tc.dollar[i] {
+					t.Errorf("period %+v row %d: expected SKU=%s quantity=%v dollars=%v, got SKU=%s quantity=%v dollars=%v", tc.period, i, tc.order[i], tc.quant[i], tc.dollar[i], row.item.SKU, row.shipped, row.dollars)
 				}
 			}
 			if items[0].SKU != "B" || items[1].SKU != "A" {
@@ -86,14 +86,14 @@ func TestBestSellerRows(t *testing.T) {
 	}
 }
 
-// TestWriteBestSellersSheet verifies ranked sales, inventory snapshot quantities,
+// TestWriteBestSellersSheet verifies ranked YTD shipments, inventory snapshot quantities,
 // metadata, status, and filter dropdowns in a saved workbook.
 func TestWriteBestSellersSheet(t *testing.T) {
 	f := newProductLineWorkbook()
 	defer func() { _ = f.Close() }()
 	items := []*inventoryEntry{
-		{SKU: "B", Description: "second", YTDSold: 1, DollarSoldYTD: 20, Status: "Rundown"},
-		{SKU: "A", Description: "first", RawClassDesc: "Counter Cards", ClassDesc: "BX - Counter Cards", RoyaltyCode: "HOUSE", Occasion: "BIRTHDAY", Foil: "Yes", YTDSold: 5, DollarSoldYTD: 55.5, OnHand: 12, OnSO: 3, OnBO: 4, OnPO: 9, Status: "Carryover"},
+		{SKU: "B", Description: "second", YTDSold: 1, YTDIssued: -5, DollarSoldYTD: 20, Status: "Rundown"},
+		{SKU: "A", Description: "first", RawClassDesc: "Counter Cards", ClassDesc: "BX - Counter Cards", RoyaltyCode: "HOUSE", Occasion: "BIRTHDAY", Foil: "Yes", YTDSold: 5, YTDIssued: 3, DollarSoldYTD: 55.5, OnHand: 12, OnSO: 3, OnBO: 4, OnPO: 9, Status: "Carryover"},
 	}
 	if err := writeBestSellersSheet(f, items, nil); err != nil {
 		t.Fatalf("cannot write Best Sellers sheet: %v", err)
@@ -108,10 +108,10 @@ func TestWriteBestSellersSheet(t *testing.T) {
 	}
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
-		"A1": "Item Code", "B1": "Description", "C1": "Quantity Sold", "D1": "Dollars Sold",
+		"A1": "Item Code", "B1": "Description", "C1": "Quantity Shipped", "D1": "Dollars Sold",
 		"E1": "Quantity on Hand", "F1": "Quantity Committed", "G1": "Quantity on PO",
 		"H1": "Royalty Code", "I1": "Class Description", "J1": "Occasion", "K1": "Foil Status", "L1": "Status",
-		"A2": "A", "B2": "first", "C2": "5", "D2": "55.5", "E2": "12", "F2": "7", "G2": "9", "H2": "HOUSE",
+		"A2": "A", "B2": "first", "C2": "8", "D2": "55.5", "E2": "12", "F2": "7", "G2": "9", "H2": "HOUSE",
 		"I2": "Counter Cards", "J2": "BIRTHDAY", "K2": "Yes", "L2": "Carryover",
 		"A3": "B", "B3": "second", "C3": "1", "D3": "20", "E3": "0", "F3": "0", "G3": "0", "L3": "Rundown",
 	}
@@ -154,7 +154,7 @@ func TestWriteBestSellersSheet(t *testing.T) {
 // values when they request monthly history without supplying its source report.
 func TestGenerateRejectsRangeWithoutHistory(t *testing.T) {
 	period := &BestSellersRange{FromYear: 2024, FromMonth: 1, ToYear: 2024, ToMonth: 12}
-	paths, err := Generate("", "", "", t.TempDir(), period, nil)
+	paths, err := Generate("", "", "", "", t.TempDir(), period, nil)
 	if !errors.Is(err, ErrBestSellersHistoryRequired) || paths != nil {
 		t.Fatalf("range without history: expected history-required error and no files, got paths=%v error=%v", paths, err)
 	}

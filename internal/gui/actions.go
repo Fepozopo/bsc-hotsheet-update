@@ -92,6 +92,24 @@ func (s *AppState) browseHistory() {
 	s.requestRedraw()
 }
 
+// browseIssueHistory opens the native file picker for optional issue history.
+// It is only available once the user has provided sales history.
+func (s *AppState) browseIssueHistory() {
+	if editorText(&s.historyEditor) == "" {
+		return
+	}
+	path, err := pickFile()
+	if err != nil {
+		if errors.Is(err, errDialogCancelled) {
+			return
+		}
+		s.openErrorPopup("Browse Error", err.Error())
+		return
+	}
+	setEditorText(&s.issueEditor, path)
+	s.requestRedraw()
+}
+
 // browseOutputDir opens the native directory picker and stores the chosen
 // output directory path.
 func (s *AppState) browseOutputDir() {
@@ -107,8 +125,8 @@ func (s *AppState) browseOutputDir() {
 	s.requestRedraw()
 }
 
-// startGenerate validates the required path and optional Best Sellers month
-// range, shows the progress popup, and starts generation in a background goroutine.
+// startGenerate validates required inventory, issue-history dependency and
+// optional Best Sellers range, then generates on a background goroutine.
 func (s *AppState) startGenerate() {
 	if s.isBusy() {
 		return
@@ -122,6 +140,11 @@ func (s *AppState) startGenerate() {
 
 	poPath := editorText(&s.poEditor)
 	historyPath := editorText(&s.historyEditor)
+	issuePath := editorText(&s.issueEditor)
+	if issuePath != "" && historyPath == "" {
+		s.openErrorPopup("Missing Sales History", hotsheet.ErrIssueHistorySalesRequired.Error())
+		return
+	}
 	outputDir := editorText(&s.outputEditor)
 	var bestSellersRange *hotsheet.BestSellersRange
 	if s.useBestSellersRange {
@@ -151,14 +174,14 @@ func (s *AppState) startGenerate() {
 	s.openGenerateProgressPopup()
 	s.requestRedraw()
 
-	go func(inv, po, history, outdir string, period *hotsheet.BestSellersRange) {
-		outputs, err := hotsheet.Generate(inv, po, history, outdir, period, func(progress hotsheet.Progress) {
+	go func(inv, po, history, issue, outdir string, period *hotsheet.BestSellersRange) {
+		outputs, err := hotsheet.Generate(inv, po, history, issue, outdir, period, func(progress hotsheet.Progress) {
 			// Generate invokes this callback from the worker goroutine, so route the
 			// update through the UI event channel before touching AppState-owned UI data.
 			s.queueEvent(generateProgressEvent{Progress: progress})
 		})
 		s.queueEvent(generateCompletedEvent{Outputs: outputs, Err: err})
-	}(inventoryPath, poPath, historyPath, outputDir, bestSellersRange)
+	}(inventoryPath, poPath, historyPath, issuePath, outputDir, bestSellersRange)
 }
 
 // handleGenerateProgress applies a background generation progress update to the
@@ -203,12 +226,13 @@ func (s *AppState) handleGenerateResult(outputs []string, err error) {
 	s.requestRedraw()
 }
 
-// resetInputs clears the main path fields and Best Sellers range, then resets
+// resetInputs clears all path fields and the Best Sellers range, then resets
 // result-list selection state so the user can start a fresh run.
 func (s *AppState) resetInputs() {
 	setEditorText(&s.inventoryEditor, "")
 	setEditorText(&s.poEditor, "")
 	setEditorText(&s.historyEditor, "")
+	setEditorText(&s.issueEditor, "")
 	setEditorText(&s.outputEditor, "")
 	now := time.Now()
 	s.useBestSellersRange = false

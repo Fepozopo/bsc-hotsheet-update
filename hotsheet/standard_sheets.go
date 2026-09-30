@@ -57,7 +57,8 @@ func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool
 }
 
 // buildStandardSheetHeaders returns the inventory header row, including Season before
-// Occasion and Quantity Committed (sales orders plus back orders), plus MTO column indexes.
+// Occasion, Quantity Committed (sales orders plus back orders), and shipped
+// YTD/PY quantities, plus MTO column indexes.
 func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 	headers := []string{"Item Code", "QTY on Hand"}
 	if hasPO {
@@ -74,8 +75,8 @@ func buildStandardSheetHeaders(hasPO bool) ([]string, int, int) {
 		"QTY Available",
 		"MTO YTD",
 		"MTO PY",
-		"QTY Sold+Issued YTD",
-		"QTY Sold+Issued PY",
+		"QTY Shipped YTD",
+		"QTY Shipped PY",
 		"Class",
 		"Status",
 		"Season",
@@ -131,7 +132,7 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 			cmt := excelize.Comment{
 				Cell:   cell,
 				Author: "Shane DuPrey",
-				Text:   "MTO YTD = QTY Available / ((QTY Sold+Issued YTD + Quantity Committed) / (monthsThrough + 1)). monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date sales pace including current sales orders/backorders.",
+				Text:   "MTO YTD = QTY Available / ((QTY Shipped YTD + Quantity Committed) / monthsThrough + 1). Shipped = sold + nonnegative issued units. monthsThrough is the number of months completed in the current year (fractional). This shows months till out using year-to-date shipped pace including current sales orders/backorders.",
 				Height: 190,
 				Width:  200,
 			}
@@ -141,7 +142,7 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 			cmt := excelize.Comment{
 				Cell:   cell,
 				Author: "Shane DuPrey",
-				Text:   "MTO PY = QTY Available / ((QTY Sold+Issued PY) / (salesSeason + 1)). salesSeason used: Winter=6.5, Spring=5, Everyday=12. This shows months till out using prior-year sales scaled to the season length.",
+				Text:   "MTO PY = QTY Available / (QTY Shipped PY / salesSeason + 1). Shipped = sold + nonnegative issued units. salesSeason used: Winter=6.5, Spring=5, Everyday=12. This shows months till out using prior-year shipped units scaled to the season length.",
 				Height: 180,
 				Width:  180,
 			}
@@ -176,17 +177,18 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			salesSeason = 12.0
 		}
 
-		// Calculate the derived values used by the standard report layout.
+		// Inventory sold and issued quantities are separate source fields; combine
+		// them once for displayed shipments and inventory-based MTO pace.
 		committed := e.OnSO + e.OnBO
 		totalInventory := e.OnHand + e.OnPO
 		totalAvail := totalInventory - committed
 
-		totalSoldYTD := e.YTDSold + max(e.YTDIssued, 0)
-		totalSoldPY := e.SoldPY + max(e.IssuedPY, 0)
-		soldPerMonthPY := float64(totalSoldPY) / salesSeason
+		shippedYTD := e.YTDSold + max(e.YTDIssued, 0)
+		shippedPY := e.SoldPY + max(e.IssuedPY, 0)
+		shippedPerMonthPY := float64(shippedPY) / salesSeason
 
 		mtoYTD := standardMTOYTD(e, monthsThrough)
-		mtoPY := float64(totalAvail) / (soldPerMonthPY + 1)
+		mtoPY := float64(totalAvail) / (shippedPerMonthPY + 1)
 
 		classDesc := applyStandardDisplayClassPrefix(e)
 
@@ -203,8 +205,8 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			totalAvail,
 			mtoYTD,
 			mtoPY,
-			totalSoldYTD,
-			totalSoldPY,
+			shippedYTD,
+			shippedPY,
 			classDesc,
 			e.Status,
 			sh,
@@ -253,12 +255,12 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 }
 
 // standardMTOYTD returns an entry's months-to-out value from available stock and the
-// year-to-date sales pace including committed orders, using the supplied monthsThrough.
+// year-to-date shipped pace including committed orders, using the supplied monthsThrough.
 func standardMTOYTD(e *inventoryEntry, monthsThrough float64) float64 {
 	committed := e.OnSO + e.OnBO
 	available := e.OnHand + e.OnPO - committed
-	soldYTD := e.YTDSold + max(e.YTDIssued, 0)
-	return float64(available) / ((float64(soldYTD)+float64(committed))/monthsThrough + 1)
+	shippedYTD := e.YTDSold + max(e.YTDIssued, 0)
+	return float64(available) / ((float64(shippedYTD)+float64(committed))/monthsThrough + 1)
 }
 
 // applyStandardDisplayClassPrefix applies the display-time class prefix rules while keeping
@@ -382,7 +384,7 @@ func standardSheetWidthForHeader(header string) float64 {
 		return 15
 	case "MTO YTD", "MTO PY":
 		return 10
-	case "QTY Sold+Issued YTD", "QTY Sold+Issued PY":
+	case "QTY Shipped YTD", "QTY Shipped PY":
 		return 20
 	case "Class":
 		return 20

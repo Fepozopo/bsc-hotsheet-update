@@ -14,7 +14,7 @@ var monthlyHistoryHeaders = [17]string{
 	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Status",
 }
 
-// writeMonthlyHistorySheet adds entries' BSC sales records to workbook f as a
+// writeMonthlyHistorySheet adds entries' BSC sales and issued records to f as a
 // product-line tab. Each row is one SKU/year/metric with status last for filtering;
 // it returns an error if the sheet cannot be created or written.
 func writeMonthlyHistorySheet(f *excelize.File, entries []*inventoryEntry) error {

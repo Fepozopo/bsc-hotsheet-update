@@ -9,11 +9,7 @@ import (
 	"golang.org/x/mobile/event/key"
 )
 
-// AppState stores the persistent state that drives the immediate-mode GUI.
-//
-// Unlike retained-mode toolkits, Nucular does not keep long-lived widgets with
-// their own internal application logic. Instead, the application owns the state
-// explicitly and redraws the interface from that state on every frame.
+// popupKind identifies the currently displayed modal dialog, or popupNone.
 type popupKind int
 
 const (
@@ -28,7 +24,7 @@ const (
 // AppState contains all mutable state owned by the GUI layer.
 //
 // Nucular redraws the interface from application-owned data on every frame, so
-// this struct is the single source of truth for window state, form inputs,
+// this struct is the single source of truth for window state, five path inputs,
 // background-job status, and transient popup state.
 type AppState struct {
 	mw                    nucular.MasterWindow
@@ -38,10 +34,11 @@ type AppState struct {
 	windowBounds          rect.Rect
 	currentPopup          popupKind
 
-	// Text editors back the four path fields in the main form.
+	// Text editors back the five path fields in the main form.
 	inventoryEditor nucular.TextEditor
 	poEditor        nucular.TextEditor
 	historyEditor   nucular.TextEditor
+	issueEditor     nucular.TextEditor
 	outputEditor    nucular.TextEditor
 
 	// Best Sellers uses inventory YTD unless the user enables a history month range.
@@ -84,6 +81,7 @@ func NewAppState() *AppState {
 		inventoryEditor:   newPathEditor(),
 		poEditor:          newPathEditor(),
 		historyEditor:     newPathEditor(),
+		issueEditor:       newPathEditor(),
 		outputEditor:      newPathEditor(),
 		fromYearEditor:    newYearEditor(),
 		toYearEditor:      newYearEditor(),
@@ -169,5 +167,5 @@ func shortcutModifier() key.Modifiers {
 // anyEditorActive reports whether one of the main form path inputs currently
 // owns keyboard focus.
 func (s *AppState) anyEditorActive() bool {
-	return s.inventoryEditor.Active || s.poEditor.Active || s.historyEditor.Active || s.outputEditor.Active || s.fromYearEditor.Active || s.toYearEditor.Active
+	return s.inventoryEditor.Active || s.poEditor.Active || s.historyEditor.Active || s.issueEditor.Active || s.outputEditor.Active || s.fromYearEditor.Active || s.toYearEditor.Active
 }

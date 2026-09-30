@@ -14,8 +14,8 @@ const bestSellersSheetName = "Best Sellers"
 // the optional sales-history report needed to supply its monthly sales figures.
 var ErrBestSellersHistoryRequired = errors.New("a sales history report is required for a Best Sellers date range")
 
-// BestSellersRange selects an inclusive pair of calendar months from the BSC
-// history report. A nil range instead selects the required inventory report's YTD sales.
+// BestSellersRange selects inclusive BSC sales and optional issue-history months.
+// A nil range instead selects the required inventory report's YTD shipments.
 type BestSellersRange struct {
 	FromYear  int
 	FromMonth int
@@ -35,25 +35,27 @@ func (r BestSellersRange) Validate() error {
 	return nil
 }
 
-// bestSellerRow holds the source inventory item and its sales for the requested period.
+// bestSellerRow holds an inventory item, shipped units and sales dollars for
+// the requested period. Shipped units combine sold and nonnegative issued units.
 type bestSellerRow struct {
-	item     *inventoryEntry
-	quantity float64
-	dollars  float64
+	item    *inventoryEntry
+	shipped float64
+	dollars float64
 }
 
-// bestSellerRows calculates sales for entries and returns them ranked by quantity
-// sold descending, breaking ties by SKU. A nil range uses inventory YTD sales.
+// bestSellerRows ranks entries by monthly BSC sold plus nonnegative issued units,
+// breaking ties by SKU. A nil range uses the inventory YTD sold and issued
+// snapshot and YTD sales dollars, not the optional monthly history.
 func bestSellerRows(entries []*inventoryEntry, period *BestSellersRange) []bestSellerRow {
 	rows := make([]bestSellerRow, 0, len(entries))
 	for _, item := range entries {
 		row := bestSellerRow{item: item}
 		if period == nil {
-			row.quantity = float64(item.YTDSold)
+			row.shipped = float64(item.YTDSold + max(item.YTDIssued, 0))
 			row.dollars = item.DollarSoldYTD
 		} else {
 			for _, record := range item.SalesRecords {
-				if record.Metric != "Quantity Sold" && record.Metric != "Dollars Sold" {
+				if record.Metric != "Quantity Sold" && record.Metric != "Quantity Issued" && record.Metric != "Dollars Sold" {
 					continue
 				}
 				if record.Year < period.FromYear || record.Year > period.ToYear {
@@ -67,9 +69,12 @@ func bestSellerRows(entries []*inventoryEntry, period *BestSellersRange) []bestS
 					last = period.ToMonth
 				}
 				for month := first; month <= last; month++ {
-					if record.Metric == "Quantity Sold" {
-						row.quantity += record.Periods[month-1]
-					} else {
+					switch record.Metric {
+					case "Quantity Sold":
+						row.shipped += record.Periods[month-1]
+					case "Quantity Issued":
+						row.shipped += max(record.Periods[month-1], 0)
+					case "Dollars Sold":
 						row.dollars += record.Periods[month-1]
 					}
 				}
@@ -78,24 +83,24 @@ func bestSellerRows(entries []*inventoryEntry, period *BestSellersRange) []bestS
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].quantity != rows[j].quantity {
-			return rows[i].quantity > rows[j].quantity
+		if rows[i].shipped != rows[j].shipped {
+			return rows[i].shipped > rows[j].shipped
 		}
 		return rows[i].item.SKU < rows[j].item.SKU
 	})
 	return rows
 }
 
-// writeBestSellersSheet adds one ranked inventory row per SKU to f. If period is
-// nil it writes inventory YTD sales; otherwise it sums the inclusive BSC months.
-// Inventory quantities are the current inventory-report snapshot, regardless of
-// the sales period; committed quantity is on sales orders plus on back order.
-// It returns an error when a worksheet operation fails.
+// writeBestSellersSheet adds one ranked row per SKU to f. A nil period uses
+// inventory YTD shipped units and sales dollars; a range sums BSC sold plus
+// issued units and sales dollars across inclusive months. Inventory quantities
+// remain the current snapshot; committed units include sales orders and back
+// orders. Worksheet failures are returned.
 func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *BestSellersRange) error {
 	if _, err := f.NewSheet(bestSellersSheetName); err != nil {
 		return fmt.Errorf("failed to create Best Sellers sheet: %w", err)
 	}
-	headers := [...]string{"Item Code", "Description", "Quantity Sold", "Dollars Sold", "Quantity on Hand", "Quantity Committed", "Quantity on PO", "Royalty Code", "Class Description", "Occasion", "Foil Status", "Status"}
+	headers := [...]string{"Item Code", "Description", "Quantity Shipped", "Dollars Sold", "Quantity on Hand", "Quantity Committed", "Quantity on PO", "Royalty Code", "Class Description", "Occasion", "Foil Status", "Status"}
 	headerStyle, err := f.NewStyle(&excelize.Style{
 		Alignment: centeredAlignment(), Border: thinBlackBorder(),
 		Fill: patternFill(standardHeaderFill), Font: boldFont(),
@@ -113,7 +118,7 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 		}
 		width := standardSheetWidthForHeader(header)
 		switch header {
-		case "Quantity Sold", "Dollars Sold":
+		case "Quantity Shipped", "Dollars Sold":
 			width = 18
 		case "Quantity on Hand", "Quantity Committed", "Quantity on PO", "Class Description", "Foil Status":
 			width = 22
@@ -150,7 +155,7 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 			classDesc = item.ClassDesc
 		}
 		committed := item.OnSO + item.OnBO
-		values := [...]interface{}{item.SKU, item.Description, row.quantity, row.dollars, item.OnHand, committed, item.OnPO, item.RoyaltyCode, classDesc, item.Occasion, item.Foil, item.Status}
+		values := [...]interface{}{item.SKU, item.Description, row.shipped, row.dollars, item.OnHand, committed, item.OnPO, item.RoyaltyCode, classDesc, item.Occasion, item.Foil, item.Status}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
 			if err := f.SetCellValue(bestSellersSheetName, cell, value); err != nil {

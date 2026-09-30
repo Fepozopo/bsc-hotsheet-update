@@ -15,7 +15,7 @@ const (
 )
 
 // mtoForecastState distinguishes an estimated stockout from a longer runway or
-// insufficient completed sales history; it controls both display and row order.
+// insufficient completed shipment history; it controls display and row order.
 type mtoForecastState uint8
 
 const (
@@ -24,7 +24,7 @@ const (
 	mtoInsufficientHistory
 )
 
-// mtoForecastRow contains an active inventory item's BSC sales forecast and
+// mtoForecastRow contains an active inventory item's BSC shipment forecast and
 // stockout estimate, or an explicit reason why no date can be estimated.
 type mtoForecastRow struct {
 	item      *inventoryEntry
@@ -38,15 +38,15 @@ type mtoForecastRow struct {
 	state     mtoForecastState
 }
 
-// observedMonth records one completed month in the history export. The year is
-// used to favor newer observations of the same calendar month.
+// observedMonth records one completed month of shipped units in the history
+// exports. The year favors newer observations of the same calendar month.
 type observedMonth struct {
 	year  int
 	units float64
 }
 
 // mtoHistoryProfile holds forecast units per full calendar month and the number
-// of completed observations since the item's first positive BSC sale.
+// of completed observations since the item's first positive BSC shipment.
 type mtoHistoryProfile struct {
 	monthly [12]float64
 	months  int
@@ -54,19 +54,50 @@ type mtoHistoryProfile struct {
 	usable  bool
 }
 
-// buildMTOHistoryProfile builds monthly BSC Quantity Sold forecasts from records
-// completed by asOf. Months before the first positive sale and the current partial
-// month are excluded; completed zero months after that sale count. With at least
-// two completed observations, missing calendar months use the mean of all observed
-// months; observed calendar months retain their recent-year weighted estimates.
-func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryProfile {
-	var profile mtoHistoryProfile
-	firstSale := 0
-	foundSale := false
+// shippedRecords combines each calendar month's sales and nonnegative issued
+// quantities into one BSC Quantity Shipped record per year. Other history metrics
+// are ignored so forecast coverage counts each month at most once.
+func shippedRecords(records []salesRecord) []salesRecord {
+	byYear := make(map[int]*salesRecord)
 	for _, record := range records {
-		if record.Metric != "Quantity Sold" {
+		if record.Metric != "Quantity Sold" && record.Metric != "Quantity Issued" {
 			continue
 		}
+		shipped := byYear[record.Year]
+		if shipped == nil {
+			shipped = &salesRecord{Year: record.Year, Metric: "Quantity Shipped"}
+			byYear[record.Year] = shipped
+		}
+		for month, units := range record.Periods {
+			if record.Metric == "Quantity Issued" {
+				units = max(units, 0)
+			}
+			shipped.Periods[month] += units
+		}
+	}
+	years := make([]int, 0, len(byYear))
+	for year := range byYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	shipped := make([]salesRecord, 0, len(years))
+	for _, year := range years {
+		shipped = append(shipped, *byYear[year])
+	}
+	return shipped
+}
+
+// buildMTOHistoryProfile forecasts monthly BSC shipped units completed by asOf.
+// Months before the first positive shipment and the current partial month are
+// excluded; completed zero months afterward count once. With at least two
+// observations, missing calendar months use the observed mean while measured
+// months retain recent-year weighted estimates.
+func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryProfile {
+	var profile mtoHistoryProfile
+	shipments := shippedRecords(records)
+	firstSale := 0
+	foundSale := false
+	for _, record := range shipments {
 		for index, units := range record.Periods {
 			month := time.Month(index + 1)
 			if units > 0 && !time.Date(record.Year, month+1, 1, 0, 0, 0, 0, time.UTC).After(asOf) {
@@ -85,17 +116,14 @@ func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryPro
 	var observed [12][]observedMonth
 	var totalUnits float64
 	seenYears := make(map[int]struct{})
-	for _, record := range records {
-		if record.Metric != "Quantity Sold" {
-			continue
-		}
+	for _, record := range shipments {
 		for index, units := range record.Periods {
 			month := time.Month(index + 1)
 			if record.Year*12+index < firstSale || time.Date(record.Year, month+1, 1, 0, 0, 0, 0, time.UTC).After(asOf) {
 				continue
 			}
-			// Sold units represent demand; corrections cannot create negative
-			// future depletion. Zero sales after the first sale remain observed.
+			// Shipped units represent demand; corrections cannot create negative
+			// future depletion. Zero shipments after the first remain observed.
 			units = max(units, 0)
 			observed[index] = append(observed[index], observedMonth{year: record.Year, units: units})
 			totalUnits += units
@@ -172,7 +200,7 @@ func monthsAfter(start time.Time, months int) time.Time {
 
 // buildMTORows forecasts active inventory entries as of the report date, including
 // undated POs in available stock and subtracting committed quantity (sales orders
-// plus back orders). Only BSC units sold count as demand. It returns rows ordered
+// plus back orders). BSC shipped units count as demand. It returns rows ordered
 // by earliest stockout, then >24-month and insufficient-history items.
 func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 	rows := make([]mtoForecastRow, 0, len(entries))

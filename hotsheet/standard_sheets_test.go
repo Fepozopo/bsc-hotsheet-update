@@ -47,6 +47,39 @@ func TestStandardSheetsCommitted(t *testing.T) {
 	}
 }
 
+// TestStandardSheetsShipped verifies that both inventory tabs label combined
+// sold-plus-issued YTD/PY quantities as shipped and clamp negative issued values.
+func TestStandardSheetsShipped(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		issuedYTD int
+		issuedPY  int
+		wantYTD   string
+		wantPY    string
+	}{
+		{"positive issues", 3, 2, "10", "6"},
+		{"negative issues", -5, -3, "7", "4"},
+		{"zero issues", 0, 0, "7", "4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newProductLineWorkbook()
+			defer func() { _ = f.Close() }()
+			item := &inventoryEntry{SKU: "SKU-1", YTDSold: 7, YTDIssued: tc.issuedYTD, SoldPY: 4, IssuedPY: tc.issuedPY}
+			if err := writeStandardSheets(f, []*inventoryEntry{item}, false); err != nil {
+				t.Fatalf("write standard sheets for %s: %v", tc.name, err)
+			}
+			for _, sheet := range standardSheetNames {
+				for cell, want := range map[string]string{"H1": "QTY Shipped YTD", "I1": "QTY Shipped PY", "H2": tc.wantYTD, "I2": tc.wantPY} {
+					got, err := f.GetCellValue(sheet, cell, excelize.Options{RawCellValue: true})
+					if err != nil || got != want {
+						t.Errorf("%s %s for %s: expected %q, got %q (err %v)", sheet, cell, tc.name, want, got, err)
+					}
+				}
+			}
+		})
+	}
+}
+
 // TestInventorySheets checks the saved workbook's two inventory tabs: All Products
 // retains every input row and YTD Stock Priority excludes retired items and sorts by MTO.
 // Both tabs show the original season mapping before Occasion with and without PO details.

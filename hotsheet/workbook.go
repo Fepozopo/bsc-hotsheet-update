@@ -12,8 +12,9 @@ import (
 
 // buildProductLineWorkbook creates a workbook for one product line with All Products,
 // YTD Stock Priority, Data Insights, Best Sellers, and optional Monthly History and MTO,
-// then saves the result. A nil bestSellersRange uses inventory YTD sales; when
-// hasHistory is true, historyRunDate anchors the MTO forecasts.
+// then saves the result. A nil bestSellersRange uses inventory YTD shipped
+// units; when hasHistory is true, historyRunDate anchors MTO. It returns the
+// saved path or an error.
 func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
 	defer func() {

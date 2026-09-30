@@ -13,13 +13,13 @@ var bestSellersMonthLabels = []string{"January", "February", "March", "April", "
 // renderMainForm draws the main application window contents.
 //
 // The layout is intentionally kept close to the original Fyne-based UI: a title,
-// four labeled path pickers, the optional Best Sellers range, a status line, and the action row.
+// five labeled path pickers, the optional Best Sellers range, a status line, and the action row.
 func (s *AppState) renderMainForm(w *nucular.Window) {
 	w.Row(30).Dynamic(1)
 	w.Label("Create Unified Hotsheets from Reports", "CC")
 
 	w.Row(18).Dynamic(1)
-	w.LabelColored("Inventory is required. PO, sales history and output directory are optional.", "CC", color.RGBA{R: 95, G: 95, B: 95, A: 255})
+	w.LabelColored("Inventory is required. Issue history requires sales history; other reports are optional.", "CC", color.RGBA{R: 95, G: 95, B: 95, A: 255})
 
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, shortcutLabel("Inventory Report:", "I"), "Path to inventory report (.xlsx)", &s.inventoryEditor, s.browseInventory)
@@ -27,6 +27,13 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	s.renderPathField(w, shortcutLabel("PO Report (optional):", "P"), "Path to PO report (.xlsx)", &s.poEditor, s.browsePO)
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, shortcutLabel("Sales History (optional):", "H"), "Path to sales history report (.xlsx)", &s.historyEditor, s.browseHistory)
+	if strings.TrimSpace(string(s.historyEditor.Buffer)) != "" {
+		s.renderSpacer(w, 6)
+		s.renderPathField(w, shortcutLabel("Issue History (optional with sales):", "S"), "Path to issue history report (.xlsx)", &s.issueEditor, s.browseIssueHistory)
+	} else if !s.isBusy() {
+		// A removed sales source must not leave a hidden issue source selected.
+		setEditorText(&s.issueEditor, "")
+	}
 	s.renderBestSellersRange(w)
 	s.renderSpacer(w, 6)
 	s.renderPathField(w, shortcutLabel("Output Directory (optional):", "O"), "Directory for generated files", &s.outputEditor, s.browseOutputDir)
@@ -37,18 +44,18 @@ func (s *AppState) renderMainForm(w *nucular.Window) {
 	s.handleMainKeyboard(w)
 }
 
-// renderBestSellersRange shows a range checkbox only when history is selected.
+// renderBestSellersRange shows a range checkbox only when sales history is selected.
 // Month dropdowns avoid ambiguous dates; year editors are validated before generation.
 func (s *AppState) renderBestSellersRange(w *nucular.Window) {
 	w.Row(20).Dynamic(1)
 	if strings.TrimSpace(string(s.historyEditor.Buffer)) == "" {
 		// Clearing the history path also restores the inventory YTD fallback.
 		s.useBestSellersRange = false
-		w.LabelColored("Best Sellers uses inventory YTD sales unless you select a history date range.", "LC", color.RGBA{R: 120, G: 120, B: 120, A: 255})
+		w.LabelColored("Best Sellers uses inventory YTD shipped units unless you select a history date range.", "LC", color.RGBA{R: 120, G: 120, B: 120, A: 255})
 		return
 	}
 	selected := s.useBestSellersRange
-	w.CheckboxText("Use a month range for Best Sellers (otherwise use inventory YTD)", &selected)
+	w.CheckboxText("Use a month range for Best Sellers (otherwise use inventory YTD shipped units)", &selected)
 	if !s.isBusy() {
 		s.useBestSellersRange = selected
 	}
