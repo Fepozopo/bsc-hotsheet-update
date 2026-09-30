@@ -86,14 +86,14 @@ func TestBestSellerRows(t *testing.T) {
 	}
 }
 
-// TestWriteBestSellersSheet verifies the ranking, inventory metadata, status,
-// and filter dropdowns in an emitted workbook without requiring a history file.
+// TestWriteBestSellersSheet verifies ranked sales, inventory snapshot quantities,
+// metadata, status, and filter dropdowns in a saved workbook.
 func TestWriteBestSellersSheet(t *testing.T) {
 	f := newProductLineWorkbook()
 	defer func() { _ = f.Close() }()
 	items := []*inventoryEntry{
 		{SKU: "B", Description: "second", YTDSold: 1, DollarSoldYTD: 20, Status: "Rundown"},
-		{SKU: "A", Description: "first", RawClassDesc: "Counter Cards", ClassDesc: "BX - Counter Cards", RoyaltyCode: "HOUSE", Occasion: "BIRTHDAY", Foil: "Yes", YTDSold: 5, DollarSoldYTD: 55.5, Status: "Carryover"},
+		{SKU: "A", Description: "first", RawClassDesc: "Counter Cards", ClassDesc: "BX - Counter Cards", RoyaltyCode: "HOUSE", Occasion: "BIRTHDAY", Foil: "Yes", YTDSold: 5, DollarSoldYTD: 55.5, OnHand: 12, OnSO: 3, OnBO: 4, OnPO: 9, Status: "Carryover"},
 	}
 	if err := writeBestSellersSheet(f, items, nil); err != nil {
 		t.Fatalf("cannot write Best Sellers sheet: %v", err)
@@ -109,10 +109,11 @@ func TestWriteBestSellersSheet(t *testing.T) {
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
 		"A1": "Item Code", "B1": "Description", "C1": "Quantity Sold", "D1": "Dollars Sold",
-		"E1": "Royalty Code", "F1": "Class Description", "G1": "Occasion", "H1": "Foil Status", "I1": "Status",
-		"A2": "A", "B2": "first", "C2": "5", "D2": "55.5", "E2": "HOUSE",
-		"F2": "Counter Cards", "G2": "BIRTHDAY", "H2": "Yes", "I2": "Carryover",
-		"A3": "B", "B3": "second", "C3": "1", "D3": "20", "I3": "Rundown",
+		"E1": "Quantity on Hand", "F1": "Quantity Committed", "G1": "Quantity on PO",
+		"H1": "Royalty Code", "I1": "Class Description", "J1": "Occasion", "K1": "Foil Status", "L1": "Status",
+		"A2": "A", "B2": "first", "C2": "5", "D2": "55.5", "E2": "12", "F2": "7", "G2": "9", "H2": "HOUSE",
+		"I2": "Counter Cards", "J2": "BIRTHDAY", "K2": "Yes", "L2": "Carryover",
+		"A3": "B", "B3": "second", "C3": "1", "D3": "20", "E3": "0", "F3": "0", "G3": "0", "L3": "Rundown",
 	}
 	for cell, expected := range want {
 		got, err := written.GetCellValue(bestSellersSheetName, cell, excelize.Options{RawCellValue: true})
@@ -140,12 +141,12 @@ func TestWriteBestSellersSheet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cannot read worksheet %s: %v", member.Name, err)
 		}
-		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$I$1"`) {
+		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$L$1"`) {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected an A1:I1 autofilter in the saved Best Sellers sheet")
+		t.Fatal("expected an A1:L1 autofilter in the saved Best Sellers sheet")
 	}
 }
 

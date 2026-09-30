@@ -88,12 +88,14 @@ func bestSellerRows(entries []*inventoryEntry, period *BestSellersRange) []bestS
 
 // writeBestSellersSheet adds one ranked inventory row per SKU to f. If period is
 // nil it writes inventory YTD sales; otherwise it sums the inclusive BSC months.
+// Inventory quantities are the current inventory-report snapshot, regardless of
+// the sales period; committed quantity is on sales orders plus on back order.
 // It returns an error when a worksheet operation fails.
 func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *BestSellersRange) error {
 	if _, err := f.NewSheet(bestSellersSheetName); err != nil {
 		return fmt.Errorf("failed to create Best Sellers sheet: %w", err)
 	}
-	headers := [...]string{"Item Code", "Description", "Quantity Sold", "Dollars Sold", "Royalty Code", "Class Description", "Occasion", "Foil Status", "Status"}
+	headers := [...]string{"Item Code", "Description", "Quantity Sold", "Dollars Sold", "Quantity on Hand", "Quantity Committed", "Quantity on PO", "Royalty Code", "Class Description", "Occasion", "Foil Status", "Status"}
 	headerStyle, err := f.NewStyle(&excelize.Style{
 		Alignment: centeredAlignment(), Border: thinBlackBorder(),
 		Fill: patternFill(standardHeaderFill), Font: boldFont(),
@@ -113,7 +115,7 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 		switch header {
 		case "Quantity Sold", "Dollars Sold":
 			width = 18
-		case "Class Description", "Foil Status":
+		case "Quantity on Hand", "Quantity Committed", "Quantity on PO", "Class Description", "Foil Status":
 			width = 22
 		}
 		name, _ := excelize.ColumnNumberToName(col + 1)
@@ -147,7 +149,7 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 		if classDesc == "" {
 			classDesc = item.ClassDesc
 		}
-		values := [...]interface{}{item.SKU, item.Description, row.quantity, row.dollars, item.RoyaltyCode, classDesc, item.Occasion, item.Foil, item.Status}
+		values := [...]interface{}{item.SKU, item.Description, row.quantity, row.dollars, item.OnHand, item.OnSO + item.OnBO, item.OnPO, item.RoyaltyCode, classDesc, item.Occasion, item.Foil, item.Status}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
 			if err := f.SetCellValue(bestSellersSheetName, cell, value); err != nil {
@@ -161,7 +163,7 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 		case "Discontinued":
 			statusIndex = 2
 		}
-		if err := f.SetCellStyle(bestSellersSheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("I%d", rowNum), rowStyles[statusIndex]); err != nil {
+		if err := f.SetCellStyle(bestSellersSheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("L%d", rowNum), rowStyles[statusIndex]); err != nil {
 			return fmt.Errorf("failed to style Best Sellers row %d: %w", rowNum, err)
 		}
 		if err := f.SetCellStyle(bestSellersSheetName, fmt.Sprintf("D%d", rowNum), fmt.Sprintf("D%d", rowNum), dollarStyles[statusIndex]); err != nil {
@@ -169,7 +171,7 @@ func writeBestSellersSheet(f *excelize.File, entries []*inventoryEntry, period *
 		}
 	}
 	// Excelize writes one filter dropdown per header, including the final Status field.
-	if err := f.AutoFilter(bestSellersSheetName, "A1:I1", nil); err != nil {
+	if err := f.AutoFilter(bestSellersSheetName, "A1:L1", nil); err != nil {
 		return fmt.Errorf("failed to set Best Sellers autofilter: %w", err)
 	}
 	return nil
