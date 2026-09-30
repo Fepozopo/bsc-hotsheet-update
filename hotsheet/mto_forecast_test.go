@@ -311,8 +311,9 @@ func TestMTOProposedPO(t *testing.T) {
 	}
 }
 
-// TestWriteMTOSheet checks user-visible fields, occasion-mapped seasons and
-// filters in the saved workbook without asserting cosmetic styles or colors.
+// TestWriteMTOSheet checks user-visible fields, occasion-mapped seasons,
+// filtering, and prompt-free PO validation in the saved workbook without
+// asserting cosmetic styles or colors.
 func TestWriteMTOSheet(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	f := newProductLineWorkbook()
@@ -351,6 +352,17 @@ func TestWriteMTOSheet(t *testing.T) {
 	}
 	if actual, err := written.GetCellValue(mtoSheetName, "A5"); err != nil || actual != "" {
 		t.Errorf("A5: expected discontinued SKU omitted, got %q (error %v)", actual, err)
+	}
+	validations, err := written.GetDataValidations(mtoSheetName)
+	if err != nil {
+		t.Fatalf("cannot read saved MTO validation: %v", err)
+	}
+	if len(validations) != 1 {
+		t.Fatalf("expected one proposed-PO validation, got %d", len(validations))
+	}
+	validation := validations[0]
+	if validation.Sqref != "F2:F4" || validation.ShowInputMessage || validation.Prompt != nil || validation.PromptTitle != nil || !validation.ShowErrorMessage || !validation.AllowBlank || validation.Type != "whole" || validation.Operator != "between" || validation.Formula1 != "0" || validation.Formula2 != "2147483647" {
+		t.Errorf("expected prompt-free F2:F4 nonnegative whole-number validation with error feedback and blanks allowed, got %+v", validation)
 	}
 	// Verify Excel stores the filter range through the final Card Size column.
 	archive, err := zip.OpenReader(path)

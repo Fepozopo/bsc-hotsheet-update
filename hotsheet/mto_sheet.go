@@ -171,7 +171,8 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 		if err := validation.SetRange(0, maxProposedPOUnits, excelize.DataValidationTypeWhole, excelize.DataValidationOperatorBetween); err != nil {
 			return fmt.Errorf("failed to configure proposed PO validation: %w", err)
 		}
-		validation.SetInput("Proposed PO units", "Enter additional units; blank means zero. Assumed available immediately.")
+		// The F1 header note explains the input; a selection prompt would obscure
+		// adjacent rows while entering proposed units.
 		validation.SetError(excelize.DataValidationErrorStyleStop, "Invalid PO quantity", "Enter a nonnegative whole number.")
 		if err := f.AddDataValidation(mtoSheetName, validation); err != nil {
 			return fmt.Errorf("failed to validate proposed PO units: %w", err)
