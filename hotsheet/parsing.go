@@ -18,14 +18,15 @@ func colToIndex(col string) int {
 	return idx - 1
 }
 
-// parseInt parses numbers permissively (commas, floats fallback, trailing "-" interpreted as negative).
+// parseInt parses s permissively, allowing commas, a float fallback, and a trailing
+// "-" to indicate a negative number. It returns 0 on parse failure.
 func parseInt(s string) int {
 	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
 	if s == "" {
 		return 0
 	}
-	if strings.HasSuffix(s, "-") {
-		s = "-" + strings.TrimSuffix(s, "-")
+	if prefix, found := strings.CutSuffix(s, "-"); found {
+		s = "-" + prefix
 	}
 	v, err := strconv.Atoi(s)
 	if err != nil {
@@ -38,15 +39,15 @@ func parseInt(s string) int {
 	return v
 }
 
-// parseFloat parses numbers permissively (commas, trailing "-" interpreted as negative).
-// Returns a float64, or 0.0 on parse failure.
+// parseFloat parses s permissively, allowing commas and a trailing "-" to indicate
+// a negative number. It returns 0.0 on parse failure.
 func parseFloat(s string) float64 {
 	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
 	if s == "" {
 		return 0.0
 	}
-	if strings.HasSuffix(s, "-") {
-		s = "-" + strings.TrimSuffix(s, "-")
+	if prefix, found := strings.CutSuffix(s, "-"); found {
+		s = "-" + prefix
 	}
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
