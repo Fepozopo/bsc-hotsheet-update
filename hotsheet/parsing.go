@@ -85,10 +85,7 @@ func isRunDate(s string) bool {
 	}
 	// match time patterns like 12:34
 	timeRe := regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
-	if timeRe.MatchString(s) {
-		return true
-	}
-	return false
+	return timeRe.MatchString(s)
 }
 
 // getRow returns the row at 1-based index vloc (or nil).

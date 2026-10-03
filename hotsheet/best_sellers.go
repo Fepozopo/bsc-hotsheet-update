@@ -27,10 +27,10 @@ type BestSellersRange struct {
 // later than the end. Callers should also require a history file for a range.
 func (r BestSellersRange) Validate() error {
 	if r.FromYear < 1 || r.FromYear > 9999 || r.ToYear < 1 || r.ToYear > 9999 || r.FromMonth < 1 || r.FromMonth > 12 || r.ToMonth < 1 || r.ToMonth > 12 {
-		return fmt.Errorf("Best Sellers range needs valid years and months")
+		return fmt.Errorf("best sellers range needs valid years and months")
 	}
 	if r.FromYear*12+r.FromMonth > r.ToYear*12+r.ToMonth {
-		return fmt.Errorf("Best Sellers from month must not be after to month")
+		return fmt.Errorf("best sellers from month must not be after to month")
 	}
 	return nil
 }
