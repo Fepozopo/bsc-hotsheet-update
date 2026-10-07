@@ -20,10 +20,12 @@ var mtoHeaders = [...]string{
 }
 
 // writeMTOSheet writes active items' 12-month BSC shipped demand and 24-month
-// stockout estimates into f as of the sales-history report's run date. Missing calendar months
-// use the observed-month mean once two completed months are available. Hidden
-// forecast segments power live PO what-if formulas without altering baseline
-// quantities. Class descriptions use standard SKU prefixes; Season uses the
+// stockout estimates into f as of the sales-history report's run date. Missing
+// calendar months use the observed-month mean once two completed months are
+// available. Listed product-line 2021 SKUs use only 2026-and-later history for
+// coverage, baseline forecasts, and PO scenarios. Hidden forecast segments power
+// live PO what-if formulas without altering baseline quantities. Class
+// descriptions use standard SKU prefixes; Season uses the
 // same occasion mapping as the inventory tabs. Numeric baseline MTO cells use
 // MTO YTD's light colors.
 // The returned error identifies the first worksheet operation that fails.
@@ -65,7 +67,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 		{Cell: "E1", Author: "Hotsheet Generator", Text: fmt.Sprintf("Available = on hand + all undated POs - committed (sales orders + backorders). MTO simulates BSC units shipped for up to %d months. Undated POs are assumed available immediately; stockout within a month assumes uniform demand.", mtoHorizonMonths)},
 		{Cell: "F1", Author: "Hotsheet Generator", Text: "Enter additional, nonnegative whole units to simulate a PO. Existing POs are already included in Available Quantity. Proposed units are assumed available immediately; this input does not create an order."},
 		{Cell: "G1", Author: "Hotsheet Generator", Text: "Recalculates MTO with Available Quantity plus Proposed PO Units using the same monthly BSC forecast and 24-month horizon as the baseline MTO. Blank means zero additional units."},
-		{Cell: "I1", Author: "Hotsheet Generator", Text: "Completed BSC shipment months and years from the first observed positive-shipment month through the last completed month. Zero-shipment months after that first shipment count. Missing years and partial months do not. Forecasts based on fewer than 12 observed calendar months use the completed-month average for missing calendar months."},
+		{Cell: "I1", Author: "Hotsheet Generator", Text: "Completed BSC shipment months and years from the first observed positive-shipment month through the last completed month. Zero-shipment months after that first shipment count. Missing years and partial months do not. Forecasts based on fewer than 12 observed calendar months use the completed-month average for missing calendar months. Designated product-line 2021 SKUs exclude all history before 2026, when the key account moved to custom SKUs."},
 	}
 	for _, comment := range comments {
 		if err := f.AddComment(mtoSheetName, comment); err != nil {

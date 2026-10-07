@@ -12,6 +12,8 @@ const (
 	mtoHorizonMonths    = 24
 	mtoHistoryYears     = 3
 	mtoMinHistoryMonths = 2
+
+	mtoKeyAccountHistoryStartYear = 2026
 )
 
 // mtoForecastState distinguishes an estimated stockout from a longer runway or
@@ -198,10 +200,40 @@ func monthsAfter(start time.Time, months int) time.Time {
 	return first.AddDate(0, 0, day-1)
 }
 
+// mtoHistoryRecords returns the item's history eligible for MTO forecasting.
+// Listed product-line 2021 SKUs exclude years before 2026, when the key account
+// moved to custom SKUs. The source history is never changed so other sheets
+// retain their existing sales and issue data.
+func mtoHistoryRecords(item *inventoryEntry) []salesRecord {
+	if strings.TrimSpace(item.ProductLine) != "2021" {
+		return item.SalesRecords
+	}
+	switch strings.TrimSpace(item.SKU) {
+	case "BD1001FJ", "BD1006F", "BD1028", "BD1044", "BD1046F", "BD1048FJ",
+		"BP1002", "CS1003", "CS1005", "FC1005", "GR1016FJ", "HY1048FB",
+		"HY1071", "HY1071B", "LV1010", "MD1011", "MI1011", "MI1014",
+		"PJ1011", "PJ1031", "PJ1032", "RL1003", "SP1001F", "TY1007",
+		"TY1019", "TY1019B", "TY1020", "TY1023B", "TY1025", "TY1025B",
+		"TY1028F", "VD1029J":
+		// Copy eligible records rather than filtering in place: the shared
+		// slice also feeds Monthly History and range-based Best Sellers.
+		records := make([]salesRecord, 0, len(item.SalesRecords))
+		for _, record := range item.SalesRecords {
+			if record.Year >= mtoKeyAccountHistoryStartYear {
+				records = append(records, record)
+			}
+		}
+		return records
+	default:
+		return item.SalesRecords
+	}
+}
+
 // buildMTORows forecasts active inventory entries as of the report date, including
 // undated POs in available stock and subtracting committed quantity (sales orders
-// plus back orders). BSC shipped units count as demand. It returns rows ordered
-// by earliest stockout, then >24-month and insufficient-history items.
+// plus back orders). BSC shipped units count as demand; listed product-line 2021
+// SKUs use only 2026-and-later history. It returns rows ordered by earliest
+// stockout, then >24-month and insufficient-history items.
 func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 	rows := make([]mtoForecastRow, 0, len(entries))
 	// Inventory quantities are a report-date snapshot; project from the next day.
@@ -214,7 +246,7 @@ func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 		}
 		committed := item.OnSO + item.OnBO
 		row := mtoForecastRow{item: item, available: item.OnHand + item.OnPO - committed}
-		profile := buildMTOHistoryProfile(item.SalesRecords, asOf)
+		profile := buildMTOHistoryProfile(mtoHistoryRecords(item), asOf)
 		row.coverage = fmt.Sprintf("%d months / %d years", profile.months, profile.years)
 		if profile.usable {
 			row.monthly = profile.monthly
