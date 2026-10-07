@@ -10,14 +10,14 @@ import (
 )
 
 // TestMTOKeyAccountHistoryCutoff verifies the workbook's baseline and proposed-PO
-// forecasts use only 2026+ sales and issues for every designated 2021 SKU, while
-// unlisted SKUs and other product lines retain their historical forecasts.
+// forecasts use only February 2026 and later sales and issues for every
+// designated 2021 SKU, while other SKUs and lines retain historical forecasts.
 func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 	history := []salesRecord{
 		{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90}},
 		{Year: 2025, Metric: "Quantity Issued", Periods: [12]float64{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}},
-		{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 20, 999}},
-		{Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{5, 5, 999}},
+		{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 20, 30, 999}},
+		{Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{5, 5, 5, 999}},
 	}
 	// forecastCase defines the expected user-visible forecast for one SKU and date.
 	type forecastCase struct {
@@ -29,18 +29,18 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 	cases := []forecastCase{
 		{
 			name: "unlisted SKU", sku: "BD1001", productLine: "2021",
-			coverage: "14 months / 2 years", stockout: "Mar 2026", proposedStockout: "Mar 2026",
-			demand: 3280.0 / 3, mto: 0.3, proposedMTO: 0.6,
+			coverage: "15 months / 2 years", stockout: "Apr 2026", proposedStockout: "Apr 2026",
+			demand: 1050, mto: 0.3, proposedMTO: 0.6,
 		},
 		{
 			name: "listed SKU in other product line", sku: "BD1001FJ", productLine: "BAS",
-			coverage: "14 months / 2 years", stockout: "Mar 2026", proposedStockout: "Mar 2026",
-			demand: 3280.0 / 3, mto: 0.3, proposedMTO: 0.6,
+			coverage: "15 months / 2 years", stockout: "Apr 2026", proposedStockout: "Apr 2026",
+			demand: 1050, mto: 0.3, proposedMTO: 0.6,
 		},
 		{
 			name: "listed SKU without product line", sku: "BD1001FJ",
-			coverage: "14 months / 2 years", stockout: "Mar 2026", proposedStockout: "Mar 2026",
-			demand: 3280.0 / 3, mto: 0.3, proposedMTO: 0.6,
+			coverage: "15 months / 2 years", stockout: "Apr 2026", proposedStockout: "Apr 2026",
+			demand: 1050, mto: 0.3, proposedMTO: 0.6,
 		},
 		{
 			name: "later years remain eligible", sku: "BD1001FJ", productLine: "2021",
@@ -50,8 +50,8 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 				{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}},
 				{Year: 2027, Metric: "Quantity Sold", Periods: [12]float64{40, 40, 999}},
 			},
-			coverage: "14 months / 2 years", stockout: "Apr 2027", proposedStockout: "Jun 2027",
-			demand: 800.0 / 3, mto: 1.5, proposedMTO: 3,
+			coverage: "13 months / 2 years", stockout: "Apr 2027", proposedStockout: "Jun 2027",
+			demand: 820.0 / 3, mto: 1.5, proposedMTO: 3,
 		},
 	}
 	// Keep the expected SKU list independent of the production eligibility rule.
@@ -60,21 +60,21 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 		"BP1002", "CS1003", "CS1005", "FC1005", "GR1016FJ", "HY1048FB",
 		"HY1071", "HY1071B", "LV1010", "MD1011", "MI1011", "MI1014",
 		"PJ1011", "PJ1031", "PJ1032", "RL1003", "SP1001F", "TY1007",
-		"TY1019", "TY1019B", "TY1020", "TY1023B", "TY1025", "TY1025B",
+		"TY1019", "TY1019B", "TY1020", "TY1023", "TY1023B", "TY1025", "TY1025B",
 		"TY1028F", "VD1029J",
 	} {
 		cases = append(cases, forecastCase{
 			name: sku, sku: sku, productLine: "2021",
-			coverage: "2 months / 1 years", stockout: "Apr 2026", proposedStockout: "Jun 2026",
-			demand: 240, mto: 1.5, proposedMTO: 3,
+			coverage: "2 months / 1 years", stockout: "May 2026", proposedStockout: "Jun 2026",
+			demand: 360, mto: 1, proposedMTO: 2,
 		})
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			asOf := tc.asOf
 			if asOf.IsZero() {
-				// The first day of March makes February a completed month.
-				asOf = time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
+				// April's first day makes both February and March completed months.
+				asOf = time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
 			}
 			records := tc.records
 			if records == nil {
@@ -123,7 +123,7 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 	}
 }
 
-// TestMTOKeyAccountInsufficientHistory verifies excluded years cannot supply
+// TestMTOKeyAccountInsufficientHistory verifies excluded months cannot supply
 // forecast coverage when fewer than two eligible completed months remain.
 func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 	prior := salesRecord{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{100, 100}}
@@ -137,7 +137,10 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 		{"empty history", []salesRecord{}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
 		{"only excluded years", []salesRecord{prior}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
 		{"report before cutoff", []salesRecord{prior}, time.Date(2025, time.December, 31, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"one eligible completed month", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 999}}}, time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC), "1 months / 1 years"},
+		{"January sale with partial February", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 999}}}, time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
+		{"January sale cannot seed coverage", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10}}}, time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
+		{"January issue cannot seed coverage", []salesRecord{prior, {Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{10}}}, time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
+		{"one eligible completed month", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{100, 10}}}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "1 months / 1 years"},
 		{"eligible zeros before first positive shipment", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 10}}}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "1 months / 1 years"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -159,12 +162,13 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 }
 
 // TestMTOCutoffPreservesMonthlyHistory verifies generating MTO does not remove
-// or overwrite the pre-2026 records rendered by Monthly History afterward.
+// or overwrite pre-February-2026 sales and issues in Monthly History afterward.
 func TestMTOCutoffPreservesMonthlyHistory(t *testing.T) {
 	item := &inventoryEntry{SKU: "BD1001FJ", ProductLine: "2021", OnHand: 30, SalesRecords: []salesRecord{
 		{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{90}},
 		{Year: 2025, Metric: "Quantity Issued", Periods: [12]float64{10}},
 		{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 20}},
+		{Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{5, 5}},
 	}}
 	f := newProductLineWorkbook()
 	t.Cleanup(func() { _ = f.Close() })
@@ -178,6 +182,7 @@ func TestMTOCutoffPreservesMonthlyHistory(t *testing.T) {
 		{"C2", "2025"}, {"D2", "Quantity Sold"}, {"E2", "90"},
 		{"C3", "2025"}, {"D3", "Quantity Issued"}, {"E3", "10"},
 		{"C4", "2026"}, {"D4", "Quantity Sold"}, {"E4", "10"}, {"F4", "20"},
+		{"C5", "2026"}, {"D5", "Quantity Issued"}, {"E5", "5"}, {"F5", "5"},
 	} {
 		if got, err := f.GetCellValue("Monthly History", check.cell); err != nil || got != check.want {
 			t.Errorf("Monthly History %s after MTO cutoff: expected %q, got %q (error %v)", check.cell, check.want, got, err)
