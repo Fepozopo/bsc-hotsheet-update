@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -147,8 +148,8 @@ func TestMergeSalesHistoryRequiresRunDate(t *testing.T) {
 	}
 }
 
-// TestMonthlyHistorySheetOptional verifies that Best Sellers is always present and
-// only a selected history report adds Monthly History and MTO to a product-line workbook.
+// TestMonthlyHistorySheetOptional verifies the saved tab order: Best Sellers follows
+// Data Insights, with Monthly History and MTO appended only when history is supplied.
 func TestMonthlyHistorySheetOptional(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -167,21 +168,13 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 			if err != nil {
 				t.Fatalf("hasHistory=%v: cannot read workbook: %v", tc.hasHistory, err)
 			}
-			defer func() { _ = file.Close() }()
-			foundHistory, foundBestSellers, foundMTO := false, false, false
-			for _, name := range file.GetSheetList() {
-				if name == monthlyHistorySheetName {
-					foundHistory = true
-				}
-				if name == bestSellersSheetName {
-					foundBestSellers = true
-				}
-				if name == mtoSheetName {
-					foundMTO = true
-				}
+			t.Cleanup(func() { _ = file.Close() })
+			wantSheets := []string{"All Products", "YTD Stock Priority", "Data Insights", "Best Sellers"}
+			if tc.wantSheet {
+				wantSheets = append(wantSheets, "Monthly History", "MTO", "MTO Forecast Data")
 			}
-			if foundHistory != tc.wantSheet || foundMTO != tc.wantSheet || !foundBestSellers {
-				t.Errorf("hasHistory=%v: expected Monthly History and MTO present=%v and Best Sellers present=true, got Monthly History=%v, MTO=%v, Best Sellers=%v (sheets=%v)", tc.hasHistory, tc.wantSheet, foundHistory, foundMTO, foundBestSellers, file.GetSheetList())
+			if got := file.GetSheetList(); !slices.Equal(got, wantSheets) {
+				t.Errorf("hasHistory=%v: expected sheet order %v, got %v", tc.hasHistory, wantSheets, got)
 			}
 		})
 	}

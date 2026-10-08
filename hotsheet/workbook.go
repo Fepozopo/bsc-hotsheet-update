@@ -11,8 +11,8 @@ import (
 )
 
 // buildProductLineWorkbook creates a workbook for one product line with All Products,
-// YTD Stock Priority, Data Insights, Best Sellers, and optional Monthly History and MTO,
-// then saves the result. A nil bestSellersRange uses inventory YTD shipped
+// YTD Stock Priority, Data Insights, Best Sellers, and optional Monthly History and MTO
+// in that tab order, then saves the result. A nil bestSellersRange uses inventory YTD shipped
 // units; when hasHistory is true, historyRunDate anchors MTO. It returns the
 // saved path or an error.
 func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
@@ -35,16 +35,13 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 		return "", fmt.Errorf("failed to create Data Insights sheet for %s: %w", productLine, err)
 	}
 
-	if hasHistory {
-		if err := writeMonthlyHistorySheet(f, entries); err != nil {
-			return "", fmt.Errorf("failed to create Monthly History sheet for %s: %w", productLine, err)
-		}
-	}
-
 	if err := writeBestSellersSheet(f, entries, bestSellersRange); err != nil {
 		return "", fmt.Errorf("failed to create Best Sellers sheet for %s: %w", productLine, err)
 	}
 	if hasHistory {
+		if err := writeMonthlyHistorySheet(f, entries); err != nil {
+			return "", fmt.Errorf("failed to create Monthly History sheet for %s: %w", productLine, err)
+		}
 		if err := writeMTOSheet(f, entries, historyRunDate); err != nil {
 			return "", fmt.Errorf("failed to create MTO sheet for %s: %w", productLine, err)
 		}
