@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -157,8 +158,8 @@ func (s *AppState) openOutputsPopup() {
 	s.mw.PopupOpen("Created Hotsheets", nucular.WindowMovable|nucular.WindowTitle|nucular.WindowDynamic|nucular.WindowNoScrollbar, s.centeredPopupRect(660, 430), true, s.renderOutputsPopup)
 }
 
-// renderOutputsPopup draws the output list and action buttons after generation
-// completes.
+// renderOutputsPopup draws generated file names and action buttons in w.
+// Full output paths are retained for opening files and their containing folders.
 func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 	s.handleOutputsPopupKeyboard(w)
 
@@ -182,7 +183,8 @@ func (s *AppState) renderOutputsPopup(w *nucular.Window) {
 			for gl.Next() {
 				idx := gl.Index()
 				selected := idx == s.selectedOutput
-				if gw.SelectableLabel(s.outputs[idx], "LC", &selected) {
+				// Keep directory prefixes out of labels so long paths do not obscure file names.
+				if gw.SelectableLabel(filepath.Base(s.outputs[idx]), "LC", &selected) {
 					s.handleOutputClick(idx)
 				}
 				if idx == s.selectedOutput && s.selectedOutputNeedsScroll {
