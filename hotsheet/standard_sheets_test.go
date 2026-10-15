@@ -80,7 +80,7 @@ func TestStandardSheetsShipped(t *testing.T) {
 	}
 }
 
-// TestInventorySheets checks the saved workbook's two inventory tabs: All Products
+// TestInventorySheets checks the saved workbook's inventory tabs after Dashboard: All Products
 // retains every input row and YTD Stock Priority excludes retired items and sorts by MTO.
 // Both tabs show the original season mapping before Occasion with and without PO details.
 func TestInventorySheets(t *testing.T) {
@@ -113,7 +113,7 @@ func TestInventorySheets(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = f.Close() })
 
-			wantSheets := []string{"All Products", "YTD Stock Priority", "Data Insights", "Best Sellers"}
+			wantSheets := []string{"Dashboard", "All Products", "YTD Stock Priority", "Data Insights", "Best Sellers", "Dashboard Data"}
 			if got := f.GetSheetList(); !reflect.DeepEqual(got, wantSheets) {
 				t.Fatalf("hasPO=%v: expected sheets %v, got %v", tc.hasPO, wantSheets, got)
 			}

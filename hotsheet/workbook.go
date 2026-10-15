@@ -10,11 +10,11 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// buildProductLineWorkbook creates a workbook for one product line with All Products,
-// YTD Stock Priority, Data Insights, Best Sellers, and optional Monthly History and MTO
-// in that tab order, then saves the result. A nil bestSellersRange uses inventory YTD shipped
-// units; when hasHistory is true, historyRunDate anchors MTO. It returns the
-// saved path or an error.
+// buildProductLineWorkbook creates and saves one product-line workbook, starting
+// with Dashboard, then All Products, YTD Stock Priority, Data Insights, Best Sellers,
+// and optional Monthly History and MTO. A nil bestSellersRange uses inventory YTD
+// shipments. With history, historyRunDate anchors MTO and Dashboard comparisons
+// through the last completed month. It returns the saved path or an error.
 func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
 	defer func() {
@@ -47,6 +47,10 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 		}
 	}
 
+	if err := writeDashboardSheet(f, entries, hasHistory, historyRunDate); err != nil {
+		return "", fmt.Errorf("failed to create Dashboard sheet for %s: %w", productLine, err)
+	}
+
 	outPath, err := saveWorkbook(f, outputDir, productLine, dateStamp)
 	if err != nil {
 		if logger != nil {
@@ -58,17 +62,15 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 	return outPath, nil
 }
 
-// newProductLineWorkbook returns a workbook with All Products followed by YTD Stock
-// Priority; later writers append Data Insights, Best Sellers, and optional report tabs.
+// newProductLineWorkbook returns a workbook with Dashboard first and active,
+// followed by All Products and YTD Stock Priority. Later writers append report
+// tabs and hidden chart/forecast data without changing the initial tab order.
 func newProductLineWorkbook() *excelize.File {
 	f := excelize.NewFile()
-	idx, _ := f.NewSheet(allProductsSheetName)
-	f.SetActiveSheet(idx)
+	_ = f.SetSheetName("Sheet1", dashboardSheetName)
+	_, _ = f.NewSheet(allProductsSheetName)
 	_, _ = f.NewSheet(ytdStockPrioritySheetName)
-	// Delete the default Sheet1 if it still exists so the output matches the existing workbook layout.
-	if idxSheet, _ := f.GetSheetIndex("Sheet1"); idxSheet != -1 {
-		_ = f.DeleteSheet("Sheet1")
-	}
+	f.SetActiveSheet(0)
 	return f
 }
 

@@ -148,8 +148,9 @@ func TestMergeSalesHistoryRequiresRunDate(t *testing.T) {
 	}
 }
 
-// TestMonthlyHistorySheetOptional verifies the saved tab order: Best Sellers follows
-// Data Insights, with Monthly History and MTO appended only when history is supplied.
+// TestMonthlyHistorySheetOptional verifies Dashboard is first, Best Sellers follows
+// Data Insights, and Monthly History and MTO appear only when history is supplied.
+// Hidden Dashboard data follows the report and optional forecast-data tabs.
 func TestMonthlyHistorySheetOptional(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -169,10 +170,11 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 				t.Fatalf("hasHistory=%v: cannot read workbook: %v", tc.hasHistory, err)
 			}
 			t.Cleanup(func() { _ = file.Close() })
-			wantSheets := []string{"All Products", "YTD Stock Priority", "Data Insights", "Best Sellers"}
+			wantSheets := []string{"Dashboard", "All Products", "YTD Stock Priority", "Data Insights", "Best Sellers"}
 			if tc.wantSheet {
 				wantSheets = append(wantSheets, "Monthly History", "MTO", "MTO Forecast Data")
 			}
+			wantSheets = append(wantSheets, "Dashboard Data")
 			if got := file.GetSheetList(); !slices.Equal(got, wantSheets) {
 				t.Errorf("hasHistory=%v: expected sheet order %v, got %v", tc.hasHistory, wantSheets, got)
 			}
