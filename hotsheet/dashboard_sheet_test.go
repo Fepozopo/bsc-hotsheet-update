@@ -76,9 +76,9 @@ func TestDashboardSavedWorkbook(t *testing.T) {
 			if visible, err := f.GetSheetVisible("Dashboard Data"); err != nil || visible {
 				t.Fatalf("expected hidden chart data, got visible=%v error=%v", visible, err)
 			}
-			selectors := []string{"B6", "L6", "B38"}
+			selectors := []string{"B6", "L6", "B50"}
 			if tc.hasHistory {
-				selectors = append(selectors, "L38")
+				selectors = append(selectors, "L50")
 			}
 			validations, err := f.GetDataValidations("Dashboard")
 			if err != nil || len(validations) != len(selectors) {
@@ -138,7 +138,7 @@ func TestDashboardSavedWorkbook(t *testing.T) {
 			assertDashboardRange(t, f, dollars.Values, paddedDashboardNumbers("100"))
 			assertDashboardRange(t, f, shipped.Values, paddedDashboardNumbers("10"))
 
-			setDashboardTestSelector(t, f, "B38", "CardsX")
+			setDashboardTestSelector(t, f, "B50", "CardsX")
 			assertDashboardRange(t, f, comparison.Values, tc.wantFilteredSales)
 			if tc.hasHistory {
 				monthly := charts[3].Chart.PlotArea.Bars[0].Series
@@ -158,7 +158,7 @@ func TestDashboardSavedWorkbook(t *testing.T) {
 				assertDashboardRange(t, f, monthly[0].Categories, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"})
 				assertDashboardRange(t, f, monthly[0].Values, []string{"30", "0", "0", "0", "0", "0", "0", "80", "1000", "0", "0", "0"})
 				assertDashboardRange(t, f, monthly[1].Values, []string{"21", "0", "0", "0", "0", "0", "0", "56", "1000", "0", "0", "0"})
-				setDashboardTestSelector(t, f, "L38", "Cards")
+				setDashboardTestSelector(t, f, "L50", "Cards")
 				assertDashboardRange(t, f, monthly[0].Values, []string{"10", "0", "0", "0", "0", "0", "0", "70", "900", "0", "0", "0"})
 				assertDashboardRange(t, f, monthly[1].Values, []string{"7", "0", "0", "0", "0", "0", "0", "49", "800", "0", "0", "0"})
 				assertDashboardRange(t, f, comparison.Values, tc.wantFilteredSales)

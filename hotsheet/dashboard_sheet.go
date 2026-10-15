@@ -12,10 +12,11 @@ const (
 	dashboardSheetName     = "Dashboard"
 	dashboardDataSheetName = "Dashboard Data"
 	dashboardClassList     = "DashboardClasses"
-	// Fixed row heights keep the 480px donuts clear of the lower controls,
-	// regardless of the spreadsheet application's default font metrics.
+	// Taller donuts leave room for 15 multiline legend entries. Fixed row
+	// heights preserve clearance above the lower controls across applications.
+	dashboardDonutHeight      = 720
 	dashboardRowHeight        = 15.0
-	dashboardBarChartRow      = 40
+	dashboardBarChartRow      = 52
 	dashboardHeadingRowHeight = 32.0
 	// Each class occupies one summary row; rankings store labels then values.
 	dashboardShippedLabels = 2
@@ -28,7 +29,8 @@ const (
 
 // writeDashboardSheet fills the first worksheet with independently filtered YTD
 // donuts and sales comparisons. hasHistory enables monthly sales and completed-
-// month comparisons anchored to runDate. It returns worksheet or chart errors.
+// month comparisons anchored to runDate. Both donuts share a taller legend area,
+// with sales controls positioned below them. It returns worksheet or chart errors.
 func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory bool, runDate time.Time) error {
 	data := buildDashboardData(entries, hasHistory, runDate)
 	if _, err := f.NewSheet(dashboardDataSheetName); err != nil {
@@ -91,7 +93,7 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 		}
 		chart := &excelize.Chart{
 			Type: excelize.Doughnut, HoleSize: 60,
-			Dimension: excelize.ChartDimension{Width: 700, Height: 480},
+			Dimension: excelize.ChartDimension{Width: 700, Height: dashboardDonutHeight},
 			Legend:    excelize.ChartLegend{Position: "r"},
 			PlotArea:  excelize.ChartPlotArea{ShowPercent: true},
 			Series: []excelize.ChartSeries{{Name: fmt.Sprintf("'%s'!%s", dashboardSheetName, spec.heading),
@@ -105,7 +107,7 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 		}
 	}
 
-	if err := addDashboardSelector(f, "B38"); err != nil {
+	if err := addDashboardSelector(f, "B50"); err != nil {
 		return err
 	}
 	comparisonTitle := "YTD Sales vs Full Previous Year"
@@ -118,7 +120,7 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 		if err := f.SetCellValue(dashboardDataSheetName, fmt.Sprintf("M%d", firstRow+year), labels[year]); err != nil {
 			return err
 		}
-		if err := writeDashboardLookup(f, firstRow+year, 14, dashboardSalesValues+year, "B38", len(data)); err != nil {
+		if err := writeDashboardLookup(f, firstRow+year, 14, dashboardSalesValues+year, "B50", len(data)); err != nil {
 			return err
 		}
 	}
@@ -132,7 +134,7 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 	}
 
 	if hasHistory {
-		if err := addDashboardSelector(f, "L38"); err != nil {
+		if err := addDashboardSelector(f, "L50"); err != nil {
 			return err
 		}
 		for month := range 12 {
@@ -140,7 +142,7 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 				return err
 			}
 			for year := range 2 {
-				if err := writeDashboardLookup(f, firstRow+month, 10+year, dashboardMonthlyValues+year*12+month, "L38", len(data)); err != nil {
+				if err := writeDashboardLookup(f, firstRow+month, 10+year, dashboardMonthlyValues+year*12+month, "L50", len(data)); err != nil {
 					return err
 				}
 			}
@@ -232,9 +234,9 @@ func formatDashboard(f *excelize.File, hasHistory bool, runDate time.Time) error
 	if hasHistory {
 		period = fmt.Sprintf("Sales comparison: %s vs the same months in %d. Monthly chart includes Jan–Dec; current month may be partial. Report: %s.", dashboardCompletedPeriod(runDate), runDate.Year()-1, runDate.Format("Jan 2, 2006"))
 	}
-	cells := map[string]string{"A1": "Dashboard", "A2": notes, "A3": period, "A6": "Class:", "K6": "Class:", "A38": "Class:"}
+	cells := map[string]string{"A1": "Dashboard", "A2": notes, "A3": period, "A6": "Class:", "K6": "Class:", "A50": "Class:"}
 	if hasHistory {
-		cells["K38"] = "Class:"
+		cells["K50"] = "Class:"
 	}
 	for cell, text := range cells {
 		if err := f.SetCellValue(dashboardSheetName, cell, text); err != nil {
@@ -254,13 +256,13 @@ func formatDashboard(f *excelize.File, hasHistory bool, runDate time.Time) error
 	if err := f.SetColWidth(dashboardSheetName, "A", "T", 10); err != nil {
 		return err
 	}
-	for _, span := range [][2]string{{"B6", "E6"}, {"L6", "O6"}, {"B38", "E38"}, {"A7", "J7"}, {"K7", "T7"}} {
+	for _, span := range [][2]string{{"B6", "E6"}, {"L6", "O6"}, {"B50", "E50"}, {"A7", "J7"}, {"K7", "T7"}} {
 		if err := f.MergeCell(dashboardSheetName, span[0], span[1]); err != nil {
 			return err
 		}
 	}
 	if hasHistory {
-		if err := f.MergeCell(dashboardSheetName, "L38", "O38"); err != nil {
+		if err := f.MergeCell(dashboardSheetName, "L50", "O50"); err != nil {
 			return err
 		}
 	}
@@ -296,13 +298,13 @@ func formatDashboard(f *excelize.File, hasHistory bool, runDate time.Time) error
 	if err != nil {
 		return err
 	}
-	for _, cell := range []string{"B6", "L6", "B38"} {
+	for _, cell := range []string{"B6", "L6", "B50"} {
 		if err := f.SetCellStyle(dashboardSheetName, cell, cell, control); err != nil {
 			return err
 		}
 	}
 	if hasHistory {
-		if err := f.SetCellStyle(dashboardSheetName, "L38", "L38", control); err != nil {
+		if err := f.SetCellStyle(dashboardSheetName, "L50", "L50", control); err != nil {
 			return err
 		}
 	}
