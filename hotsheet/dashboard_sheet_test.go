@@ -38,7 +38,8 @@ type dashboardChartXML struct {
 
 // TestDashboardSavedWorkbook verifies the initially active Dashboard, optional
 // monthly chart with year legends, independent validated selectors, and class-sensitive chart data
-// after saving/reopening. The reporting date is fixed rather than using a clock.
+// after saving/reopening. Comparison labels distinguish completed months from
+// inventory YTD. The reporting date is fixed rather than using a clock.
 func TestDashboardSavedWorkbook(t *testing.T) {
 	for _, tc := range []struct {
 		name                         string
@@ -125,6 +126,11 @@ func TestDashboardSavedWorkbook(t *testing.T) {
 			assertDashboardRange(t, f, dollars.Categories, paddedDashboardValues("A - Alpha", "B - Beta"))
 			assertDashboardRange(t, f, dollars.Values, paddedDashboardNumbers("300", "100"))
 			assertDashboardRange(t, f, comparison.Values, tc.wantSales)
+			wantLabels := []string{"YTD", "Previous Year (Full Year)"}
+			if tc.hasHistory {
+				wantLabels = []string{"2026 (completed months)", "2025 (same months)"}
+			}
+			assertDashboardRange(t, f, comparison.Categories, wantLabels)
 
 			// Selecting one class must not include another class's items.
 			setDashboardTestSelector(t, f, "B6", "Cards")

@@ -30,7 +30,9 @@ const (
 // writeDashboardSheet fills the first worksheet with independently filtered YTD
 // donuts and sales comparisons. hasHistory enables monthly sales and completed-
 // month comparisons anchored to runDate. Both donuts share a taller legend area,
-// with sales controls positioned below them. It returns worksheet or chart errors.
+// with sales controls positioned below them. The comparison axis includes zero
+// and negative class totals rather than magnifying differences between bars.
+// It returns worksheet or chart errors.
 func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory bool, runDate time.Time) error {
 	data := buildDashboardData(entries, hasHistory, runDate)
 	if _, err := f.NewSheet(dashboardDataSheetName); err != nil {
@@ -114,7 +116,7 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 	labels := [2]string{"YTD", "Previous Year (Full Year)"}
 	if hasHistory {
 		comparisonTitle = dashboardCompletedPeriod(runDate) + " Sales vs Previous Year"
-		labels = [2]string{fmt.Sprintf("%d YTD (completed months)", runDate.Year()), fmt.Sprintf("%d (same months)", runDate.Year()-1)}
+		labels = [2]string{fmt.Sprintf("%d (completed months)", runDate.Year()), fmt.Sprintf("%d (same months)", runDate.Year()-1)}
 	}
 	for year := range 2 {
 		if err := f.SetCellValue(dashboardDataSheetName, fmt.Sprintf("M%d", firstRow+year), labels[year]); err != nil {
@@ -129,6 +131,12 @@ func writeDashboardSheet(f *excelize.File, entries []*inventoryEntry, hasHistory
 	}
 	comparison := dashboardBarChart(comparisonTitle, []excelize.ChartSeries{{Name: fmt.Sprintf("'%s'!$N$%d", dashboardDataSheetName, firstRow-1), Categories: dashboardRange(13, firstRow, 2), Values: dashboardRange(14, firstRow, 2)}})
 	comparison.PlotArea.ShowVal = true
+	// Include zero without clipping negative sales after a class-filter change.
+	minimum := 0.0
+	for _, summary := range data {
+		minimum = min(minimum, summary.sales[0], summary.sales[1])
+	}
+	comparison.YAxis.Minimum = &minimum
 	if err := f.AddChart(dashboardSheetName, fmt.Sprintf("A%d", dashboardBarChartRow), comparison); err != nil {
 		return err
 	}
