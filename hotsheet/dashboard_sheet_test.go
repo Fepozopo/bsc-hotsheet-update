@@ -14,9 +14,10 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// dashboardSeriesXML reads category/value references from saved chart series so
+// dashboardSeriesXML reads name/category/value references from saved chart series so
 // tests evaluate the actual ranges plotted by Excel, not parallel test formulas.
 type dashboardSeriesXML struct {
+	Name       string `xml:"tx>strRef>f"`
 	Categories string `xml:"cat>strRef>f"`
 	Values     string `xml:"val>numRef>f"`
 }
@@ -36,7 +37,7 @@ type dashboardChartXML struct {
 }
 
 // TestDashboardSavedWorkbook verifies the initially active Dashboard, optional
-// monthly chart, independent validated selectors, and class-sensitive chart data
+// monthly chart with year legends, independent validated selectors, and class-sensitive chart data
 // after saving/reopening. The reporting date is fixed rather than using a clock.
 func TestDashboardSavedWorkbook(t *testing.T) {
 	for _, tc := range []struct {
@@ -75,9 +76,9 @@ func TestDashboardSavedWorkbook(t *testing.T) {
 			if visible, err := f.GetSheetVisible("Dashboard Data"); err != nil || visible {
 				t.Fatalf("expected hidden chart data, got visible=%v error=%v", visible, err)
 			}
-			selectors := []string{"B4", "L4", "B32"}
+			selectors := []string{"B4", "L4", "B36"}
 			if tc.hasHistory {
-				selectors = append(selectors, "L32")
+				selectors = append(selectors, "L36")
 			}
 			validations, err := f.GetDataValidations("Dashboard")
 			if err != nil || len(validations) != len(selectors) {
@@ -137,17 +138,27 @@ func TestDashboardSavedWorkbook(t *testing.T) {
 			assertDashboardRange(t, f, dollars.Values, paddedDashboardNumbers("100"))
 			assertDashboardRange(t, f, shipped.Values, paddedDashboardNumbers("10"))
 
-			setDashboardTestSelector(t, f, "B32", "CardsX")
+			setDashboardTestSelector(t, f, "B36", "CardsX")
 			assertDashboardRange(t, f, comparison.Values, tc.wantFilteredSales)
 			if tc.hasHistory {
 				monthly := charts[3].Chart.PlotArea.Bars[0].Series
 				if len(monthly) != 2 {
 					t.Fatalf("expected two monthly series, got %d", len(monthly))
 				}
+				for year, expected := range []string{"2026", "2025"} {
+					parts := strings.SplitN(monthly[year].Name, "!", 2)
+					if len(parts) != 2 {
+						t.Fatalf("monthly series %d must reference a year cell, got %q", year, monthly[year].Name)
+					}
+					got, err := f.GetCellValue(strings.Trim(parts[0], "'"), parts[1])
+					if err != nil || got != expected {
+						t.Errorf("monthly series %d: expected legend %q, got %q from %s (error %v)", year, expected, got, monthly[year].Name, err)
+					}
+				}
 				assertDashboardRange(t, f, monthly[0].Categories, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"})
 				assertDashboardRange(t, f, monthly[0].Values, []string{"30", "0", "0", "0", "0", "0", "0", "80", "1000", "0", "0", "0"})
 				assertDashboardRange(t, f, monthly[1].Values, []string{"21", "0", "0", "0", "0", "0", "0", "56", "1000", "0", "0", "0"})
-				setDashboardTestSelector(t, f, "L32", "Cards")
+				setDashboardTestSelector(t, f, "L36", "Cards")
 				assertDashboardRange(t, f, monthly[0].Values, []string{"10", "0", "0", "0", "0", "0", "0", "70", "900", "0", "0", "0"})
 				assertDashboardRange(t, f, monthly[1].Values, []string{"7", "0", "0", "0", "0", "0", "0", "49", "800", "0", "0", "0"})
 				assertDashboardRange(t, f, comparison.Values, tc.wantFilteredSales)
