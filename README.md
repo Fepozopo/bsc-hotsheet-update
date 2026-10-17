@@ -10,11 +10,23 @@ This tool automates the manual work of assembling hotsheets from inventory and P
 
 ## Screenshots
 
-### Legacy Data Insights sheet
+### Dashboard
 
-This screenshot predates the overhaul. Current output replaces seasonal sections and status text with the grouped sales outlook described below, including PY Sales to Date when history is supplied.
+Class-filtered top-15 items by YTD quantity shipped and dollars sold, with completed-month and monthly sales comparisons when history is supplied.
 
-![Legacy Data Insights sheet](images/data_insights.png)
+![Dashboard with top-item charts and current/prior-year sales comparisons](images/dashboard.png)
+
+### All Products
+
+Item-level inventory, committed and available quantities, MTO, shipped quantities, and sales, with filterable product details and status shading.
+
+![All Products worksheet showing inventory, MTO, YTD/PY shipments and sales, and product details](images/all_products.png)
+
+### Data Insights
+
+Grouped sales outlook for Counter Cards and Other Products, including aligned PY Sales to Date and independently forecast totals when history is supplied.
+
+![Data Insights with grouped occasion sales, PY Sales to Date, and projected YoY totals](images/data_insights.png)
 
 ## Requirements
 
