@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-// dataInsightsRow holds one combined occasion's inventory totals and history-based
+// dataInsightsRow holds an occasion or whole table's inventory totals and history-based
 // outlook. DollarSoldYTD and DollarSoldPY always retain inventory-report values;
 // DollarSoldPYToDate and ProjectedDollar use optional monthly dollar history.
 // HasProjection distinguishes a real zero estimate from unavailable history.
-// Class is empty for the Counter Cards table and names each Other Products table.
+// Class names each Other Products detail row's table; card rows and totals leave it empty.
 type dataInsightsRow struct {
 	DollarSoldYTD      float64
 	DollarSoldPY       float64
@@ -21,6 +21,13 @@ type dataInsightsRow struct {
 	Date               string
 	HasProjection      bool
 	LimitedHistory     bool
+}
+
+// dataInsightsTable contains occasion rows and an independently forecast total.
+// The total uses combined monthly history, not the sum of occasion forecasts.
+type dataInsightsTable struct {
+	Rows  []dataInsightsRow
+	Total dataInsightsRow
 }
 
 // dataInsightsGroup accumulates a combined row and its observed yearly dollars.
@@ -37,13 +44,15 @@ type dataInsightsGroupKey struct {
 	occasion string
 }
 
-// buildDataInsightsRows returns Counter Cards grouped by occasion and Other
-// Products grouped by class then occasion. Labels are trimmed and grouped
-// case-insensitively; tables and rows are alphabetically ordered by the writer.
-// Nil entries are ignored. hasHistory enables projections anchored exclusively
-// to runDate; without history, inventory totals remain but projections do not.
-func buildDataInsightsRows(entries []*inventoryEntry, hasHistory bool, runDate time.Time) ([]dataInsightsRow, map[string][]dataInsightsRow) {
+// buildDataInsightsTables returns Counter Cards grouped by occasion and Other
+// Products grouped by class then occasion, each with an independently forecast
+// total. Labels are trimmed and grouped case-insensitively; rows are sorted here
+// and classes by the writer. Nil entries are ignored. hasHistory enables
+// projections anchored exclusively to runDate; without history, inventory
+// totals remain but projections do not.
+func buildDataInsightsTables(entries []*inventoryEntry, hasHistory bool, runDate time.Time) (dataInsightsTable, map[string]dataInsightsTable) {
 	groups := make(map[dataInsightsGroupKey]*dataInsightsGroup)
+	groupsByClass := make(map[string][]*dataInsightsGroup)
 	classLabels := make(map[string]string)
 	for _, entry := range entries {
 		if entry == nil {
@@ -68,6 +77,7 @@ func buildDataInsightsRows(entries []*inventoryEntry, hasHistory bool, runDate t
 				history: make(map[int][12]float64),
 			}
 			groups[key] = group
+			groupsByClass[class] = append(groupsByClass[class], group)
 		}
 		group.row.DollarSoldYTD += entry.DollarSoldYTD
 		group.row.DollarSoldPY += entry.DollarSoldPY
@@ -85,30 +95,31 @@ func buildDataInsightsRows(entries []*inventoryEntry, hasHistory bool, runDate t
 		}
 	}
 
-	var cards []dataInsightsRow
-	other := make(map[string][]dataInsightsRow)
-	for _, group := range groups {
-		if hasHistory && !runDate.IsZero() {
-			projectDataInsightsRow(&group.row, group.history, runDate)
+	cards := dataInsightsTable{Total: dataInsightsRow{Occasion: "Total"}}
+	other := make(map[string]dataInsightsTable)
+	for class, classGroups := range groupsByClass {
+		table := dataInsightsTable{Total: totalDataInsightsRows(classGroups, hasHistory, runDate)}
+		for _, group := range classGroups {
+			if hasHistory && !runDate.IsZero() {
+				projectDataInsightsRow(&group.row, group.history, runDate)
+			}
+			table.Rows = append(table.Rows, group.row)
 		}
-		if group.row.Class == "" {
-			cards = append(cards, group.row)
+		sortDataInsightsRows(table.Rows)
+		if class == "" {
+			cards = table
 		} else {
-			other[group.row.Class] = append(other[group.row.Class], group.row)
+			other[class] = table
 		}
-	}
-	sortDataInsightsRows(cards)
-	for _, rows := range other {
-		sortDataInsightsRows(rows)
 	}
 	return cards, other
 }
 
-// sortedOtherProductsDataInsightsClasses returns class names alphabetically,
+// sortedOtherProductsDataInsightsClasses returns table class names alphabetically,
 // ignoring case and breaking ties by the original label for stable worksheets.
-func sortedOtherProductsDataInsightsClasses(rowsByClass map[string][]dataInsightsRow) []string {
-	classes := make([]string, 0, len(rowsByClass))
-	for class := range rowsByClass {
+func sortedOtherProductsDataInsightsClasses(tablesByClass map[string]dataInsightsTable) []string {
+	classes := make([]string, 0, len(tablesByClass))
+	for class := range tablesByClass {
 		classes = append(classes, class)
 	}
 	sort.Slice(classes, func(i, j int) bool {
@@ -163,18 +174,27 @@ func normalizeDataInsightsOccasion(occ string) string {
 	return "NO OCCASION"
 }
 
-// totalDataInsightsRows sums a table's inventory, aligned history, and forecasts.
-// A total is projectable only when every detail row is projectable, so it cannot
-// silently compare a partial forecast with the full table's PY baseline.
-func totalDataInsightsRows(rows []dataInsightsRow) dataInsightsRow {
-	total := dataInsightsRow{Occasion: "Total", HasProjection: len(rows) > 0}
-	for _, row := range rows {
-		total.DollarSoldYTD += row.DollarSoldYTD
-		total.DollarSoldPY += row.DollarSoldPY
-		total.DollarSoldPYToDate += row.DollarSoldPYToDate
-		total.ProjectedDollar += row.ProjectedDollar
-		total.HasProjection = total.HasProjection && row.HasProjection
-		total.LimitedHistory = total.LimitedHistory || row.LimitedHistory
+// totalDataInsightsRows sums groups' inventory values and observed monthly
+// dollars, then forecasts that combined history as of runDate when hasHistory
+// is true. The total applies its own first-positive-sale and two-month rules;
+// an unprojectable occasion cannot veto an otherwise usable table history.
+// Missing SKU/year records remain absent, and source groups are not modified.
+func totalDataInsightsRows(groups []*dataInsightsGroup, hasHistory bool, runDate time.Time) dataInsightsRow {
+	total := dataInsightsRow{Occasion: "Total"}
+	history := make(map[int][12]float64)
+	for _, group := range groups {
+		total.DollarSoldYTD += group.row.DollarSoldYTD
+		total.DollarSoldPY += group.row.DollarSoldPY
+		for year, dollars := range group.history {
+			combined := history[year]
+			for month, value := range dollars {
+				combined[month] += value
+			}
+			history[year] = combined
+		}
+	}
+	if hasHistory && !runDate.IsZero() {
+		projectDataInsightsRow(&total, history, runDate)
 	}
 	return total
 }

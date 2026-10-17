@@ -175,8 +175,8 @@ func TestDataInsightsForecast(t *testing.T) {
 			projectionCol := "E"
 			if tc.hasHistory {
 				projectionCol = "F"
-				assertInsightsCell(t, f, "E6", tc.wantPYTD)
-				assertInsightsCell(t, f, "E7", tc.wantPYTD)
+				assertInsightsCell(t, f, "D6", tc.wantPYTD)
+				assertInsightsCell(t, f, "D7", tc.wantPYTD)
 			}
 			assertInsightsCell(t, f, "A6", "Birthday")
 			assertInsightsCell(t, f, "A7", "Total") // All member SKUs must produce one combined row.
@@ -214,8 +214,9 @@ func TestDataInsightsHolidayLabels(t *testing.T) {
 }
 
 // TestDataInsightsSavedWorkbook verifies routing the report date/history flag
-// through the workbook builder, persisted columns, grouping, and independent
-// card/other-product histories after saving and reopening the actual XLSX.
+// through the workbook builder, persisted YTD / aligned PY / full-year PY column
+// order, grouping, and independent card/other-product histories after saving and
+// reopening the actual XLSX.
 func TestDataInsightsSavedWorkbook(t *testing.T) {
 	t.Parallel()
 	for _, hasHistory := range []bool{false, true} {
@@ -236,6 +237,8 @@ func TestDataInsightsSavedWorkbook(t *testing.T) {
 				{SKU: "D", RawClassDesc: "Coasters", Occasion: "Easter", DollarSoldYTD: 80, DollarSoldPY: 100, SalesRecords: []salesRecord{
 					{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 999}},
 				}},
+				{SKU: "E", ClassDesc: "ZZ Desk Notes", DollarSoldYTD: 1},
+				{SKU: "F", DollarSoldYTD: 2},
 			}
 			path, err := buildProductLineWorkbook("BAS", entries, t.TempDir(), "20260331", false, hasHistory, nil, time.Date(2026, time.March, 31, 0, 0, 0, 0, time.UTC), nil)
 			if err != nil {
@@ -250,26 +253,40 @@ func TestDataInsightsSavedWorkbook(t *testing.T) {
 			assertInsightsCell(t, f, "A5", "Occasion")
 			assertInsightsCell(t, f, "B5", "Holiday / Date")
 			assertInsightsCell(t, f, "C5", "YTD Sales")
-			assertInsightsCell(t, f, "D5", "PY Sales")
+			pyColumn := "D"
+			if hasHistory {
+				pyColumn = "E"
+			}
+			assertInsightsCell(t, f, pyColumn+"5", "PY Sales")
 			assertInsightsCell(t, f, "A6", "Birthday")
 			assertInsightsCell(t, f, "C6", "120")
-			assertInsightsCell(t, f, "D6", "100")
+			assertInsightsCell(t, f, pyColumn+"6", "100")
 			assertInsightsCell(t, f, "A7", "Total")
 			assertInsightsCell(t, f, "C7", "120")
-			assertInsightsCell(t, f, "D7", "100")
+			assertInsightsCell(t, f, pyColumn+"7", "100")
 			if hasHistory {
-				assertInsightsCell(t, f, "E5", "PY Sales to Date")
+				assertInsightsCell(t, f, "D5", "PY Sales to Date")
 				assertInsightsCell(t, f, "F5", "Projected YoY")
-				assertInsightsCell(t, f, "E6", "0")
+				assertInsightsCell(t, f, "D6", "0")
+				assertInsightsCell(t, f, "D7", "0")
 				// Dec 2025=10, Jan=20, Feb=40: remaining nine unknown months
 				// use 70/3, while December keeps 10. Projection = 280.
 				assertInsightsCell(t, f, "F6", "+180% (limited-history estimate)")
 				assertInsightsCell(t, f, "H4", "Coasters")
 				assertInsightsCell(t, f, "H6", "Easter")
 				assertInsightsCell(t, f, "I6", "Easter")
-				assertInsightsCell(t, f, "L5", "PY Sales to Date")
+				assertInsightsCell(t, f, "K5", "PY Sales to Date")
+				assertInsightsCell(t, f, "L5", "PY Sales")
+				assertInsightsCell(t, f, "K6", "0")
+				assertInsightsCell(t, f, "L6", "100")
+				assertInsightsCell(t, f, "K7", "0")
+				assertInsightsCell(t, f, "L7", "100")
 				assertInsightsCell(t, f, "M6", "+260% (limited-history estimate)")
 				assertInsightsCell(t, f, "H9", "Counter Cards Assortment")
+				assertInsightsCell(t, f, "H14", "UNCLASSIFIED")
+				assertInsightsCell(t, f, "H16", "NO OCCASION")
+				assertInsightsCell(t, f, "J16", "2")
+				assertInsightsCell(t, f, "H19", "ZZ Desk Notes")
 			} else {
 				assertInsightsCell(t, f, "E5", "Projected YoY")
 				assertInsightsCell(t, f, "E6", "Insufficient history")
@@ -277,48 +294,139 @@ func TestDataInsightsSavedWorkbook(t *testing.T) {
 				assertInsightsCell(t, f, "G4", "Coasters")
 				assertInsightsCell(t, f, "K6", "Insufficient history")
 				assertInsightsCell(t, f, "G9", "Counter Cards Assortment")
+				assertInsightsCell(t, f, "G14", "UNCLASSIFIED")
+				assertInsightsCell(t, f, "G16", "NO OCCASION")
+				assertInsightsCell(t, f, "I16", "2")
+				assertInsightsCell(t, f, "G19", "ZZ Desk Notes")
 			}
 		})
 	}
 }
 
-// TestDataInsightsTotals verifies all-or-nothing total forecasts and
-// class/occasion grouping rather than averaging row percentages.
+// TestDataInsightsTotals verifies independently forecast combined histories in
+// saved card and class tables, without vetoes from unprojectable occasions or
+// contamination from another class. Detail forecasts must remain unchanged.
 func TestDataInsightsTotals(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name       string
-		second     []salesRecord
-		wantYoY    string
-		wantSecond string
+		name                           string
+		month                          time.Month
+		first, second                  []salesRecord
+		secondPY                       float64
+		wantFirst, wantSecond, wantYoY string
+		wantPYTD, wantPY               string
 	}{
-		{"unprojectable member", nil, "Insufficient history", "Insufficient history"},
-		{"all projectable", []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{10, 30}}}, "+100% (limited-history estimate)", "+20% (limited-history estimate)"},
+		{
+			name: "missing occasion history does not veto total", month: time.March, secondPY: 200,
+			first: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}},
+			// The missing record supplies no observations. Forecast 360 / full PY 300.
+			wantFirst: "+260% (limited-history estimate)", wantSecond: "Insufficient history",
+			wantYoY: "+20% (limited-history estimate)", wantPYTD: "0", wantPY: "300",
+		},
+		{
+			name: "no baseline occasion does not veto total", month: time.March,
+			first:     []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}},
+			wantFirst: "+260% (limited-history estimate)", wantSecond: "N/A — no PY baseline",
+			wantYoY: "+260% (limited-history estimate)", wantPYTD: "0", wantPY: "100",
+		},
+		{
+			name: "new occasion sales participate before sufficiency checks", month: time.March, secondPY: 200,
+			first:  []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 999}}},
+			second: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 30, 999}}},
+			// Combined actuals 20 + 70, then ten months at 45 = 540.
+			wantFirst: "+260% (limited-history estimate)", wantSecond: "Insufficient history",
+			wantYoY: "+80% (limited-history estimate)", wantPYTD: "0", wantPY: "300",
+		},
+		{
+			name: "total can qualify when neither occasion does", month: time.September, secondPY: 200,
+			first:  []salesRecord{{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20}}},
+			second: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 40, 999}}},
+			// Combined coverage starts Dec 2025: nine observations total 60.
+			// CY actual 40 + Sep-Nov at 60/9 + December 20 = 80.
+			wantFirst: "Insufficient history", wantSecond: "Insufficient history",
+			wantYoY: "-73% (limited-history estimate)", wantPYTD: "0", wantPY: "300",
+		},
+		{
+			name: "total uses its own launch and fallback rather than summing forecasts", month: time.May, secondPY: 200,
+			first:  []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 0, 0, 999}}},
+			second: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 30, 50, 999}}},
+			// Individual forecasts are 180 and 400. Combined Jan-Apr actuals
+			// are 140, then eight months at 35 = 420, versus full PY 300.
+			wantFirst: "+80% (limited-history estimate)", wantSecond: "+100% (limited-history estimate)",
+			wantYoY: "+40% (limited-history estimate)", wantPYTD: "0", wantPY: "300",
+		},
+		{
+			name: "combined coverage removes individual limited-history flag", month: time.December, secondPY: 200,
+			first:  []salesRecord{{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20}}},
+			second: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 999}}},
+			// Together all twelve calendar months are observed. Completed
+			// actuals 110 + December 20 = 130, versus full PY 300.
+			wantFirst: "Insufficient history", wantSecond: "-40% (limited-history estimate)",
+			wantYoY: "-57%", wantPYTD: "0", wantPY: "300",
+		},
+		{
+			name: "aligned PY totals retain all observed dollars", month: time.March, secondPY: 200,
+			first: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{1, 2}},
+				{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}},
+			},
+			second: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{3, 4}},
+				{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{10, 30}},
+			},
+			wantFirst: "-40%", wantSecond: "-80%", wantYoY: "-67%", wantPYTD: "10", wantPY: "300",
+		},
+		{
+			name: "two occasions in one completed month are still insufficient", month: time.March, secondPY: 200,
+			first:     []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 20, 999}}},
+			second:    []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 40, 999}}},
+			wantFirst: "Insufficient history", wantSecond: "Insufficient history",
+			wantYoY: "Insufficient history", wantPYTD: "0", wantPY: "300",
+		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := excelize.NewFile()
-			t.Cleanup(func() { _ = f.Close() })
-			second := append([]salesRecord{{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{999}}}, tc.second...)
-			entries := []*inventoryEntry{
-				{RawClassDesc: "Napkins", Occasion: "Birthday", DollarSoldYTD: 50, DollarSoldPY: 100, SalesRecords: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}}},
-				{RawClassDesc: "NAPKINS", Occasion: "Christmas", DollarSoldYTD: 70, DollarSoldPY: 200, SalesRecords: second},
-				{ClassDesc: "Desk Notes", Occasion: "Everyday", DollarSoldYTD: 1},
-				{DollarSoldYTD: 2}, nil,
-			}
-			if err := writeDataInsightsSheet(f, entries, true, time.Date(2026, time.March, 25, 0, 0, 0, 0, time.UTC)); err != nil {
-				t.Fatal(err)
-			}
-			assertInsightsCell(t, f, "H4", "Desk Notes")
-			assertInsightsCell(t, f, "H9", "Napkins")
-			assertInsightsCell(t, f, "H11", "Birthday")
-			assertInsightsCell(t, f, "H12", "Christmas")
-			assertInsightsCell(t, f, "M12", tc.wantSecond)
-			assertInsightsCell(t, f, "H13", "Total")
-			assertInsightsCell(t, f, "J13", "120")
-			assertInsightsCell(t, f, "K13", "300")
-			assertInsightsCell(t, f, "M13", tc.wantYoY)
-			assertInsightsCell(t, f, "H15", "UNCLASSIFIED")
-		})
+		for _, class := range []string{"Counter Cards", "Napkins"} {
+			t.Run(tc.name+"/"+class, func(t *testing.T) {
+				t.Parallel()
+				f := excelize.NewFile()
+				t.Cleanup(func() { _ = f.Close() })
+				secondClass := class
+				if class == "Napkins" {
+					secondClass = "NAPKINS"
+				}
+				entries := []*inventoryEntry{
+					{RawClassDesc: class, Occasion: "Birthday", DollarSoldYTD: 50, DollarSoldPY: 100, SalesRecords: tc.first},
+					{RawClassDesc: secondClass, Occasion: "Christmas", DollarSoldYTD: 70, DollarSoldPY: tc.secondPY, SalesRecords: tc.second},
+					{RawClassDesc: "ZZ Unrelated", DollarSoldYTD: 9000, DollarSoldPY: 9000, SalesRecords: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{9999, 9999}}}},
+					nil,
+				}
+				if err := writeDataInsightsSheet(f, entries, true, time.Date(2026, tc.month, 25, 0, 0, 0, 0, time.UTC)); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(t.TempDir(), "totals.xlsx")
+				if err := f.SaveAs(path); err != nil {
+					t.Fatal(err)
+				}
+				written, err := excelize.OpenFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = written.Close() })
+				occasion, ytd, pytd, py, yoy := "A", "C", "D", "E", "F"
+				if class == "Napkins" {
+					occasion, ytd, pytd, py, yoy = "H", "J", "K", "L", "M"
+				}
+				assertInsightsCell(t, written, occasion+"4", class)
+				assertInsightsCell(t, written, occasion+"6", "Birthday")
+				assertInsightsCell(t, written, yoy+"6", tc.wantFirst)
+				assertInsightsCell(t, written, occasion+"7", "Christmas")
+				assertInsightsCell(t, written, yoy+"7", tc.wantSecond)
+				assertInsightsCell(t, written, occasion+"8", "Total")
+				assertInsightsCell(t, written, ytd+"8", "120")
+				assertInsightsCell(t, written, pytd+"8", tc.wantPYTD)
+				assertInsightsCell(t, written, py+"8", tc.wantPY)
+				assertInsightsCell(t, written, yoy+"8", tc.wantYoY)
+			})
+		}
 	}
 }
 

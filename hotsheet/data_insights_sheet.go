@@ -16,11 +16,12 @@ type dataInsightsStyles struct {
 
 // writeDataInsightsSheet creates a grouped sales outlook: Counter Cards by
 // occasion on the left, other products by class and occasion on the right.
-// hasHistory adds PY Sales to Date and enables completed-month forecasting using
-// the sales report's runDate, never the machine clock. Excelize writes the scalar
-// values and formatting into a worksheet; percentages are explicit display text.
+// hasHistory inserts PY Sales to Date before full-year PY Sales and enables
+// completed-month forecasting using the sales report's runDate, never the
+// machine clock. Each table total is forecast from its combined monthly history.
+// Excelize writes scalar values and formatting; percentages are explicit text.
 func writeDataInsightsSheet(f *excelize.File, entries []*inventoryEntry, hasHistory bool, runDate time.Time) error {
-	cards, other := buildDataInsightsRows(entries, hasHistory, runDate)
+	cards, other := buildDataInsightsTables(entries, hasHistory, runDate)
 	if _, err := f.NewSheet(dataInsightsSheetName); err != nil {
 		return fmt.Errorf("create Data Insights sheet: %w", err)
 	}
@@ -29,14 +30,14 @@ func writeDataInsightsSheet(f *excelize.File, entries []*inventoryEntry, hasHist
 		return err
 	}
 
-	headers := []string{"Occasion", "Holiday / Date", "YTD Sales", "PY Sales"}
-	widths := []float64{26, 22, 16, 16}
+	headers := []string{"Occasion", "Holiday / Date", "YTD Sales"}
+	widths := []float64{26, 22, 16}
 	if hasHistory {
 		headers = append(headers, "PY Sales to Date")
 		widths = append(widths, 19)
 	}
-	headers = append(headers, "Projected YoY")
-	widths = append(widths, 39)
+	headers = append(headers, "PY Sales", "Projected YoY")
+	widths = append(widths, 16, 39)
 	// Leave a blank separator column even when the optional history column
 	// expands both tables; no fixed column letters can overlap the two areas.
 	rightStart := len(headers) + 2
@@ -125,10 +126,11 @@ func writeDataInsightsHeading(f *excelize.File, startCol, endCol, row int, text 
 	return f.SetCellStyle(dataInsightsSheetName, start, end, style)
 }
 
-// writeDataInsightsTable writes a title, headers, detail values, and a safe total
-// at startCol/startRow, returning the first unused row or a workbook-write error.
-// hasHistory controls the optional aligned PY column for every row and total.
-func writeDataInsightsTable(f *excelize.File, startCol, startRow int, title string, headers []string, rows []dataInsightsRow, hasHistory bool, styles dataInsightsStyles) (int, error) {
+// writeDataInsightsTable writes table's title, headers, occasion rows, and
+// independently forecast total at startCol/startRow, returning the first unused
+// row or a workbook-write error. hasHistory controls the optional aligned PY
+// column for every row and total.
+func writeDataInsightsTable(f *excelize.File, startCol, startRow int, title string, headers []string, table dataInsightsTable, hasHistory bool, styles dataInsightsStyles) (int, error) {
 	endCol := startCol + len(headers) - 1
 	if err := writeDataInsightsHeading(f, startCol, endCol, startRow, title, styles.section); err != nil {
 		return 0, err
@@ -141,26 +143,26 @@ func writeDataInsightsTable(f *excelize.File, startCol, startRow int, title stri
 		return 0, err
 	}
 	rowNum := startRow + 2
-	for _, row := range rows {
+	for _, row := range table.Rows {
 		if err := writeDataInsightsValues(f, startCol, rowNum, dataInsightsValues(row, hasHistory), styles.data, styles.currency); err != nil {
 			return 0, err
 		}
 		rowNum++
 	}
-	if err := writeDataInsightsValues(f, startCol, rowNum, dataInsightsValues(totalDataInsightsRows(rows), hasHistory), styles.total, styles.currencyTotal); err != nil {
+	if err := writeDataInsightsValues(f, startCol, rowNum, dataInsightsValues(table.Total, hasHistory), styles.total, styles.currencyTotal); err != nil {
 		return 0, err
 	}
 	return rowNum + 1, nil
 }
 
 // dataInsightsValues returns row's scalar worksheet values in header order,
-// inserting PY Sales to Date only when hasHistory is true.
+// inserting PY Sales to Date before full-year PY Sales when hasHistory is true.
 func dataInsightsValues(row dataInsightsRow, hasHistory bool) []interface{} {
-	values := []interface{}{row.Occasion, row.Date, row.DollarSoldYTD, row.DollarSoldPY}
+	values := []interface{}{row.Occasion, row.Date, row.DollarSoldYTD}
 	if hasHistory {
 		values = append(values, row.DollarSoldPYToDate)
 	}
-	return append(values, dataInsightsYoYDisplay(row))
+	return append(values, row.DollarSoldPY, dataInsightsYoYDisplay(row))
 }
 
 // writeDataInsightsValues writes a contiguous scalar row using Excelize's
