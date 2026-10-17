@@ -6,219 +6,134 @@ import (
 	"time"
 )
 
-// dataInsightsRow represents one output row in the Data Insights sheet.
-//
-// YoYDisplay stores the exact text written into the rightmost column. Seasonal rows include
-// status wording such as "IN PROGRESS:" or "COMPLETE:", while everyday rows only show the
-// projected year-over-year percentage.
+// dataInsightsRow holds one combined occasion's inventory totals and history-based
+// outlook. DollarSoldYTD and DollarSoldPY always retain inventory-report values;
+// DollarSoldPYToDate and ProjectedDollar use optional monthly dollar history.
+// HasProjection distinguishes a real zero estimate from unavailable history.
+// Class is empty for the Counter Cards table and names each Other Products table.
 type dataInsightsRow struct {
-	// Section preserves the original seasonal bucket so class-based Other Products tables can
-	// still sort mixed occasions sensibly and choose the right total-row wording.
-	Section             string
-	Class               string
-	Occasion            string
-	Date                string
-	DollarSoldYTD       float64
-	DollarSoldPY        float64
-	ProjectedDollar     float64
-	YoYDisplay          string
-	occasionDateSortKey int
-	occasionSortLabel   string
+	DollarSoldYTD      float64
+	DollarSoldPY       float64
+	DollarSoldPYToDate float64
+	ProjectedDollar    float64
+	Class              string
+	Occasion           string
+	Date               string
+	HasProjection      bool
+	LimitedHistory     bool
 }
 
-// dataInsightsGroup aggregates sales for a single normalized occasion within a section.
+// dataInsightsGroup accumulates a combined row and its observed yearly dollars.
+// A year exists only when a member SKU supplies a Dollars Sold record for it.
 type dataInsightsGroup struct {
-	Section             string
-	Class               string
-	Occasion            string
-	Date                string
-	occasionDateSortKey int
-	complete            bool
-	TargetMonthsThrough float64
-	DollarSoldYTD       float64
-	DollarSoldPY        float64
+	row     dataInsightsRow
+	history map[int][12]float64
 }
 
-// buildDataInsightsRows groups Counter Cards into the seasonal sections used by the
-// Data Insights sheet, preserving the existing holiday, date, and projection rules.
-func buildDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
-	groups := make(map[string]*dataInsightsGroup)
+// dataInsightsGroupKey keeps the class/occasion aggregation boundary explicit;
+// separate fields avoid collisions when source labels contain punctuation.
+type dataInsightsGroupKey struct {
+	class    string
+	occasion string
+}
 
-	for _, e := range entries {
-		// This sheet only tracks exact Counter Cards entries.
-		if !isExactCounterCards(e) {
+// buildDataInsightsRows returns Counter Cards grouped by occasion and Other
+// Products grouped by class then occasion. Labels are trimmed and grouped
+// case-insensitively; tables and rows are alphabetically ordered by the writer.
+// Nil entries are ignored. hasHistory enables projections anchored exclusively
+// to runDate; without history, inventory totals remain but projections do not.
+func buildDataInsightsRows(entries []*inventoryEntry, hasHistory bool, runDate time.Time) ([]dataInsightsRow, map[string][]dataInsightsRow) {
+	groups := make(map[dataInsightsGroupKey]*dataInsightsGroup)
+	classLabels := make(map[string]string)
+	for _, entry := range entries {
+		if entry == nil {
 			continue
 		}
-
-		// Normalize occasion names so common variants collapse into the same grouped row.
-		occasion := normalizeDataInsightsOccasion(e.Occasion)
-		section := mapOccasion(occasion)
-		dateInfo := dataInsightsDateInfo(section, occasion, now)
-		// Use the normalized occasion plus section so variants collapse into one rollup bucket.
-		groupKey := section + "|" + strings.ToUpper(occasion)
-
-		group, ok := groups[groupKey]
-		if !ok {
-			group = &dataInsightsGroup{
-				Section:             section,
-				Occasion:            occasion,
-				Date:                dateInfo.Display,
-				occasionDateSortKey: dateInfo.SortKey,
-				complete:            dateInfo.Complete,
-				TargetMonthsThrough: dateInfo.TargetMonthsThrough,
+		class := ""
+		if !isExactCounterCards(entry) {
+			class = normalizeDataInsightsClassDescription(entry)
+			key := strings.ToUpper(class)
+			if label, exists := classLabels[key]; exists {
+				class = label
+			} else {
+				classLabels[key] = class
 			}
-			groups[groupKey] = group
 		}
-
-		group.DollarSoldYTD += e.DollarSoldYTD
-		group.DollarSoldPY += e.DollarSoldPY
-	}
-
-	rowsBySection := newDataInsightsRowsBySection()
-	for _, group := range groups {
-		dateInfo, projected, yoyDisplay := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
-		row := dataInsightsRow{
-			Section:             group.Section,
-			Occasion:            group.Occasion,
-			Date:                dateInfo.Display,
-			DollarSoldYTD:       group.DollarSoldYTD,
-			DollarSoldPY:        group.DollarSoldPY,
-			ProjectedDollar:     projected,
-			YoYDisplay:          yoyDisplay,
-			occasionDateSortKey: group.occasionDateSortKey,
-			occasionSortLabel:   strings.ToUpper(group.Occasion),
-		}
-		if group.Section == "Spring" {
-			rowsBySection["Spring"] = append(rowsBySection["Spring"], row)
-			continue
-		}
-		if group.Section == "Winter" {
-			rowsBySection["Winter"] = append(rowsBySection["Winter"], row)
-			continue
-		}
-		rowsBySection["Everyday"] = append(rowsBySection["Everyday"], row)
-	}
-
-	// Sort seasonal rows by calendar order first, then alphabetically for stable ties.
-	sortDataInsightsRows(rowsBySection["Spring"], true)
-	sortDataInsightsRows(rowsBySection["Winter"], true)
-	sortDataInsightsRows(rowsBySection["Everyday"], false)
-
-	return rowsBySection
-}
-
-// buildOtherProductsDataInsightsRows groups non-card products by class and occasion, then
-// returns the rows keyed by class so the sheet can render one table per class while reusing
-// the same holiday, date, and projection rules used by the card section.
-func buildOtherProductsDataInsightsRows(entries []*inventoryEntry, currentMonthsThrough float64, now time.Time) map[string][]dataInsightsRow {
-	groups := make(map[string]*dataInsightsGroup)
-
-	for _, e := range entries {
-		if isExactCounterCards(e) {
-			continue
-		}
-
-		classDesc := normalizeDataInsightsClassDescription(e)
-		occasion := normalizeDataInsightsOccasion(e.Occasion)
-		section := mapOccasion(occasion)
-		dateInfo := dataInsightsDateInfo(section, occasion, now)
-		// Keep class and occasion in the grouping key so each class can keep one row per
-		// holiday date instead of collapsing every seasonal occasion into a single total.
-		groupKey := strings.ToUpper(classDesc) + "|" + section + "|" + strings.ToUpper(occasion)
-
-		group, ok := groups[groupKey]
-		if !ok {
+		occasion := normalizeDataInsightsOccasion(entry.Occasion)
+		key := dataInsightsGroupKey{class: strings.ToUpper(class), occasion: strings.ToUpper(occasion)}
+		group := groups[key]
+		if group == nil {
 			group = &dataInsightsGroup{
-				Section:             section,
-				Class:               classDesc,
-				Occasion:            occasion,
-				Date:                dateInfo.Display,
-				occasionDateSortKey: dateInfo.SortKey,
-				complete:            dateInfo.Complete,
-				TargetMonthsThrough: dateInfo.TargetMonthsThrough,
+				row:     dataInsightsRow{Class: class, Occasion: occasion, Date: dataInsightsHolidayLabel(occasion)},
+				history: make(map[int][12]float64),
 			}
-			groups[groupKey] = group
+			groups[key] = group
 		}
-
-		group.DollarSoldYTD += e.DollarSoldYTD
-		group.DollarSoldPY += e.DollarSoldPY
+		group.row.DollarSoldYTD += entry.DollarSoldYTD
+		group.row.DollarSoldPY += entry.DollarSoldPY
+		if hasHistory {
+			for _, record := range entry.SalesRecords {
+				if record.Metric != "Dollars Sold" {
+					continue
+				}
+				dollars := group.history[record.Year]
+				for month, value := range record.Periods {
+					dollars[month] += value
+				}
+				group.history[record.Year] = dollars
+			}
+		}
 	}
 
-	rowsByClass := make(map[string][]dataInsightsRow)
+	var cards []dataInsightsRow
+	other := make(map[string][]dataInsightsRow)
 	for _, group := range groups {
-		dateInfo, projected, yoyDisplay := projectDataInsightsRow(group.Section, group.Occasion, group.DollarSoldYTD, group.DollarSoldPY, currentMonthsThrough, now)
-		row := dataInsightsRow{
-			Section:             group.Section,
-			Class:               group.Class,
-			Occasion:            group.Occasion,
-			Date:                dateInfo.Display,
-			DollarSoldYTD:       group.DollarSoldYTD,
-			DollarSoldPY:        group.DollarSoldPY,
-			ProjectedDollar:     projected,
-			YoYDisplay:          yoyDisplay,
-			occasionDateSortKey: group.occasionDateSortKey,
-			occasionSortLabel:   strings.ToUpper(group.Occasion),
+		if hasHistory && !runDate.IsZero() {
+			projectDataInsightsRow(&group.row, group.history, runDate)
 		}
-		rowsByClass[group.Class] = append(rowsByClass[group.Class], row)
+		if group.row.Class == "" {
+			cards = append(cards, group.row)
+		} else {
+			other[group.row.Class] = append(other[group.row.Class], group.row)
+		}
 	}
-
-	for className, rows := range rowsByClass {
-		// Sort within each class by seasonal date first so known holidays stay in calendar order
-		// and everyday rows naturally fall to the bottom with their shared N/A sort key.
-		sortDataInsightsRows(rows, true)
-		rowsByClass[className] = rows
+	sortDataInsightsRows(cards)
+	for _, rows := range other {
+		sortDataInsightsRows(rows)
 	}
-
-	return rowsByClass
+	return cards, other
 }
 
-// sortedOtherProductsDataInsightsClasses returns class names in case-insensitive alphabetical
-// order so the right side of the sheet stays stable and easy to scan.
+// sortedOtherProductsDataInsightsClasses returns class names alphabetically,
+// ignoring case and breaking ties by the original label for stable worksheets.
 func sortedOtherProductsDataInsightsClasses(rowsByClass map[string][]dataInsightsRow) []string {
 	classes := make([]string, 0, len(rowsByClass))
-	for className := range rowsByClass {
-		classes = append(classes, className)
+	for class := range rowsByClass {
+		classes = append(classes, class)
 	}
-
 	sort.Slice(classes, func(i, j int) bool {
-		left := strings.ToUpper(classes[i])
-		right := strings.ToUpper(classes[j])
+		left, right := strings.ToUpper(classes[i]), strings.ToUpper(classes[j])
 		if left == right {
 			return classes[i] < classes[j]
 		}
 		return left < right
 	})
-
 	return classes
 }
 
-// newDataInsightsRowsBySection pre-creates each section so the worksheet keeps a stable
-// Spring / Winter / Everyday layout even when one of the buckets is empty.
-func newDataInsightsRowsBySection() map[string][]dataInsightsRow {
-	return map[string][]dataInsightsRow{
-		"Spring":   {},
-		"Winter":   {},
-		"Everyday": {},
-	}
-}
-
-// sortDataInsightsRows keeps row ordering stable. When useSortKey is true the rows sort by
-// calendar position first so known holidays appear in seasonal order; ties and undated rows
-// then fall back to the normalized occasion label for deterministic output.
-func sortDataInsightsRows(rows []dataInsightsRow, useSortKey bool) {
+// sortDataInsightsRows orders occasions alphabetically, without seasonal buckets.
+func sortDataInsightsRows(rows []dataInsightsRow) {
 	sort.Slice(rows, func(i, j int) bool {
-		if useSortKey && rows[i].occasionDateSortKey != rows[j].occasionDateSortKey {
-			return rows[i].occasionDateSortKey < rows[j].occasionDateSortKey
-		}
-		if rows[i].occasionSortLabel == rows[j].occasionSortLabel {
+		left, right := strings.ToUpper(rows[i].Occasion), strings.ToUpper(rows[j].Occasion)
+		if left == right {
 			return rows[i].Occasion < rows[j].Occasion
 		}
-		return rows[i].occasionSortLabel < rows[j].occasionSortLabel
+		return left < right
 	})
 }
 
-// isExactCounterCards reports whether an inventory entry belongs to the exact Counter Cards
-// class, which is the only class that should feed the left-hand Data Insights table.
+// isExactCounterCards reports whether item belongs to the exact Counter Cards
+// class, preferring its unmodified inventory category over the display category.
 func isExactCounterCards(item *inventoryEntry) bool {
 	category := strings.TrimSpace(item.RawClassDesc)
 	if category == "" {
@@ -227,7 +142,8 @@ func isExactCounterCards(item *inventoryEntry) bool {
 	return category == "Counter Cards"
 }
 
-// normalizeDataInsightsClassDescription trims the class description and provides a fallback for empty values.
+// normalizeDataInsightsClassDescription returns item's trimmed original class,
+// falling back to its display category and then UNCLASSIFIED when both are empty.
 func normalizeDataInsightsClassDescription(item *inventoryEntry) string {
 	category := strings.TrimSpace(item.RawClassDesc)
 	if category == "" {
@@ -239,11 +155,26 @@ func normalizeDataInsightsClassDescription(item *inventoryEntry) string {
 	return category
 }
 
-// normalizeDataInsightsOccasion trims the occasion name and provides a fallback for empty values.
+// normalizeDataInsightsOccasion returns occ trimmed, or NO OCCASION when empty.
 func normalizeDataInsightsOccasion(occ string) string {
-	trimmed := strings.TrimSpace(occ)
-	if trimmed == "" {
-		return "NO OCCASION"
+	if trimmed := strings.TrimSpace(occ); trimmed != "" {
+		return trimmed
 	}
-	return trimmed
+	return "NO OCCASION"
+}
+
+// totalDataInsightsRows sums a table's inventory, aligned history, and forecasts.
+// A total is projectable only when every detail row is projectable, so it cannot
+// silently compare a partial forecast with the full table's PY baseline.
+func totalDataInsightsRows(rows []dataInsightsRow) dataInsightsRow {
+	total := dataInsightsRow{Occasion: "Total", HasProjection: len(rows) > 0}
+	for _, row := range rows {
+		total.DollarSoldYTD += row.DollarSoldYTD
+		total.DollarSoldPY += row.DollarSoldPY
+		total.DollarSoldPYToDate += row.DollarSoldPYToDate
+		total.ProjectedDollar += row.ProjectedDollar
+		total.HasProjection = total.HasProjection && row.HasProjection
+		total.LimitedHistory = total.LimitedHistory || row.LimitedHistory
+	}
+	return total
 }

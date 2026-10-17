@@ -17,6 +17,18 @@ const (
 // standardSheetNames lists the inventory tabs in workbook order.
 var standardSheetNames = []string{allProductsSheetName, ytdStockPrioritySheetName}
 
+// currentMonthsThrough returns fractional year-to-date month progress for the
+// inventory sheets' MTO YTD calculation. It retains their day-of-month pacing;
+// Data Insights instead uses completed months anchored to its history report.
+func currentMonthsThrough(now time.Time) float64 {
+	daysInMonth := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, now.Location()).Day()
+	months := float64(int(now.Month())-1) + float64(now.Day())/float64(daysInMonth)
+	if months <= 0 {
+		return 1
+	}
+	return months
+}
+
 // writeStandardSheets writes all inventory items to All Products and eligible items to
 // YTD Stock Priority, sharing headers, formatting, widths, and filters. The PO flag controls
 // detail columns; an error is returned if either worksheet cannot be written.

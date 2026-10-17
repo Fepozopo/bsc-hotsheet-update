@@ -1,300 +1,352 @@
 package hotsheet
 
 import (
-	"math"
-	"strings"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/xuri/excelize/v2"
 )
 
-// TestValentinesProjectionWindow verifies the split-window selling-day math used for
-// Valentine's Day projections.
-func TestValentinesProjectionWindow(t *testing.T) {
+// TestDataInsightsForecast verifies user-visible forecasts against independently
+// calculated percentages, including completed-month cutoffs and missing history.
+func TestDataInsightsForecast(t *testing.T) {
 	t.Parallel()
-
-	now := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
-	current, total, complete := valentinesProjectionWindow(now)
-
-	if current != 45 {
-		t.Fatalf("expected 45 current selling days before the November window, got %v", current)
-	}
-	if total != 91 {
-		t.Fatalf("expected 91 total selling days across both Valentine windows, got %v", total)
-	}
-	if complete {
-		t.Fatal("expected Valentine's Day to remain incomplete before year end")
-	}
-
-	current, total, complete = valentinesProjectionWindow(time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC))
-	if current != total {
-		t.Fatalf("expected current selling days to equal the full window on Dec 31, got %v vs %v", current, total)
-	}
-	if complete {
-		t.Fatal("expected Valentine's Day to remain incomplete on Dec 31")
+	for _, tc := range []struct {
+		name       string
+		month      time.Month
+		day        int
+		hasHistory bool
+		records    []salesRecord
+		extra      []*inventoryEntry
+		py         float64
+		wantYoY    string
+		wantPYTD   string
+	}{
+		{
+			name: "short history at first day of month", month: time.March, day: 1, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 999}}},
+			// 60 completed dollars + ten months at 30 = 360, versus PY 100.
+			wantYoY: "+260% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "short history at last day of month", month: time.March, day: 31, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 999}}},
+			wantYoY: "+260% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "three year weighting ignores older fourth year", month: time.January, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40}},
+				{Year: 2022, Metric: "Dollars Sold", Periods: [12]float64{9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000}},
+				{Year: 2024, Metric: "Dollars Sold", Periods: [12]float64{20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}},
+				{Year: 2023, Metric: "Dollars Sold", Periods: [12]float64{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}},
+			},
+			// Each month is (3*40 + 2*20 + 10)/6; full year = 340.
+			wantYoY: "+240%", wantPYTD: "0",
+		},
+		{
+			name: "completed actuals plus forecast not inventory annualization", month: time.September, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}},
+				{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 20, 20, 20, 20, 20, 20, 20, 999, 999, 999, 999}},
+				{Year: 2027, Metric: "Dollars Sold", Periods: [12]float64{9999}},
+				{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{9999}},
+				{Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{9999}},
+			},
+			// Jan-Aug actuals = 160; Sep-Dec estimates = 40; full PY baseline = 100, not PYTD 80.
+			wantYoY: "+100%", wantPYTD: "80",
+		},
+		{
+			name: "two comparable years use two to one weighting", month: time.January, day: 1, hasHistory: true, py: 100,
+			records: []salesRecord{
+				{Year: 2024, Metric: "Dollars Sold", Periods: [12]float64{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}},
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40}},
+			},
+			wantYoY: "+260%", wantPYTD: "0",
+		},
+		{
+			name: "observed zero after launch contributes to mean", month: time.March, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 0, 999}}},
+			wantYoY: "+20% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "signed dollar corrections are not clamped to unit demand", month: time.March, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, -10, 999}}},
+			wantYoY: "-40% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "leading zeros do not satisfy threshold", month: time.September, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 20, 999}}},
+			wantYoY: "Insufficient history", wantPYTD: "0",
+		},
+		{
+			name: "two SKUs in one completed month still insufficient", month: time.September, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 20}}},
+			extra:   []*inventoryEntry{{RawClassDesc: "Counter Cards", Occasion: " birthday ", SalesRecords: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 40}}}}},
+			wantYoY: "Insufficient history", wantPYTD: "0",
+		},
+		{
+			name: "new SKU does not block group projection", month: time.September, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 20}}},
+			extra:   []*inventoryEntry{{RawClassDesc: "Counter Cards", Occasion: "Birthday", SalesRecords: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 40}}}}},
+			// Combined July/August are 20/40; remaining four months use 30.
+			wantYoY: "+80% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "missing SKU record is not an extra zero observation", month: time.March, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}},
+			extra:   []*inventoryEntry{{RawClassDesc: "Counter Cards", Occasion: "Birthday"}},
+			wantYoY: "+260% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "absent intervening year does not supply twelve zeros", month: time.March, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{
+				{Year: 2024, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20}},
+				{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}},
+			},
+			// 60 actual + 9 months at 80/3 + December 20 = 320.
+			wantYoY: "+220% (limited-history estimate)", wantPYTD: "0",
+		},
+		{
+			name: "only incomplete month has sales", month: time.September, day: 30, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 0, 20}}},
+			wantYoY: "Insufficient history", wantPYTD: "0",
+		},
+		{
+			name: "all zero history", month: time.September, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2025, Metric: "Dollars Sold"}},
+			wantYoY: "Insufficient history", wantPYTD: "0",
+		},
+		{
+			name: "December still projects its incomplete month", month: time.December, day: 31, hasHistory: true, py: 100,
+			records: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 40}},
+				{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 999}},
+			},
+			wantYoY: "+160%", wantPYTD: "110",
+		},
+		{
+			name: "combined aligned PY uses available SKU records", month: time.March, day: 25, hasHistory: true, py: 100,
+			records: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{1, 2}},
+				{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}},
+			},
+			extra: []*inventoryEntry{{RawClassDesc: "Counter Cards", Occasion: "Birthday", SalesRecords: []salesRecord{
+				{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{3, 4}},
+			}}},
+			// Jan/Feb PY sum to 10. Remaining months have observed PY zeros,
+			// so the full-year projection is 60, not the inventory YTD of 999.
+			wantYoY: "-40%", wantPYTD: "10",
+		},
+		{
+			name: "history supplied but SKU has no records", month: time.September, day: 25, hasHistory: true, py: 100,
+			wantYoY: "Insufficient history", wantPYTD: "0",
+		},
+		{
+			name: "history omitted", month: time.September, day: 25, py: 100,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}},
+			wantYoY: "Insufficient history",
+		},
+		{
+			name: "small decline rounds to unchanged without negative zero", month: time.January, day: 1, hasHistory: true, py: 100,
+			records: []salesRecord{{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{8.3, 8.3, 8.3, 8.3, 8.3, 8.3, 8.3, 8.3, 8.3, 8.3, 8.3, 8.3}}},
+			wantYoY: "+0%", wantPYTD: "0",
+		},
+		{
+			name: "zero PY despite usable history", month: time.March, day: 25, hasHistory: true,
+			records: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}},
+			wantYoY: "N/A — no PY baseline", wantPYTD: "0",
+		},
+		{
+			name: "missing PY and history", month: time.September, day: 25,
+			wantYoY: "N/A — no PY baseline",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			entries := append([]*inventoryEntry{{RawClassDesc: "Counter Cards", Occasion: "Birthday", DollarSoldYTD: 999, DollarSoldPY: tc.py, SalesRecords: tc.records}}, tc.extra...)
+			f := excelize.NewFile()
+			t.Cleanup(func() { _ = f.Close() })
+			runDate := time.Date(2026, tc.month, tc.day, 0, 0, 0, 0, time.UTC)
+			if err := writeDataInsightsSheet(f, entries, tc.hasHistory, runDate); err != nil {
+				t.Fatalf("run %s: write outlook: %v", runDate, err)
+			}
+			projectionCol := "E"
+			if tc.hasHistory {
+				projectionCol = "F"
+				assertInsightsCell(t, f, "E6", tc.wantPYTD)
+				assertInsightsCell(t, f, "E7", tc.wantPYTD)
+			}
+			assertInsightsCell(t, f, "A6", "Birthday")
+			assertInsightsCell(t, f, "A7", "Total") // All member SKUs must produce one combined row.
+			assertInsightsCell(t, f, "C6", "999")
+			assertInsightsCell(t, f, projectionCol+"6", tc.wantYoY)
+			assertInsightsCell(t, f, projectionCol+"7", tc.wantYoY)
+		})
 	}
 }
 
-// TestBuildDataInsightsRowsValentinesProjection confirms the card section keeps the split
-// Valentine's Day date and projection behavior.
-func TestBuildDataInsightsRowsValentinesProjection(t *testing.T) {
+// TestDataInsightsHolidayLabels verifies fixed dates, stable movable labels, and
+// N/A occasions in observable worksheet rows rather than seasonal metadata.
+func TestDataInsightsHolidayLabels(t *testing.T) {
 	t.Parallel()
-
-	entries := []*inventoryEntry{{
-		RawClassDesc:  "Counter Cards",
-		Occasion:      "Valentine's Day",
-		DollarSoldYTD: 100,
-		DollarSoldPY:  80,
-	}}
-
-	now := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
-	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough(now), now)
-	rows := rowsBySection["Spring"]
-	if len(rows) != 1 {
-		t.Fatalf("expected one Spring row, got %d", len(rows))
+	cases := []struct{ occasion, label string }{
+		{"Valentine's Day", "Feb 14"}, {"ST PATRICKS DAY", "Mar 17"},
+		{"Easter", "Easter"}, {"Passover", "Passover"}, {"Mother's Day", "Mother's Day"},
+		{"Father's Day", "Father's Day"}, {"Independence Day", "Jul 4"},
+		{"Halloween", "Oct 31"}, {"VETERANS DAY", "Nov 11"},
+		{"Thanksgiving", "Thanksgiving"}, {"Hanukkah", "Hanukkah"},
+		{"HOLIDAY", "Dec 25"}, {"Christmas", "Dec 25"},
+		{"Graduation", "N/A"}, {"Everyday", "N/A"}, {"Birthday", "N/A"}, {"", "N/A"},
 	}
-
-	row := rows[0]
-	if row.Date != "Jan 1 - Feb 14, Nov 16 - Dec 31" {
-		t.Fatalf("expected split-window Valentine's Day display date, got %q", row.Date)
-	}
-
-	expectedProjected := 100.0 * 91.0 / 45.0
-	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
-		t.Fatalf("expected projected sales %.9f, got %.9f", expectedProjected, row.ProjectedDollar)
-	}
-	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
-		t.Fatalf("expected in-progress status before year end, got %q", row.YoYDisplay)
-	}
-
-	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC)), time.Date(2026, time.December, 31, 12, 0, 0, 0, time.UTC))
-	row = rowsBySection["Spring"][0]
-	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
-		t.Fatalf("expected projected sales to match YTD at the end of the season, got %.9f", row.ProjectedDollar)
-	}
-	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
-		t.Fatalf("expected status to remain in progress on Dec 31, got %q", row.YoYDisplay)
+	for _, tc := range cases {
+		t.Run(tc.occasion, func(t *testing.T) {
+			f := excelize.NewFile()
+			t.Cleanup(func() { _ = f.Close() })
+			if err := writeDataInsightsSheet(f, []*inventoryEntry{{RawClassDesc: "Counter Cards", Occasion: tc.occasion}}, false, time.Time{}); err != nil {
+				t.Fatal(err)
+			}
+			assertInsightsCell(t, f, "B5", "Holiday / Date")
+			assertInsightsCell(t, f, "B6", tc.label)
+		})
 	}
 }
 
-// TestGraduationProjectionWindow confirms a normal spring holiday uses its holiday date
-// and flips to complete after the event day.
-func TestGraduationProjectionWindow(t *testing.T) {
+// TestDataInsightsSavedWorkbook verifies routing the report date/history flag
+// through the workbook builder, persisted columns, grouping, and independent
+// card/other-product histories after saving and reopening the actual XLSX.
+func TestDataInsightsSavedWorkbook(t *testing.T) {
 	t.Parallel()
-
-	entries := []*inventoryEntry{{
-		RawClassDesc:  "Counter Cards",
-		Occasion:      "Graduation",
-		DollarSoldYTD: 100,
-		DollarSoldPY:  80,
-	}}
-
-	beforeCutoff := time.Date(2026, time.June, 14, 12, 0, 0, 0, time.UTC)
-	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough(beforeCutoff), beforeCutoff)
-	rows := rowsBySection["Spring"]
-	if len(rows) != 1 {
-		t.Fatalf("expected one Spring row, got %d", len(rows))
-	}
-
-	row := rows[0]
-	if row.Date != "mid-June" {
-		t.Fatalf("expected Graduation to display as mid-June, got %q", row.Date)
-	}
-	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
-		t.Fatalf("expected Graduation to be in progress before June 15, got %q", row.YoYDisplay)
-	}
-
-	afterCutoff := time.Date(2026, time.June, 16, 12, 0, 0, 0, time.UTC)
-	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(afterCutoff), afterCutoff)
-	row = rowsBySection["Spring"][0]
-	if row.Date != "mid-June" {
-		t.Fatalf("expected Graduation to still display as mid-June, got %q", row.Date)
-	}
-	if !strings.HasPrefix(row.YoYDisplay, "COMPLETE:") {
-		t.Fatalf("expected Graduation to be complete after June 15, got %q", row.YoYDisplay)
+	for _, hasHistory := range []bool{false, true} {
+		name := "inventory only"
+		if hasHistory {
+			name = "monthly history"
+		}
+		t.Run(name, func(t *testing.T) {
+			entries := []*inventoryEntry{
+				{SKU: "A", RawClassDesc: "Counter Cards", Occasion: "Birthday", DollarSoldYTD: 50, DollarSoldPY: 60, SalesRecords: []salesRecord{
+					{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10}},
+					{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 0, 999}},
+				}},
+				{SKU: "B", RawClassDesc: "Counter Cards", Occasion: " birthday ", DollarSoldYTD: 70, DollarSoldPY: 40, SalesRecords: []salesRecord{
+					{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{0, 40, 999}},
+				}},
+				{SKU: "C", RawClassDesc: "Counter Cards Assortment", Occasion: "Christmas", DollarSoldYTD: 9, DollarSoldPY: 5},
+				{SKU: "D", RawClassDesc: "Coasters", Occasion: "Easter", DollarSoldYTD: 80, DollarSoldPY: 100, SalesRecords: []salesRecord{
+					{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 999}},
+				}},
+			}
+			path, err := buildProductLineWorkbook("BAS", entries, t.TempDir(), "20260331", false, hasHistory, nil, time.Date(2026, time.March, 31, 0, 0, 0, 0, time.UTC), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, err := excelize.OpenFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = f.Close() })
+			assertInsightsCell(t, f, "A4", "Counter Cards")
+			assertInsightsCell(t, f, "A5", "Occasion")
+			assertInsightsCell(t, f, "B5", "Holiday / Date")
+			assertInsightsCell(t, f, "C5", "YTD Sales")
+			assertInsightsCell(t, f, "D5", "PY Sales")
+			assertInsightsCell(t, f, "A6", "Birthday")
+			assertInsightsCell(t, f, "C6", "120")
+			assertInsightsCell(t, f, "D6", "100")
+			assertInsightsCell(t, f, "A7", "Total")
+			assertInsightsCell(t, f, "C7", "120")
+			assertInsightsCell(t, f, "D7", "100")
+			if hasHistory {
+				assertInsightsCell(t, f, "E5", "PY Sales to Date")
+				assertInsightsCell(t, f, "F5", "Projected YoY")
+				assertInsightsCell(t, f, "E6", "0")
+				// Dec 2025=10, Jan=20, Feb=40: remaining nine unknown months
+				// use 70/3, while December keeps 10. Projection = 280.
+				assertInsightsCell(t, f, "F6", "+180% (limited-history estimate)")
+				assertInsightsCell(t, f, "H4", "Coasters")
+				assertInsightsCell(t, f, "H6", "Easter")
+				assertInsightsCell(t, f, "I6", "Easter")
+				assertInsightsCell(t, f, "L5", "PY Sales to Date")
+				assertInsightsCell(t, f, "M6", "+260% (limited-history estimate)")
+				assertInsightsCell(t, f, "H9", "Counter Cards Assortment")
+			} else {
+				assertInsightsCell(t, f, "E5", "Projected YoY")
+				assertInsightsCell(t, f, "E6", "Insufficient history")
+				assertInsightsCell(t, f, "F5", "")
+				assertInsightsCell(t, f, "G4", "Coasters")
+				assertInsightsCell(t, f, "K6", "Insufficient history")
+				assertInsightsCell(t, f, "G9", "Counter Cards Assortment")
+			}
+		})
 	}
 }
 
-// TestBuildDataInsightsRowsWinterProjectionStartsJune15 confirms winter holidays stay at
-// YTD before July 1 and switch to in-season projection afterward.
-func TestBuildDataInsightsRowsWinterProjectionStartsJune15(t *testing.T) {
+// TestDataInsightsTotals verifies all-or-nothing total forecasts and
+// class/occasion grouping rather than averaging row percentages.
+func TestDataInsightsTotals(t *testing.T) {
 	t.Parallel()
-
-	entries := []*inventoryEntry{{
-		RawClassDesc:  "Counter Cards",
-		Occasion:      "Christmas",
-		DollarSoldYTD: 100,
-		DollarSoldPY:  80,
-	}}
-
-	beforeSeason := time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC)
-	rowsBySection := buildDataInsightsRows(entries, currentMonthsThrough(beforeSeason), beforeSeason)
-	rows := rowsBySection["Winter"]
-	if len(rows) != 1 {
-		t.Fatalf("expected one Winter row, got %d", len(rows))
-	}
-
-	row := rows[0]
-	if row.Date != "December 25" {
-		t.Fatalf("expected Christmas to display as December 25, got %q", row.Date)
-	}
-	if diff := math.Abs(row.ProjectedDollar - 100.0); diff > 1e-9 {
-		t.Fatalf("expected winter projection to stay at YTD before July 1, got %.9f", row.ProjectedDollar)
-	}
-	if !strings.HasPrefix(row.YoYDisplay, "NOT STARTED:") {
-		t.Fatalf("expected Christmas to show NOT STARTED before July 1, got %q", row.YoYDisplay)
-	}
-	if !strings.Contains(row.YoYDisplay, "YoY") {
-		t.Fatalf("expected NOT STARTED status to include YoY comparison, got %q", row.YoYDisplay)
-	}
-
-	inSeason := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
-	rowsBySection = buildDataInsightsRows(entries, currentMonthsThrough(inSeason), inSeason)
-	row = rowsBySection["Winter"][0]
-	expectedProjected := 100.0 * (monthsThroughSinceDate(2026, time.June, 15, time.December, 25, time.UTC) / monthsThroughSinceDate(2026, time.June, 15, time.September, 1, time.UTC))
-	if diff := math.Abs(row.ProjectedDollar - expectedProjected); diff > 1e-9 {
-		t.Fatalf("expected winter projection %.9f after June 15, got %.9f", expectedProjected, row.ProjectedDollar)
-	}
-	if !strings.HasPrefix(row.YoYDisplay, "IN PROGRESS:") {
-		t.Fatalf("expected Christmas to remain in progress before Dec 25, got %q", row.YoYDisplay)
+	for _, tc := range []struct {
+		name       string
+		second     []salesRecord
+		wantYoY    string
+		wantSecond string
+	}{
+		{"unprojectable member", nil, "Insufficient history", "Insufficient history"},
+		{"all projectable", []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{10, 30}}}, "+100% (limited-history estimate)", "+20% (limited-history estimate)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := excelize.NewFile()
+			t.Cleanup(func() { _ = f.Close() })
+			second := append([]salesRecord{{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{999}}}, tc.second...)
+			entries := []*inventoryEntry{
+				{RawClassDesc: "Napkins", Occasion: "Birthday", DollarSoldYTD: 50, DollarSoldPY: 100, SalesRecords: []salesRecord{{Year: 2026, Metric: "Dollars Sold", Periods: [12]float64{20, 40}}}},
+				{RawClassDesc: "NAPKINS", Occasion: "Christmas", DollarSoldYTD: 70, DollarSoldPY: 200, SalesRecords: second},
+				{ClassDesc: "Desk Notes", Occasion: "Everyday", DollarSoldYTD: 1},
+				{DollarSoldYTD: 2}, nil,
+			}
+			if err := writeDataInsightsSheet(f, entries, true, time.Date(2026, time.March, 25, 0, 0, 0, 0, time.UTC)); err != nil {
+				t.Fatal(err)
+			}
+			assertInsightsCell(t, f, "H4", "Desk Notes")
+			assertInsightsCell(t, f, "H9", "Napkins")
+			assertInsightsCell(t, f, "H11", "Birthday")
+			assertInsightsCell(t, f, "H12", "Christmas")
+			assertInsightsCell(t, f, "M12", tc.wantSecond)
+			assertInsightsCell(t, f, "H13", "Total")
+			assertInsightsCell(t, f, "J13", "120")
+			assertInsightsCell(t, f, "K13", "300")
+			assertInsightsCell(t, f, "M13", tc.wantYoY)
+			assertInsightsCell(t, f, "H15", "UNCLASSIFIED")
+		})
 	}
 }
 
-// TestBuildOtherProductsDataInsightsRowsGroupedByClass confirms other products now group into
-// one class bucket per table while still reusing the same holiday metadata and projection rules.
-func TestBuildOtherProductsDataInsightsRowsGroupedByClass(t *testing.T) {
+// TestDataInsightsEmpty checks nil/empty collections and nil entries produce a
+// readable empty card table and persist successfully with no invented projection.
+func TestDataInsightsEmpty(t *testing.T) {
 	t.Parallel()
-
-	entries := []*inventoryEntry{
-		{RawClassDesc: "Counter Cards", DollarSoldYTD: 999, DollarSoldPY: 888},
-		{RawClassDesc: "Napkins", Occasion: "HOLIDAY", DollarSoldYTD: 75, DollarSoldPY: 70},
-		{RawClassDesc: "Napkins", Occasion: "VETERAN'S DAY", DollarSoldYTD: 55, DollarSoldPY: 45},
-		{RawClassDesc: "Coasters", Occasion: "HOLIDAY", DollarSoldYTD: 120, DollarSoldPY: 90},
-		{RawClassDesc: "Gift Wrap", Occasion: "INDEPENDENCE DAY", DollarSoldYTD: 150, DollarSoldPY: 120},
-		{RawClassDesc: "Alpha Everyday", DollarSoldYTD: 60, DollarSoldPY: 50},
-		{RawClassDesc: "Desk Notes", DollarSoldYTD: 45, DollarSoldPY: 35},
-		{RawClassDesc: "", ClassDesc: "", DollarSoldYTD: 30, DollarSoldPY: 20},
-	}
-
-	now := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
-	rowsByClass := buildOtherProductsDataInsightsRows(entries, currentMonthsThrough(now), now)
-
-	if got := len(rowsByClass); got != 6 {
-		t.Fatalf("expected six class buckets, got %d", got)
-	}
-	if got := strings.Join(sortedOtherProductsDataInsightsClasses(rowsByClass), "|"); got != "Alpha Everyday|Coasters|Desk Notes|Gift Wrap|Napkins|UNCLASSIFIED" {
-		t.Fatalf("unexpected class order: %q", got)
-	}
-
-	giftWrapRows := rowsByClass["Gift Wrap"]
-	if len(giftWrapRows) != 1 {
-		t.Fatalf("expected one Gift Wrap row, got %d", len(giftWrapRows))
-	}
-	if giftWrapRows[0].Occasion != "INDEPENDENCE DAY" || giftWrapRows[0].Date != "July 4" {
-		t.Fatalf("expected Gift Wrap to keep Independence Day metadata, got %+v", giftWrapRows[0])
-	}
-	if !strings.HasPrefix(giftWrapRows[0].YoYDisplay, "COMPLETE:") {
-		t.Fatalf("expected Independence Day to be complete, got %q", giftWrapRows[0].YoYDisplay)
-	}
-
-	napkinsRows := rowsByClass["Napkins"]
-	if got := len(napkinsRows); got != 2 {
-		t.Fatalf("expected two Napkins rows, got %d", got)
-	}
-	if napkinsRows[0].Occasion != "VETERAN'S DAY" || napkinsRows[0].Date != "November 11" {
-		t.Fatalf("expected Napkins to sort Veterans Day before Holiday, got %+v", napkinsRows[0])
-	}
-	if napkinsRows[1].Occasion != "HOLIDAY" || napkinsRows[1].Date != "December 25" {
-		t.Fatalf("expected Napkins Holiday row to keep its winter date, got %+v", napkinsRows[1])
-	}
-
-	alphaEverydayRows := rowsByClass["Alpha Everyday"]
-	if got := len(alphaEverydayRows); got != 1 {
-		t.Fatalf("expected one Alpha Everyday row, got %d", got)
-	}
-	if alphaEverydayRows[0].Occasion != "NO OCCASION" || alphaEverydayRows[0].Date != "N/A" {
-		t.Fatalf("expected Alpha Everyday to remain an everyday row, got %+v", alphaEverydayRows[0])
-	}
-	if alphaEverydayRows[0].Section != "Everyday" {
-		t.Fatalf("expected Alpha Everyday to preserve its Everyday section, got %q", alphaEverydayRows[0].Section)
-	}
-
-	unclassifiedRows := rowsByClass["UNCLASSIFIED"]
-	if got := len(unclassifiedRows); got != 1 {
-		t.Fatalf("expected one UNCLASSIFIED row, got %d", got)
-	}
-	if unclassifiedRows[0].Class != "UNCLASSIFIED" {
-		t.Fatalf("expected blank classes to normalize to UNCLASSIFIED, got %+v", unclassifiedRows[0])
+	for _, entries := range [][]*inventoryEntry{nil, {}, {nil}} {
+		f := excelize.NewFile()
+		t.Cleanup(func() { _ = f.Close() })
+		if err := writeDataInsightsSheet(f, entries, false, time.Time{}); err != nil {
+			t.Fatalf("entries=%v: write empty outlook: %v", entries, err)
+		}
+		assertInsightsCell(t, f, "A6", "Total")
+		assertInsightsCell(t, f, "C6", "0")
+		assertInsightsCell(t, f, "E6", "N/A — no PY baseline")
+		if err := f.SaveAs(filepath.Join(t.TempDir(), "empty.xlsx")); err != nil {
+			t.Fatalf("entries=%v: save empty outlook: %v", entries, err)
+		}
 	}
 }
 
-// TestOtherProductsClassTotalYoYDisplayMixedClassUsesProjectedYoY confirms mixed class tables
-// avoid seasonal status wording on the total row because the aggregate includes everyday sales.
-func TestOtherProductsClassTotalYoYDisplayMixedClassUsesProjectedYoY(t *testing.T) {
-	t.Parallel()
-
-	rows := []dataInsightsRow{
-		{Section: "Spring", YoYDisplay: "IN PROGRESS: 25.00% YoY"},
-		{Section: "Everyday", YoYDisplay: "10.00%"},
-	}
-
-	got := otherProductsClassTotalYoYDisplay(150, 100, rows)
-	want := formatYoYFromProjectedSales(150, 100)
-	if got != want {
-		t.Fatalf("expected mixed class total display %q, got %q", want, got)
-	}
-}
-
-// TestWriteDataInsightsSheetGroupsOtherProductsByClass verifies the right-hand Data Insights
-// tables are stacked by class name, with the class shown in the table title instead of a column.
-func TestWriteDataInsightsSheetGroupsOtherProductsByClass(t *testing.T) {
-	t.Parallel()
-
-	f := excelize.NewFile()
-	entries := []*inventoryEntry{
-		{RawClassDesc: "Gift Wrap", Occasion: "Mother's Day", DollarSoldYTD: 150, DollarSoldPY: 120},
-		{RawClassDesc: "Napkins", Occasion: "HOLIDAY", DollarSoldYTD: 120, DollarSoldPY: 90},
-		{RawClassDesc: "Napkins", Occasion: "VETERAN'S DAY", DollarSoldYTD: 55, DollarSoldPY: 45},
-		{RawClassDesc: "Alpha Everyday", DollarSoldYTD: 60, DollarSoldPY: 50},
-	}
-
-	if err := writeDataInsightsSheet(f, entries); err != nil {
-		t.Fatalf("writeDataInsightsSheet returned error: %v", err)
-	}
-
-	const sheetName = dataInsightsSheetName
-	if got, err := f.GetCellValue(sheetName, "G5"); err != nil || got != "Alpha Everyday" {
-		t.Fatalf("expected G5 to contain the first class title, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G6"); err != nil || got != "Occasion" {
-		t.Fatalf("expected G6 to contain Occasion, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "H6"); err != nil || got != "Date" {
-		t.Fatalf("expected H6 to contain Date, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G7"); err != nil || got != "NO OCCASION" {
-		t.Fatalf("expected G7 to contain the Alpha Everyday occasion, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "I8"); err != nil || got != "$60.00" {
-		t.Fatalf("expected I8 to contain the Alpha Everyday YTD total, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "J8"); err != nil || got != "$50.00" {
-		t.Fatalf("expected J8 to contain the Alpha Everyday PY total, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G10"); err != nil || got != "Gift Wrap" {
-		t.Fatalf("expected G10 to contain the second class title, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G11"); err != nil || got != "Occasion" {
-		t.Fatalf("expected G11 to contain Occasion, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G15"); err != nil || got != "Napkins" {
-		t.Fatalf("expected G15 to contain the third class title, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G17"); err != nil || got != "VETERAN'S DAY" {
-		t.Fatalf("expected G17 to contain the first Napkins occasion, got %q (err=%v)", got, err)
-	}
-	if got, err := f.GetCellValue(sheetName, "G18"); err != nil || got != "HOLIDAY" {
-		t.Fatalf("expected G18 to contain the second Napkins occasion, got %q (err=%v)", got, err)
+// assertInsightsCell compares a raw workbook value with an independent expected
+// string, reporting the exact user-visible cell and registering as a test helper.
+func assertInsightsCell(t *testing.T, f *excelize.File, cell, want string) {
+	t.Helper()
+	got, err := f.GetCellValue("Data Insights", cell, excelize.Options{RawCellValue: true})
+	if err != nil || got != want {
+		t.Errorf("Data Insights!%s: expected %q, got %q (error %v)", cell, want, got, err)
 	}
 }

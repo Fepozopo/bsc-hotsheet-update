@@ -13,8 +13,9 @@ import (
 // buildProductLineWorkbook creates and saves one product-line workbook, starting
 // with Dashboard, then All Products, YTD Stock Priority, Data Insights, Best Sellers,
 // and optional Monthly History and MTO. A nil bestSellersRange uses inventory YTD
-// shipments. With history, historyRunDate anchors MTO and Dashboard comparisons
-// through the last completed month. It returns the saved path or an error.
+// shipments. With history, historyRunDate anchors MTO forecasts, Data Insights
+// projections, and Dashboard comparisons to completed months. It returns the
+// saved path or an error.
 func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
 	defer func() {
@@ -28,7 +29,7 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 		return "", fmt.Errorf("failed to write standard sheets for %s: %w", productLine, err)
 	}
 
-	if err := writeDataInsightsSheet(f, entries); err != nil {
+	if err := writeDataInsightsSheet(f, entries, hasHistory, historyRunDate); err != nil {
 		if logger != nil {
 			logger.Error("failed to create Data Insights sheet", "productLine", productLine, "err", err)
 		}

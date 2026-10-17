@@ -19,7 +19,8 @@ var (
 )
 
 // mergeSalesHistory attaches BSC sales metrics to matching inventory SKUs and
-// returns the Sage report date used to anchor MTO forecasts. Empty paths are ignored.
+// returns the Sage report date used to anchor MTO, Data Insights, and Dashboard
+// completed-month calculations. Empty paths are ignored.
 func mergeSalesHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) (time.Time, error) {
 	return mergeMonthlyHistory(path, inventoryBySKU, logger, false)
 }

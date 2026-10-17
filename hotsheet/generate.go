@@ -44,8 +44,8 @@ var ErrIssueHistorySalesRequired = errors.New("a sales history report is require
 // entries by product line, and writes one workbook per line into outputDir. An
 // issueHistoryPath requires salesHistoryPath; empty optional paths omit their data.
 // A nil bestSellersRange uses inventory YTD shipments; a range uses history months.
-// MTO forecasts use the sales report's run date. If report is non-nil, it receives
-// progress milestones. Generate returns created paths or an error.
+// MTO and Data Insights forecasts use the sales report's run date. A non-nil
+// report receives progress milestones. Generate returns created paths or an error.
 func Generate(inventoryPath, poPath, salesHistoryPath, issueHistoryPath, outputDir string, bestSellersRange *BestSellersRange, report ProgressCallback) ([]string, error) {
 	if strings.TrimSpace(issueHistoryPath) != "" && strings.TrimSpace(salesHistoryPath) == "" {
 		return nil, ErrIssueHistorySalesRequired
