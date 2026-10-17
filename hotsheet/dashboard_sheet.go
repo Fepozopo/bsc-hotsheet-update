@@ -210,12 +210,13 @@ func addDashboardSelector(f *excelize.File, cell string) error {
 	return f.AddDataValidation(dashboardSheetName, validation)
 }
 
-// dashboardBarChart returns a clustered column chart with dollar-formatted sales
-// and the supplied series. Two monthly series produce adjacent bars per month.
+// dashboardBarChart returns a clustered column chart with the supplied plain-text
+// title, dollar-formatted sales, and series. Two monthly series produce adjacent
+// bars per month.
 func dashboardBarChart(title string, series []excelize.ChartSeries) *excelize.Chart {
 	return &excelize.Chart{
 		Type: excelize.Col, Series: series,
-		Title:     []excelize.RichTextRun{{Text: title}},
+		Title:     excelize.ChartTitle{Paragraph: []excelize.RichTextRun{{Text: title}}},
 		Dimension: excelize.ChartDimension{Width: 700, Height: 420},
 		Legend:    excelize.ChartLegend{Position: "b"},
 		YAxis:     excelize.ChartAxis{NumFmt: excelize.ChartNumFmt{CustomNumFmt: "$#,##0"}, MajorGridLines: true},
