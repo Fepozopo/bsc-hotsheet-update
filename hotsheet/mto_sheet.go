@@ -13,20 +13,24 @@ const (
 	maxProposedPOUnits   = 2147483647
 )
 
+// mtoHeaders orders the inventory breakdown before availability and MTO results.
 var mtoHeaders = [...]string{
-	"SKU", "Available Quantity", "Forecast Demand", "Projected Stockout Month",
-	"MTO", "Proposed PO Units", "MTO with Proposed PO", "Stockout Month with Proposed PO",
-	"History Coverage", "Class Description", "Season", "Occasion", "Foil", "Description", "Card Size",
+	"SKU", "On Hand", "On PO", "Committed", "Available",
+	"Forecast Demand", "MTO", "Proposed PO Units", "MTO with Proposed PO",
+	"History Coverage (months)", "Class Description", "Season", "Occasion", "Description", "Foil", "Card Size",
 }
 
 // writeMTOSheet writes active items' 12-month BSC shipped demand and 24-month
-// stockout estimates into f as of the sales-history report's run date. Missing
+// MTO estimates into f as of the sales-history report's run date, with inventory
+// quantities and numeric history coverage with the month unit in the header,
+// but no stockout dates. Missing
 // calendar months use the observed-month mean once two completed months are
 // available. Listed product-line 2021 SKUs use only February 2026 and later for
 // history coverage, baseline forecasts, and PO scenarios. Hidden forecast segments power
 // live PO what-if formulas without altering baseline quantities. Class
 // descriptions use standard SKU prefixes; Season uses the
-// same occasion mapping as the inventory tabs. Numeric baseline MTO cells use
+// same occasion mapping as the inventory tabs. Description precedes Foil.
+// Numeric baseline MTO cells use
 // MTO YTD's light colors.
 // The returned error identifies the first worksheet operation that fails.
 func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) error {
@@ -46,7 +50,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	if err != nil {
 		return fmt.Errorf("failed to create MTO header style: %w", err)
 	}
-	widths := [...]float64{20, 21, 20, 28, 13, 20, 22, 34, 25, 22, 15, 20, 13, 35, 13}
+	widths := [...]float64{20, 15, 15, 15, 15, 20, 13, 20, 22, 25, 22, 15, 20, 35, 13, 13}
 	for col, header := range mtoHeaders {
 		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
 		if err := f.SetCellValue(mtoSheetName, cell, header); err != nil {
@@ -63,11 +67,11 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	// Header comments keep the source date and assumptions visible without
 	// displacing the filterable first-row column headers.
 	comments := [...]excelize.Comment{
-		{Cell: "C1", Author: "Hotsheet Generator", Text: "Projected BSC units shipped (sold plus nonnegative issued units, when supplied) for 12 calendar months after the report run date " + asOf.Format("Jan 2, 2006") + ". Recent completed same-month shipments are weighted toward newer years. With at least two completed shipment months, missing calendar months use the average of observed months. Partial months are estimated uniformly by day."},
-		{Cell: "E1", Author: "Hotsheet Generator", Text: fmt.Sprintf("Available = on hand + all undated POs - committed (sales orders + backorders). MTO simulates BSC units shipped for up to %d months. Undated POs are assumed available immediately; stockout within a month assumes uniform demand.", mtoHorizonMonths)},
-		{Cell: "F1", Author: "Hotsheet Generator", Text: "Enter additional, nonnegative whole units to simulate a PO. Existing POs are already included in Available Quantity. Proposed units are assumed available immediately; this input does not create an order."},
-		{Cell: "G1", Author: "Hotsheet Generator", Text: "Recalculates MTO with Available Quantity plus Proposed PO Units using the same monthly BSC forecast and 24-month horizon as the baseline MTO. Blank means zero additional units."},
-		{Cell: "I1", Author: "Hotsheet Generator", Text: "Completed BSC shipment months and years from the first observed positive-shipment month through the last completed month. Zero-shipment months after that first shipment count. Missing years and partial months do not. Forecasts based on fewer than 12 observed calendar months use the completed-month average for missing calendar months. Designated product-line 2021 SKUs exclude all history before February 2026, when the key account moved to custom SKUs."},
+		{Cell: "F1", Author: "Hotsheet Generator", Text: "Projected BSC units shipped (sold plus nonnegative issued units, when supplied) for 12 calendar months after the report run date " + asOf.Format("Jan 2, 2006") + ". Recent completed same-month shipments are weighted toward newer years. With at least two completed shipment months, missing calendar months use the average of observed months. Partial months are estimated uniformly by day."},
+		{Cell: "G1", Author: "Hotsheet Generator", Text: fmt.Sprintf("Available = on hand + all undated POs - committed (sales orders + backorders). MTO simulates BSC units shipped for up to %d months. Undated POs are assumed available immediately; stockout within a month assumes uniform demand.", mtoHorizonMonths)},
+		{Cell: "H1", Author: "Hotsheet Generator", Text: "Enter additional, nonnegative whole units to simulate a PO. Existing POs are already included in Available. Proposed units are assumed available immediately; this input does not create an order."},
+		{Cell: "I1", Author: "Hotsheet Generator", Text: "Recalculates MTO with Available plus Proposed PO Units using the same monthly BSC forecast and 24-month horizon as the baseline MTO. Blank means zero additional units."},
+		{Cell: "J1", Author: "Hotsheet Generator", Text: "Number of completed BSC shipment months from the first observed positive-shipment month through the last completed month. Zero-shipment months after that first shipment count. Missing years and partial months do not. Forecasts based on fewer than 12 observed calendar months use the completed-month average for missing calendar months. Designated product-line 2021 SKUs exclude all history before February 2026, when the key account moved to custom SKUs."},
 	}
 	for _, comment := range comments {
 		if err := f.AddComment(mtoSheetName, comment); err != nil {
@@ -102,7 +106,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	}
 	// There are only three numeric YTD bands; reuse each Excel style across rows.
 	mtoStyles := make(map[string]int, 3)
-	const mtoColumnIdx = 4 // Column E, zero-based like standardSheetCellFillColor.
+	const mtoColumnIdx = 6 // Column G, zero-based like standardSheetCellFillColor.
 
 	dataRow := 2
 	start := asOf.AddDate(0, 0, 1)
@@ -119,11 +123,12 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 			mtoValue = "Insufficient history"
 		}
 		values := [...]interface{}{
-			row.item.SKU, row.available, "", row.stockout, mtoValue, "", "", "",
-			row.coverage, classDesc, mapOccasion(row.item.Occasion), row.item.Occasion, row.item.Foil, row.item.Description, row.item.CardSize,
+			row.item.SKU, row.item.OnHand, row.item.OnPO, row.item.OnSO + row.item.OnBO, row.available,
+			"", mtoValue, "", "",
+			row.coverage, classDesc, mapOccasion(row.item.Occasion), row.item.Occasion, row.item.Description, row.item.Foil, row.item.CardSize,
 		}
 		if row.hasDemand {
-			values[2] = row.demand12
+			values[5] = row.demand12
 		}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
@@ -131,21 +136,21 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 				return fmt.Errorf("failed to write MTO cell %s: %w", cell, err)
 			}
 		}
-		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("O%d", rowNum), bodyStyle); err != nil {
+		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("A%d", rowNum), fmt.Sprintf("P%d", rowNum), bodyStyle); err != nil {
 			return fmt.Errorf("failed to style MTO row %d: %w", rowNum, err)
 		}
 		if row.hasDemand {
-			if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("C%d", rowNum), fmt.Sprintf("C%d", rowNum), numberStyle); err != nil {
+			if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("F%d", rowNum), fmt.Sprintf("F%d", rowNum), numberStyle); err != nil {
 				return fmt.Errorf("failed to format MTO forecast row %d: %w", rowNum, err)
 			}
 		}
-		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("F%d", rowNum), fmt.Sprintf("F%d", rowNum), inputStyle); err != nil {
+		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("H%d", rowNum), fmt.Sprintf("H%d", rowNum), inputStyle); err != nil {
 			return fmt.Errorf("failed to style proposed PO input row %d: %w", rowNum, err)
 		}
-		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("G%d", rowNum), fmt.Sprintf("G%d", rowNum), numberStyle); err != nil {
+		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("I%d", rowNum), fmt.Sprintf("I%d", rowNum), numberStyle); err != nil {
 			return fmt.Errorf("failed to format proposed PO MTO row %d: %w", rowNum, err)
 		}
-		if err := writeMTOScenarioFormulas(f, row, rowNum, &dataRow, start, end, asOf); err != nil {
+		if err := writeMTOScenarioFormulas(f, row, rowNum, &dataRow, start, end); err != nil {
 			return err
 		}
 		if row.state == mtoStockout {
@@ -161,7 +166,7 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 				}
 				mtoStyles[fill] = style
 			}
-			cell := fmt.Sprintf("E%d", rowNum)
+			cell := fmt.Sprintf("G%d", rowNum)
 			if err := f.SetCellStyle(mtoSheetName, cell, cell, style); err != nil {
 				return fmt.Errorf("failed to format MTO value row %d: %w", rowNum, err)
 			}
@@ -169,11 +174,11 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	}
 	if len(rows) > 0 {
 		validation := excelize.NewDataValidation(true)
-		validation.Sqref = fmt.Sprintf("F2:F%d", len(rows)+1)
+		validation.Sqref = fmt.Sprintf("H2:H%d", len(rows)+1)
 		if err := validation.SetRange(0, maxProposedPOUnits, excelize.DataValidationTypeWhole, excelize.DataValidationOperatorBetween); err != nil {
 			return fmt.Errorf("failed to configure proposed PO validation: %w", err)
 		}
-		// The F1 header note explains the input; a selection prompt would obscure
+		// The H1 header note explains the input; a selection prompt would obscure
 		// adjacent rows while entering proposed units.
 		validation.SetError(excelize.DataValidationErrorStyleStop, "Invalid PO quantity", "Enter a nonnegative whole number.")
 		if err := f.AddDataValidation(mtoSheetName, validation); err != nil {
@@ -186,23 +191,23 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 			criteria string
 			value    float64
 		}{
-			{"AND(ISNUMBER(G2),G2<=1)", 0},
-			{"AND(ISNUMBER(G2),G2>1,G2<=3)", 2},
-			{"AND(ISNUMBER(G2),G2>3)", 4},
+			{"AND(ISNUMBER(I2),I2<=1)", 0},
+			{"AND(ISNUMBER(I2),I2>1,I2<=3)", 2},
+			{"AND(ISNUMBER(I2),I2>3)", 4},
 		} {
-			fill := standardSheetCellFillColor("", 4, 4, -1, band.value, 0, band.value)
+			fill := standardSheetCellFillColor("", mtoColumnIdx, mtoColumnIdx, -1, band.value, 0, band.value)
 			style, err := f.NewConditionalStyle(&excelize.Style{Fill: patternFill(fill)})
 			if err != nil {
 				return fmt.Errorf("failed to create proposed PO MTO color: %w", err)
 			}
 			rules = append(rules, excelize.ConditionalFormatOptions{Type: "formula", Criteria: band.criteria, Format: &style})
 		}
-		if err := f.SetConditionalFormat(mtoSheetName, fmt.Sprintf("G2:G%d", len(rows)+1), rules); err != nil {
+		if err := f.SetConditionalFormat(mtoSheetName, fmt.Sprintf("I2:I%d", len(rows)+1), rules); err != nil {
 			return fmt.Errorf("failed to color proposed PO MTO: %w", err)
 		}
 	}
 	// Excelize adds an Excel dropdown to every column header for filtering.
-	if err := f.AutoFilter(mtoSheetName, "A1:O1", nil); err != nil {
+	if err := f.AutoFilter(mtoSheetName, "A1:P1", nil); err != nil {
 		return fmt.Errorf("failed to set MTO autofilter: %w", err)
 	}
 	if err := f.SetSheetVisible(mtoScenarioSheetName, false); err != nil {
@@ -218,12 +223,12 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 }
 
 // writeMTOScenarioFormulas records the same prorated monthly segments as the Go
-// stockout simulation and links a row's proposed-PO input to its live Excel results.
-// dataRow advances past the segments used; missing history remains unforecastable.
-func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, dataRow *int, start, end, asOf time.Time) error {
-	quantity := fmt.Sprintf("B%d+F%d", rowNum, rowNum)
+// stockout simulation over start through end and links rowNum's proposed-PO input
+// to its live Excel MTO result in f. dataRow advances past the segments used;
+// missing history remains unforecastable. It returns the first worksheet error.
+func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, dataRow *int, start, end time.Time) error {
+	quantity := fmt.Sprintf("E%d+H%d", rowNum, rowNum)
 	result := fmt.Sprintf("IF(%s<=0,0,\"Insufficient history\")", quantity)
-	month := fmt.Sprintf("IF(%s<=0,\"%s\",\"Insufficient history\")", quantity, asOf.Format("Jan 2006"))
 	if row.hasDemand {
 		first := *dataRow
 		cumulative, elapsed := 0.0, 0.0
@@ -238,7 +243,7 @@ func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, 
 			}
 			fraction := segmentEnd.Sub(segmentStart).Hours() / monthEnd.Sub(monthStart).Hours()
 			units := row.monthly[int(monthStart.Month())-1]
-			values := [...]interface{}{row.item.SKU, units, cumulative, cumulative + units*fraction, elapsed, monthStart.Format("Jan 2006")}
+			values := [...]interface{}{row.item.SKU, units, cumulative, cumulative + units*fraction, elapsed}
 			for col, value := range values {
 				cell, _ := excelize.CoordinatesToCellName(col+1, *dataRow)
 				if err := f.SetCellValue(mtoScenarioSheetName, cell, value); err != nil {
@@ -250,6 +255,7 @@ func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, 
 			*dataRow += 1
 		}
 		last := *dataRow - 1
+		// ref returns the helper-sheet range for this item's forecast segments.
 		ref := func(col string) string {
 			return fmt.Sprintf("'%s'!$%s$%d:$%s$%d", mtoScenarioSheetName, col, first, col, last)
 		}
@@ -257,15 +263,10 @@ func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, 
 		// The last cumulative value bounds the simulated horizon.
 		result = fmt.Sprintf("IF(%s<=0,0,IF(%s>'%s'!D%d,\">%d\",IFERROR(INDEX(%s,%s)+(%s-INDEX(%s,%s))/INDEX(%s,%s),\">%d\")))",
 			quantity, quantity, mtoScenarioSheetName, last, mtoHorizonMonths, ref("E"), index, quantity, ref("C"), index, ref("B"), index, mtoHorizonMonths)
-		month = fmt.Sprintf("IF(G%d=0,\"%s\",IF(ISNUMBER(G%d),INDEX(%s,%s),\"Not within %d months\"))",
-			rowNum, asOf.Format("Jan 2006"), rowNum, ref("F"), index, mtoHorizonMonths)
 	}
-	valid := fmt.Sprintf("OR(F%d=\"\",IFERROR(AND(ISNUMBER(F%d),F%d>=0,F%d=INT(F%d)),FALSE))", rowNum, rowNum, rowNum, rowNum, rowNum)
-	if err := f.SetCellFormula(mtoSheetName, fmt.Sprintf("G%d", rowNum), fmt.Sprintf("IFERROR(IF(%s,%s,\"Invalid PO units\"),\"Invalid PO units\")", valid, result)); err != nil {
+	valid := fmt.Sprintf("OR(H%d=\"\",IFERROR(AND(ISNUMBER(H%d),H%d>=0,H%d=INT(H%d)),FALSE))", rowNum, rowNum, rowNum, rowNum, rowNum)
+	if err := f.SetCellFormula(mtoSheetName, fmt.Sprintf("I%d", rowNum), fmt.Sprintf("IFERROR(IF(%s,%s,\"Invalid PO units\"),\"Invalid PO units\")", valid, result)); err != nil {
 		return fmt.Errorf("failed to set proposed PO MTO formula on row %d: %w", rowNum, err)
-	}
-	if err := f.SetCellFormula(mtoSheetName, fmt.Sprintf("H%d", rowNum), fmt.Sprintf("IFERROR(IF(%s,%s,\"Invalid PO units\"),\"Invalid PO units\")", valid, month)); err != nil {
-		return fmt.Errorf("failed to set proposed PO stockout formula on row %d: %w", rowNum, err)
 	}
 	return nil
 }

@@ -115,7 +115,8 @@ func TestMTOUsesShippedMonths(t *testing.T) {
 }
 
 // TestMTOShippedDemandSheet verifies the saved forecast consumes combined monthly
-// shipments, not two independent observations for sold and issued quantities.
+// shipments, not two independent observations for sold and issued quantities,
+// and displays completed history coverage as a plain numeric month count.
 func TestMTOShippedDemandSheet(t *testing.T) {
 	f := newProductLineWorkbook()
 	defer func() { _ = f.Close() }()
@@ -127,17 +128,17 @@ func TestMTOShippedDemandSheet(t *testing.T) {
 	if err := writeMTOSheet(f, []*inventoryEntry{item}, asOf); err != nil {
 		t.Fatalf("write MTO with sold and issued history for SKU-1: %v", err)
 	}
-	units, err := f.GetCellValue(mtoSheetName, "C2", excelize.Options{RawCellValue: true})
+	units, err := f.GetCellValue(mtoSheetName, "F2", excelize.Options{RawCellValue: true})
 	if err != nil {
-		t.Fatalf("MTO C2 for SKU-1: %v", err)
+		t.Fatalf("MTO F2 for SKU-1: %v", err)
 	}
 	demand, err := strconv.ParseFloat(units, 64)
 	if err != nil || math.Abs(demand-60) > 1e-9 {
-		t.Errorf("MTO C2 for SKU-1: expected 60 shipped units, got %q (parse error %v)", units, err)
+		t.Errorf("MTO F2 for SKU-1: expected 60 shipped units, got %q (parse error %v)", units, err)
 	}
-	coverage, err := f.GetCellValue(mtoSheetName, "I2")
-	if err != nil || coverage != "3 months / 1 years" {
-		t.Errorf("MTO I2 for SKU-1: expected 3 months / 1 years, got %q (err %v)", coverage, err)
+	coverage, err := f.GetCellValue(mtoSheetName, "J2")
+	if err != nil || coverage != "3" {
+		t.Errorf("MTO J2 for SKU-1: expected 3 months, got %q (err %v)", coverage, err)
 	}
 }
 

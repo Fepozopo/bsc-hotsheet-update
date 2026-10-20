@@ -28,7 +28,8 @@ const (
 )
 
 // mtoForecastRow contains an active inventory item's BSC shipment forecast and
-// stockout estimate, or an explicit reason why no date can be estimated.
+// stockout estimate, completed history coverage in months, or an explicit reason
+// why no estimate can be made.
 type mtoForecastRow struct {
 	item      *inventoryEntry
 	available int
@@ -37,7 +38,7 @@ type mtoForecastRow struct {
 	hasDemand bool
 	mto       float64
 	stockout  string
-	coverage  string
+	coverage  int
 	state     mtoForecastState
 }
 
@@ -240,8 +241,9 @@ func mtoHistoryRecords(item *inventoryEntry) []salesRecord {
 // buildMTORows forecasts active inventory entries as of the report date, including
 // undated POs in available stock and subtracting committed quantity (sales orders
 // plus back orders). BSC shipped units count as demand; listed product-line 2021
-// SKUs use only February-2026-and-later history. It returns rows ordered by earliest
-// stockout, then >24-month and insufficient-history items.
+// SKUs use only February-2026-and-later history. It returns rows with numeric
+// completed-month coverage ordered by earliest stockout, then >24-month and
+// insufficient-history items.
 func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 	rows := make([]mtoForecastRow, 0, len(entries))
 	// Inventory quantities are a report-date snapshot; project from the next day.
@@ -255,7 +257,7 @@ func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 		committed := item.OnSO + item.OnBO
 		row := mtoForecastRow{item: item, available: item.OnHand + item.OnPO - committed}
 		profile := buildMTOHistoryProfile(mtoHistoryRecords(item), asOf)
-		row.coverage = fmt.Sprintf("%d months / %d years", profile.months, profile.years)
+		row.coverage = profile.months
 		if profile.usable {
 			row.monthly = profile.monthly
 			row.demand12, _, _ = forecastMTOWindow(profile.monthly, start, end12, float64(row.available))

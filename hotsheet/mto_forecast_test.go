@@ -140,7 +140,8 @@ func TestMonthsAfterClampsLeapDay(t *testing.T) {
 }
 
 // TestBuildMTORows verifies PO-inclusive availability, sold-only demand, status
-// exclusions, forecast horizon, insufficient history, and stockout-first order.
+// exclusions, month-only coverage, forecast horizon, insufficient history, and
+// stockout-first order.
 func TestBuildMTORows(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	history := []salesRecord{
@@ -168,8 +169,8 @@ func TestBuildMTORows(t *testing.T) {
 	if rows[0].mto != 0 || rows[0].stockout != "Sep 2026" {
 		t.Errorf("out-of-stock B: expected MTO 0 and Sep 2026, got %+v", rows[0])
 	}
-	if rows[1].available != 30 || !rows[1].hasDemand || math.Abs(rows[1].demand12-120) > 1e-9 || rows[1].stockout != "Dec 2026" || math.Abs(rows[1].mto-3) > 1e-9 || rows[1].coverage != "20 months / 2 years" {
-		t.Errorf("PO-backed SKU A: expected available 30, 120 next-year units, Dec 2026 stockout, MTO 3, 20 months / 2 years; got %+v", rows[1])
+	if rows[1].available != 30 || !rows[1].hasDemand || math.Abs(rows[1].demand12-120) > 1e-9 || rows[1].stockout != "Dec 2026" || math.Abs(rows[1].mto-3) > 1e-9 || rows[1].coverage != 20 {
+		t.Errorf("PO-backed SKU A: expected available 30, 120 next-year units, Dec 2026 stockout, MTO 3, 20 months; got %+v", rows[1])
 	}
 	if rows[2].state != mtoBeyondHorizon || rows[3].state != mtoInsufficientHistory || rows[3].hasDemand {
 		t.Errorf("expected F beyond 24 months and C with insufficient history, got F=%+v C=%+v", rows[2], rows[3])
@@ -188,13 +189,14 @@ func TestBuildMTORowsLimitedHistory(t *testing.T) {
 		t.Fatalf("one active item: expected one MTO row, got %d", len(rows))
 	}
 	row := rows[0]
-	if !row.hasDemand || row.state != mtoStockout || row.stockout != "Oct 2026" || row.coverage != "2 months / 1 years" || math.Abs(row.demand12-360) > 1e-9 || math.Abs(row.mto-1.0/3) > 1e-9 {
-		t.Errorf("two completed months, available 10: expected 360 forecast units, Oct 2026 stockout at 1/3 month and 2 months / 1 years of coverage, got %+v", row)
+	if !row.hasDemand || row.state != mtoStockout || row.stockout != "Oct 2026" || row.coverage != 2 || math.Abs(row.demand12-360) > 1e-9 || math.Abs(row.mto-1.0/3) > 1e-9 {
+		t.Errorf("two completed months, available 10: expected 360 forecast units, Oct 2026 stockout at 1/3 month and 2 months of coverage, got %+v", row)
 	}
 }
 
 // TestMTOLimitedHistoryWorkbook checks that the saved sheet displays a
-// limited-history forecast and its proposed-PO scenario uses the same fallback.
+// limited-history forecast, displays coverage as a plain numeric month count,
+// and uses the same fallback in its proposed-PO scenario.
 func TestMTOLimitedHistoryWorkbook(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	item := &inventoryEntry{SKU: "NEW", Status: "Active", OnHand: 10, SalesRecords: []salesRecord{
@@ -214,19 +216,19 @@ func TestMTOLimitedHistoryWorkbook(t *testing.T) {
 		t.Fatalf("reopen MTO for two completed months: %v", err)
 	}
 	defer func() { _ = written.Close() }()
-	for cell, want := range map[string]string{"C2": "360", "D2": "Oct 2026", "I2": "2 months / 1 years"} {
+	for cell, want := range map[string]string{"F2": "360", "J2": "2"} {
 		got, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
 		if err != nil || got != want {
 			t.Errorf("two completed months, %s: expected %q, got %q (error %v)", cell, want, got, err)
 		}
 	}
-	if err := written.SetCellValue(mtoSheetName, "F2", 30); err != nil {
+	if got, err := written.GetCellValue(mtoSheetName, "J2"); err != nil || got != "2" {
+		t.Errorf("two completed months, J2: expected display %q, got %q (error %v)", "2", got, err)
+	}
+	if err := written.SetCellValue(mtoSheetName, "H2", 30); err != nil {
 		t.Fatalf("set proposed PO units to 30: %v", err)
 	}
-	if got, err := written.CalcCellValue(mtoSheetName, "H2"); err != nil || got != "Nov 2026" {
-		t.Errorf("two completed months, 30 proposed units: expected Nov 2026 stockout, got %q (error %v)", got, err)
-	}
-	got, err := written.CalcCellValue(mtoSheetName, "G2", excelize.Options{RawCellValue: true})
+	got, err := written.CalcCellValue(mtoSheetName, "I2", excelize.Options{RawCellValue: true})
 	actual, parseErr := strconv.ParseFloat(got, 64)
 	if err != nil || parseErr != nil || math.Abs(actual-4.0/3) > 1e-9 {
 		t.Errorf("two completed months, 30 proposed units: expected MTO 4/3, got %q (calculation error %v, parse error %v)", got, err, parseErr)
@@ -234,7 +236,7 @@ func TestMTOLimitedHistoryWorkbook(t *testing.T) {
 }
 
 // TestMTOProposedPO verifies saved what-if formulas preserve the baseline and
-// move stockout to the next seasonal peak rather than averaging across months.
+// extend MTO to the next seasonal peak rather than averaging across months.
 func TestMTOProposedPO(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	var prior, current [12]float64
@@ -265,53 +267,54 @@ func TestMTOProposedPO(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name, month, mtoText string
-		input                interface{}
-		mtoWant              float64
+		name, mtoText string
+		input         interface{}
+		mtoWant       float64
 	}{
-		{"blank matches baseline", "Apr 2027", "", "", 6 + 5.0/30 + (60-1.0/3)/120},
-		{"next spring", "Apr 2028", "", 70, 18 + 5.0/30 + (130-120-2.0/3)/120},
-		{"past horizon", "Not within 24 months", ">24", 500, 0},
-		{"invalid negative", "Invalid PO units", "Invalid PO units", -1, 0},
-		{"invalid fractional", "Invalid PO units", "Invalid PO units", 1.5, 0},
+		{"blank matches baseline", "", "", 6 + 5.0/30 + (60-1.0/3)/120},
+		{"next spring", "", 70, 18 + 5.0/30 + (130-120-2.0/3)/120},
+		{"past horizon", ">24", 500, 0},
+		{"invalid negative", "Invalid PO units", -1, 0},
+		{"invalid fractional", "Invalid PO units", 1.5, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := written.SetCellValue(mtoSheetName, "F3", tc.input); err != nil {
+			if err := written.SetCellValue(mtoSheetName, "H3", tc.input); err != nil {
 				t.Fatalf("set proposed PO %v: %v", tc.input, err)
 			}
-			for cell, want := range map[string]string{"H3": tc.month, "G3": tc.mtoText} {
-				got, err := written.CalcCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
-				if err != nil {
-					formula, _ := written.GetCellFormula(mtoSheetName, cell)
-					t.Fatalf("calculate %s for proposed PO %v (%s): %v", cell, tc.input, formula, err)
+			got, err := written.CalcCellValue(mtoSheetName, "I3", excelize.Options{RawCellValue: true})
+			if err != nil {
+				formula, _ := written.GetCellFormula(mtoSheetName, "I3")
+				t.Fatalf("calculate I3 for proposed PO %v (%s): %v", tc.input, formula, err)
+			}
+			if tc.mtoText != "" {
+				if got != tc.mtoText {
+					t.Errorf("proposed PO %v, I3: expected %q, got %q", tc.input, tc.mtoText, got)
 				}
-				if want != "" && got != want {
-					t.Errorf("proposed PO %v, %s: expected %q, got %q", tc.input, cell, want, got)
-				}
-				if cell == "G3" && want == "" {
-					actual, parseErr := strconv.ParseFloat(got, 64)
-					if parseErr != nil || math.Abs(actual-tc.mtoWant) > 1e-9 {
-						t.Errorf("proposed PO %v, G3: expected MTO %v, got %q (parse error %v)", tc.input, tc.mtoWant, got, parseErr)
-					}
+			} else {
+				actual, parseErr := strconv.ParseFloat(got, 64)
+				if parseErr != nil || math.Abs(actual-tc.mtoWant) > 1e-9 {
+					t.Errorf("proposed PO %v, I3: expected MTO %v, got %q (parse error %v)", tc.input, tc.mtoWant, got, parseErr)
 				}
 			}
-			got, err := written.GetCellValue(mtoSheetName, "D3")
-			if err != nil || got != "Apr 2027" {
-				t.Errorf("baseline stockout after proposed PO %v: expected Apr 2027, got %q (error %v)", tc.input, got, err)
+			got, err = written.GetCellValue(mtoSheetName, "G3", excelize.Options{RawCellValue: true})
+			baseline, parseErr := strconv.ParseFloat(got, 64)
+			wantBaseline := 6 + 5.0/30 + (60-1.0/3)/120
+			if err != nil || parseErr != nil || math.Abs(baseline-wantBaseline) > 1e-9 {
+				t.Errorf("baseline MTO after proposed PO %v: expected %v, got %q (read error %v, parse error %v)", tc.input, wantBaseline, got, err, parseErr)
 			}
 		})
 	}
-	if err := written.SetCellValue(mtoSheetName, "F2", 5); err != nil {
+	if err := written.SetCellValue(mtoSheetName, "H2", 5); err != nil {
 		t.Fatalf("set proposed PO for missing history: %v", err)
 	}
-	for _, cell := range []string{"G2", "H2"} {
-		if got, err := written.CalcCellValue(mtoSheetName, cell); err != nil || got != "Insufficient history" {
-			t.Errorf("missing history with 5 proposed units, %s: expected Insufficient history, got %q (error %v)", cell, got, err)
-		}
+	if got, err := written.CalcCellValue(mtoSheetName, "I2"); err != nil || got != "Insufficient history" {
+		t.Errorf("missing history with 5 proposed units, I2: expected Insufficient history, got %q (error %v)", got, err)
 	}
 }
 
-// TestWriteMTOSheet checks user-visible fields, occasion-mapped seasons,
+// TestWriteMTOSheet checks inventory columns, numeric coverage with units in the
+// header, MTO-only
+// results without stockout dates, Description before Foil, occasion-mapped seasons,
 // filtering, and prompt-free PO validation in the saved workbook without
 // asserting cosmetic styles or colors.
 func TestWriteMTOSheet(t *testing.T) {
@@ -319,7 +322,7 @@ func TestWriteMTOSheet(t *testing.T) {
 	f := newProductLineWorkbook()
 	defer func() { _ = f.Close() }()
 	item := &inventoryEntry{
-		SKU: "A-WM", ProductLine: "BAS", OnHand: 0, Status: "Carryover",
+		SKU: "A-WM", ProductLine: "BAS", OnHand: 7, OnPO: 11, OnSO: 13, OnBO: 5, Status: "Carryover",
 		ClassDesc: "Counter Cards", RawClassDesc: "Counter Cards",
 		Description: "Birthday Card", Occasion: "BIRTHDAY", Foil: "Yes", CardSize: "A7",
 	}
@@ -339,16 +342,19 @@ func TestWriteMTOSheet(t *testing.T) {
 	}
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
-		"A1": "SKU", "B1": "Available Quantity", "C1": "Forecast Demand", "D1": "Projected Stockout Month", "E1": "MTO", "F1": "Proposed PO Units", "G1": "MTO with Proposed PO", "H1": "Stockout Month with Proposed PO", "I1": "History Coverage", "J1": "Class Description", "K1": "Season", "L1": "Occasion", "M1": "Foil", "N1": "Description", "O1": "Card Size",
-		"A2": "A-WM", "B2": "0", "D2": "Sep 2026", "E2": "0", "F2": "", "I2": "0 months / 0 years", "J2": "WM - Counter Cards", "K2": "Everyday", "L2": "BIRTHDAY", "M2": "Yes", "N2": "Birthday Card", "O2": "A7",
-		"A3": "C-WIN", "K3": "Winter", "L3": "CHRISTMAS",
-		"A4": "S-SPR", "K4": "Spring", "L4": "EASTER",
+		"A1": "SKU", "B1": "On Hand", "C1": "On PO", "D1": "Committed", "E1": "Available", "F1": "Forecast Demand", "G1": "MTO", "H1": "Proposed PO Units", "I1": "MTO with Proposed PO", "J1": "History Coverage (months)", "K1": "Class Description", "L1": "Season", "M1": "Occasion", "N1": "Description", "O1": "Foil", "P1": "Card Size", "Q1": "",
+		"A2": "A-WM", "B2": "7", "C2": "11", "D2": "18", "E2": "0", "G2": "0", "H2": "", "J2": "0", "K2": "WM - Counter Cards", "L2": "Everyday", "M2": "BIRTHDAY", "N2": "Birthday Card", "O2": "Yes", "P2": "A7",
+		"A3": "C-WIN", "L3": "Winter", "M3": "CHRISTMAS",
+		"A4": "S-SPR", "L4": "Spring", "M4": "EASTER",
 	}
 	for cell, expected := range want {
 		actual, err := written.GetCellValue(mtoSheetName, cell, excelize.Options{RawCellValue: true})
 		if err != nil || actual != expected {
 			t.Errorf("cell %s: expected %q, got %q (error %v)", cell, expected, actual, err)
 		}
+	}
+	if got, err := written.GetCellValue(mtoSheetName, "J2"); err != nil || got != "0" {
+		t.Errorf("no history, J2: expected display %q, got %q (error %v)", "0", got, err)
 	}
 	if actual, err := written.GetCellValue(mtoSheetName, "A5"); err != nil || actual != "" {
 		t.Errorf("A5: expected discontinued SKU omitted, got %q (error %v)", actual, err)
@@ -361,8 +367,8 @@ func TestWriteMTOSheet(t *testing.T) {
 		t.Fatalf("expected one proposed-PO validation, got %d", len(validations))
 	}
 	validation := validations[0]
-	if validation.Sqref != "F2:F4" || validation.ShowInputMessage || validation.Prompt != nil || validation.PromptTitle != nil || !validation.ShowErrorMessage || !validation.AllowBlank || validation.Type != "whole" || validation.Operator != "between" || validation.Formula1 != "0" || validation.Formula2 != "2147483647" {
-		t.Errorf("expected prompt-free F2:F4 nonnegative whole-number validation with error feedback and blanks allowed, got %+v", validation)
+	if validation.Sqref != "H2:H4" || validation.ShowInputMessage || validation.Prompt != nil || validation.PromptTitle != nil || !validation.ShowErrorMessage || !validation.AllowBlank || validation.Type != "whole" || validation.Operator != "between" || validation.Formula1 != "0" || validation.Formula2 != "2147483647" {
+		t.Errorf("expected prompt-free H2:H4 nonnegative whole-number validation with error feedback and blanks allowed, got %+v", validation)
 	}
 	// Verify Excel stores the filter range through the final Card Size column.
 	archive, err := zip.OpenReader(path)
@@ -384,11 +390,11 @@ func TestWriteMTOSheet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cannot read worksheet %s: %v", member.Name, err)
 		}
-		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$O$1"`) {
+		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$P$1"`) {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected A1:O1 autofilter in saved MTO sheet")
+		t.Fatal("expected A1:P1 autofilter in saved MTO sheet")
 	}
 }

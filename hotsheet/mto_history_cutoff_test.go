@@ -21,26 +21,26 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 	}
 	// forecastCase defines the expected user-visible forecast for one SKU and date.
 	type forecastCase struct {
-		name, sku, productLine, coverage, stockout, proposedStockout string
-		asOf                                                         time.Time
-		records                                                      []salesRecord
-		demand, mto, proposedMTO                                     float64
+		name, sku, productLine, coverage string
+		asOf                             time.Time
+		records                          []salesRecord
+		demand, mto, proposedMTO         float64
 	}
 	cases := []forecastCase{
 		{
 			name: "unlisted SKU", sku: "BD1001", productLine: "2021",
-			coverage: "15 months / 2 years", stockout: "Apr 2026", proposedStockout: "Apr 2026",
-			demand: 1050, mto: 0.3, proposedMTO: 0.6,
+			coverage: "15",
+			demand:   1050, mto: 0.3, proposedMTO: 0.6,
 		},
 		{
 			name: "listed SKU in other product line", sku: "BD1001FJ", productLine: "BAS",
-			coverage: "15 months / 2 years", stockout: "Apr 2026", proposedStockout: "Apr 2026",
-			demand: 1050, mto: 0.3, proposedMTO: 0.6,
+			coverage: "15",
+			demand:   1050, mto: 0.3, proposedMTO: 0.6,
 		},
 		{
 			name: "listed SKU without product line", sku: "BD1001FJ",
-			coverage: "15 months / 2 years", stockout: "Apr 2026", proposedStockout: "Apr 2026",
-			demand: 1050, mto: 0.3, proposedMTO: 0.6,
+			coverage: "15",
+			demand:   1050, mto: 0.3, proposedMTO: 0.6,
 		},
 		{
 			name: "later years remain eligible", sku: "BD1001FJ", productLine: "2021",
@@ -50,8 +50,8 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 				{Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}},
 				{Year: 2027, Metric: "Quantity Sold", Periods: [12]float64{40, 40, 999}},
 			},
-			coverage: "13 months / 2 years", stockout: "Apr 2027", proposedStockout: "Jun 2027",
-			demand: 820.0 / 3, mto: 1.5, proposedMTO: 3,
+			coverage: "13",
+			demand:   820.0 / 3, mto: 1.5, proposedMTO: 3,
 		},
 	}
 	// Keep the expected SKU list independent of the production eligibility rule.
@@ -65,8 +65,8 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 	} {
 		cases = append(cases, forecastCase{
 			name: sku, sku: sku, productLine: "2021",
-			coverage: "2 months / 1 years", stockout: "May 2026", proposedStockout: "Jun 2026",
-			demand: 360, mto: 1, proposedMTO: 2,
+			coverage: "2",
+			demand:   360, mto: 1, proposedMTO: 2,
 		})
 	}
 	for _, tc := range cases {
@@ -86,28 +86,21 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 			if err := writeMTOSheet(f, []*inventoryEntry{item}, asOf); err != nil {
 				t.Fatalf("write MTO for SKU %s, product line %s, as of %s: %v", tc.sku, tc.productLine, asOf, err)
 			}
-			if err := f.SetCellValue("MTO", "F2", 30); err != nil {
+			if err := f.SetCellValue("MTO", "H2", 30); err != nil {
 				t.Fatalf("set proposed PO to 30: %v", err)
 			}
-			for _, check := range []struct{ cell, want string }{
-				{"I2", tc.coverage}, {"D2", tc.stockout},
-			} {
-				if got, err := f.GetCellValue("MTO", check.cell); err != nil || got != check.want {
-					t.Errorf("%s: expected %q, got %q (error %v)", check.cell, check.want, got, err)
-				}
-			}
-			if got, err := f.CalcCellValue("MTO", "H2"); err != nil || got != tc.proposedStockout {
-				t.Errorf("30 proposed units: expected stockout %q, got %q (error %v)", tc.proposedStockout, got, err)
+			if got, err := f.GetCellValue("MTO", "J2", excelize.Options{RawCellValue: true}); err != nil || got != tc.coverage {
+				t.Errorf("J2: expected coverage %q months, got %q (error %v)", tc.coverage, got, err)
 			}
 			for _, check := range []struct {
 				cell string
 				want float64
 			}{
-				{"C2", tc.demand}, {"E2", tc.mto}, {"G2", tc.proposedMTO},
+				{"F2", tc.demand}, {"G2", tc.mto}, {"I2", tc.proposedMTO},
 			} {
 				var got string
 				var err error
-				if check.cell == "G2" {
+				if check.cell == "I2" {
 					// Excelize evaluates the live proposed-PO formula rather than
 					// reading a cached value, which has not been calculated by Excel.
 					got, err = f.CalcCellValue("MTO", check.cell, excelize.Options{RawCellValue: true})
@@ -124,7 +117,7 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 }
 
 // TestMTOKeyAccountInsufficientHistory verifies excluded months cannot supply
-// forecast coverage when fewer than two eligible completed months remain.
+// numeric forecast coverage when fewer than two eligible completed months remain.
 func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 	prior := salesRecord{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{100, 100}}
 	for _, tc := range []struct {
@@ -133,15 +126,15 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 		asOf     time.Time
 		coverage string
 	}{
-		{"nil history", nil, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"empty history", []salesRecord{}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"only excluded years", []salesRecord{prior}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"report before cutoff", []salesRecord{prior}, time.Date(2025, time.December, 31, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"January sale with partial February", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 999}}}, time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"January sale cannot seed coverage", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10}}}, time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"January issue cannot seed coverage", []salesRecord{prior, {Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{10}}}, time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), "0 months / 0 years"},
-		{"one eligible completed month", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{100, 10}}}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "1 months / 1 years"},
-		{"eligible zeros before first positive shipment", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 10}}}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "1 months / 1 years"},
+		{"nil history", nil, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0"},
+		{"empty history", []salesRecord{}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0"},
+		{"only excluded years", []salesRecord{prior}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "0"},
+		{"report before cutoff", []salesRecord{prior}, time.Date(2025, time.December, 31, 0, 0, 0, 0, time.UTC), "0"},
+		{"January sale with partial February", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10, 999}}}, time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC), "0"},
+		{"January sale cannot seed coverage", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{10}}}, time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), "0"},
+		{"January issue cannot seed coverage", []salesRecord{prior, {Year: 2026, Metric: "Quantity Issued", Periods: [12]float64{10}}}, time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), "0"},
+		{"one eligible completed month", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{100, 10}}}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "1"},
+		{"eligible zeros before first positive shipment", []salesRecord{prior, {Year: 2026, Metric: "Quantity Sold", Periods: [12]float64{0, 10}}}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), "1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newProductLineWorkbook()
@@ -151,9 +144,9 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 				t.Fatalf("write MTO as of %s with history %+v: %v", tc.asOf, tc.records, err)
 			}
 			for _, check := range []struct{ cell, want string }{
-				{"C2", ""}, {"D2", "Insufficient history"}, {"E2", "Insufficient history"}, {"I2", tc.coverage},
+				{"F2", ""}, {"G2", "Insufficient history"}, {"J2", tc.coverage},
 			} {
-				if got, err := f.GetCellValue("MTO", check.cell); err != nil || got != check.want {
+				if got, err := f.GetCellValue("MTO", check.cell, excelize.Options{RawCellValue: true}); err != nil || got != check.want {
 					t.Errorf("%s: expected %q, got %q (error %v)", check.cell, check.want, got, err)
 				}
 			}
