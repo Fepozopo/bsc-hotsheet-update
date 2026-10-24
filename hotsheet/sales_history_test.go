@@ -79,18 +79,19 @@ func writeSalesHistoryFixture(t *testing.T) string {
 	return path
 }
 
-// TestMergeSalesHistory verifies that only matching BSC rows are attached to an
-// inventory item and its authoritative inventory fields remain unchanged.
+// TestMergeSalesHistory verifies that parsing and merging attach only matching
+// BSC rows while the authoritative inventory fields remain unchanged.
 // Formatted currency and percentage cells must retain their raw numeric values.
 func TestMergeSalesHistory(t *testing.T) {
 	item := &inventoryEntry{SKU: "SKU-1", Description: "inventory description", Status: "Rundown", YTDSold: 42}
 	bySKU := map[string]*inventoryEntry{item.SKU: item}
-	runDate, err := mergeSalesHistory(writeSalesHistoryFixture(t), bySKU, nil)
+	data, err := readMonthlyHistory(writeSalesHistoryFixture(t), bySKU, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected sales history import failure: %v", err)
 	}
-	if expected := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC); !runDate.Equal(expected) {
-		t.Fatalf("expected report run date %v, got %v", expected, runDate)
+	data.merge()
+	if expected := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC); !data.runDate.Equal(expected) {
+		t.Fatalf("expected report run date %v, got %v", expected, data.runDate)
 	}
 	if item.Description != "inventory description" || item.YTDSold != 42 || item.Status != "Rundown" {
 		t.Fatalf("inventory fields changed during import for SKU-1: %+v", item)
@@ -118,13 +119,14 @@ func TestMergeSalesHistory(t *testing.T) {
 	}
 }
 
-// TestMergeSalesHistoryOptionalAndInvalid checks the optional no-op and rejects a
-// malformed month instead of importing a silently incomplete sales record.
+// TestMergeSalesHistoryOptionalAndInvalid checks the optional no-op and rejects
+// a malformed month before buffering or attaching an incomplete sales record.
 func TestMergeSalesHistoryOptionalAndInvalid(t *testing.T) {
 	item := &inventoryEntry{SKU: "SKU-1"}
 	bySKU := map[string]*inventoryEntry{"SKU-1": item}
-	if date, err := mergeSalesHistory("", bySKU, nil); err != nil || !date.IsZero() || len(item.SalesRecords) != 0 {
-		t.Fatalf("empty optional history: expected no date, records, or error; got records=%v date=%v error=%v", item.SalesRecords, date, err)
+	empty, err := readMonthlyHistory("", bySKU, nil, false)
+	if err != nil || !empty.runDate.IsZero() || len(empty.records) != 0 || len(item.SalesRecords) != 0 {
+		t.Fatalf("empty optional history: expected no date, records, or error; got data=%+v inventory=%v error=%v", empty, item.SalesRecords, err)
 	}
 	f := excelize.NewFile()
 	defer func() { _ = f.Close() }()
@@ -137,17 +139,17 @@ func TestMergeSalesHistoryOptionalAndInvalid(t *testing.T) {
 	if err := f.SaveAs(path); err != nil {
 		t.Fatalf("cannot save invalid history fixture: %v", err)
 	}
-	_, err := mergeSalesHistory(path, bySKU, nil)
+	data, err := readMonthlyHistory(path, bySKU, nil, false)
 	if !errors.Is(err, errMissingSalesPeriod) {
 		t.Fatalf("expected a missing sales-period error for invalid month, got %v", err)
 	}
-	if len(item.SalesRecords) != 0 {
-		t.Fatalf("invalid row must not append a record, got %+v", item.SalesRecords)
+	if len(data.records) != 0 || len(item.SalesRecords) != 0 {
+		t.Fatalf("invalid row must not buffer or attach a record, got data=%v inventory=%v", data.records, item.SalesRecords)
 	}
 }
 
-// TestMergeSalesHistoryRequiresRunDate ensures a report without a dated footer
-// cannot anchor an MTO forecast to an invented current date.
+// TestMergeSalesHistoryRequiresRunDate ensures parsing rejects an undated footer
+// instead of anchoring an MTO forecast to an invented current date.
 func TestMergeSalesHistoryRequiresRunDate(t *testing.T) {
 	file := excelize.NewFile()
 	defer func() { _ = file.Close() }()
@@ -160,9 +162,9 @@ func TestMergeSalesHistoryRequiresRunDate(t *testing.T) {
 	if err := file.SaveAs(path); err != nil {
 		t.Fatalf("cannot save run-date fixture: %v", err)
 	}
-	date, err := mergeSalesHistory(path, map[string]*inventoryEntry{}, nil)
-	if !errors.Is(err, errMissingSalesHistoryRunDate) || !date.IsZero() {
-		t.Fatalf("no run date: expected run-date error and zero date, got date=%v error=%v", date, err)
+	data, err := readMonthlyHistory(path, map[string]*inventoryEntry{}, nil, false)
+	if !errors.Is(err, errMissingSalesHistoryRunDate) || !data.runDate.IsZero() {
+		t.Fatalf("no run date: expected run-date error and zero date, got date=%v error=%v", data.runDate, err)
 	}
 }
 

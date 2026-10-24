@@ -52,7 +52,11 @@ var ErrProductLineFilenameCollision = errors.New("product lines produce the same
 // A nil bestSellersRange uses inventory YTD shipments; a range uses history months.
 // MTO and Data Insights forecasts use the sales report's run date. A non-nil
 // report receives progress milestones synchronously on the calling goroutine.
-// Imports are sequential; at most two independent workbooks are generated at once.
+// After inventory loads, at most two optional reports are parsed concurrently,
+// starting with sales and issue history. Their data is then merged sequentially.
+// All readers finish before returning an import error or starting workbook writes;
+// PO errors are logged and ignored, while history errors stop generation.
+// At most two independent workbooks are generated at once.
 // Output filenames must be distinct after sanitization, ignoring case. Generate
 // returns successful paths in product-line order. On a workbook error, it stops
 // scheduling new work, waits for active writers, and returns their successful
@@ -89,27 +93,11 @@ func Generate(inventoryPath, poPath, salesHistoryPath, issueHistoryPath, outputD
 	reportGenerationProgress(report, 30, "Inventory report loaded.")
 
 	hasPO := poPath != ""
-	if hasPO {
-		reportGenerationProgress(report, 35, "Merging PO report...")
-		if err := mergePOData(poPath, inventoryBySKU, logger); err != nil {
-			logger.Error("failed to merge PO report", "err", err)
-		}
-	}
 	hasHistory := strings.TrimSpace(salesHistoryPath) != ""
-	var historyRunDate time.Time
-	if hasHistory {
-		reportGenerationProgress(report, 40, "Loading monthly sales history...")
-		historyRunDate, err = mergeSalesHistory(salesHistoryPath, inventoryBySKU, logger)
-		if err != nil {
-			return nil, err
-		}
-	}
-	hasIssue := strings.TrimSpace(issueHistoryPath) != ""
-	if hasIssue {
-		reportGenerationProgress(report, 42, "Loading monthly issue history...")
-		if err := mergeIssueHistory(issueHistoryPath, inventoryBySKU, logger); err != nil {
-			return nil, err
-		}
+	reader := excelReportReader{inventoryBySKU: inventoryBySKU, logger: logger}
+	historyRunDate, err := mergeOptionalReports(poPath, salesHistoryPath, issueHistoryPath, reader, logger, report)
+	if err != nil {
+		return nil, err
 	}
 	reportGenerationProgress(report, 45, "Grouping product lines...")
 

@@ -15,28 +15,48 @@ var (
 	poOnPOBackorderIdx = colToIndex("K")
 )
 
-// mergePOData opens the optional PO workbook and merges PO numbers and quantities into the
-// provided inventory map. PO-only SKUs are skipped so the workbook does not create UNKNOWN groups.
-func mergePOData(poPath string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) error {
+// poLine holds a normalized PO number and its status-selected quantity.
+type poLine struct {
+	number   string
+	quantity int
+}
+
+// poImportData groups parsed PO lines by matching inventory entry. Lines retain
+// source order within each SKU; parsing never changes the inventory entries.
+type poImportData map[*inventoryEntry][]poLine
+
+// merge assigns the parsed lines to inventory using the existing two-slot policy.
+// The caller must own the entries exclusively until merging finishes.
+func (data poImportData) merge() {
+	for item, lines := range data {
+		for _, line := range lines {
+			assignPO(item, line.number, line.quantity)
+		}
+	}
+}
+
+// readPOData parses at most two lines per SKU block into private buffers, without
+// modifying inventory. inventoryBySKU must remain read-only during parsing.
+// Empty paths return no data; unreadable workbooks return an error and no data.
+func readPOData(poPath string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) (poImportData, error) {
 	if strings.TrimSpace(poPath) == "" {
-		return nil
+		return nil, nil
 	}
 
 	wbPO, err := excelize.OpenFile(poPath)
 	if err != nil {
-		return fmt.Errorf("failed to open PO report %s: %w", poPath, err)
+		return nil, fmt.Errorf("failed to open PO report %s: %w", poPath, err)
 	}
 	defer func() {
 		_ = wbPO.Close()
 	}()
 
+	// Excelize materializes the rows so each SKU block can scan ahead to its POs.
 	poRows, err := wbPO.GetRows("Sheet1")
 	if err != nil {
-		return fmt.Errorf("failed to read PO sheet: %w", err)
+		return nil, fmt.Errorf("failed to read PO sheet: %w", err)
 	}
-	if len(poRows) == 0 {
-		return nil
-	}
+	data := make(poImportData)
 
 	for rowNum := 1; rowNum <= len(poRows); rowNum++ {
 		row := poRows[rowNum-1]
@@ -50,7 +70,7 @@ func mergePOData(poPath string, inventoryBySKU map[string]*inventoryEntry, logge
 		}
 
 		item, ok := inventoryBySKU[sku]
-		if !ok {
+		if !ok || item == nil {
 			if logger != nil {
 				logger.Info("Skipping PO-only SKU (not present in inventory)", "SKU", sku)
 			}
@@ -77,7 +97,8 @@ func mergePOData(poPath string, inventoryBySKU map[string]*inventoryEntry, logge
 				break
 			}
 
-			poNum, qty := applyPOToEntry(item, nextRow)
+			poNum, qty := parsePOLine(nextRow)
+			data[item] = append(data[item], poLine{number: poNum, quantity: qty})
 			if logger != nil {
 				status := strings.TrimSpace(getCell(nextRow, poStatusIdx))
 				logger.Debug("Individual PO parse",
@@ -94,12 +115,12 @@ func mergePOData(poPath string, inventoryBySKU map[string]*inventoryEntry, logge
 		}
 	}
 
-	return nil
+	return data, nil
 }
 
-// applyPOToEntry normalizes one PO line, chooses the correct quantity column based on the status,
-// and assigns the PO into the first available slot on the inventory entry.
-func applyPOToEntry(item *inventoryEntry, poRow []string) (string, int) {
+// parsePOLine returns a normalized PO number and the quantity selected by status.
+// Back Order uses its dedicated column; leading zeros collapse to a usable "0".
+func parsePOLine(poRow []string) (string, int) {
 	status := strings.TrimSpace(getCell(poRow, poStatusIdx))
 	var qty int
 	if strings.EqualFold(status, "Back Order") {
@@ -113,7 +134,6 @@ func applyPOToEntry(item *inventoryEntry, poRow []string) (string, int) {
 	if poNum == "" {
 		poNum = "0"
 	}
-	assignPO(item, poNum, qty)
 	return poNum, qty
 }
 

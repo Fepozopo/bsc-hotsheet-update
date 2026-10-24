@@ -24,28 +24,35 @@ var (
 	errMissingSalesHistoryRunDate = errors.New("sales history report has no run date")
 )
 
-// mergeSalesHistory attaches BSC sales metrics to matching inventory SKUs and
-// returns the Sage report date used to anchor MTO, Data Insights, and Dashboard
-// completed-month calculations. Empty paths are ignored.
-func mergeSalesHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) (time.Time, error) {
-	return mergeMonthlyHistory(path, inventoryBySKU, logger, false)
+// monthlyHistoryData holds parsed records grouped by their matching inventory
+// entry, without modifying those entries. runDate is set only after validation.
+type monthlyHistoryData struct {
+	runDate time.Time
+	records map[*inventoryEntry][]salesRecord
 }
 
-// mergeIssueHistory attaches BSC issued quantities to matching SKUs. It returns
-// an error if the optional Sage issue export cannot be read or has no run date.
-func mergeIssueHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger) error {
-	_, err := mergeMonthlyHistory(path, inventoryBySKU, logger, true)
-	return err
+// merge transfers this report's records to inventory in source order per SKU.
+// The caller must own the entries exclusively and must not reuse the buffers.
+func (data monthlyHistoryData) merge() {
+	for item, records := range data.records {
+		if len(item.SalesRecords) == 0 {
+			// Transfer ownership rather than copying the first report's buffers.
+			item.SalesRecords = records
+		} else {
+			item.SalesRecords = append(item.SalesRecords, records...)
+		}
+	}
 }
 
-// mergeMonthlyHistory streams one Sage export, selecting only BSC item/year metrics
-// (not warehouse, item or report totals). It returns its run date or an error;
-// issueHistory selects issued units instead of the five sales-history metrics.
-// Worksheet XML up to historyXMLMemoryLimit bytes stays in memory to avoid
-// temporary-file reads; larger parts retain Excelize's disk-backed row iteration.
-func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger, issueHistory bool) (time.Time, error) {
+// readMonthlyHistory parses BSC item/year metrics into private buffers, without
+// changing inventory. issueHistory selects issued units instead of sales metrics.
+// inventoryBySKU must remain read-only until all concurrent readers finish.
+// It returns partial records and a zero date on error, or the validated run date.
+// Worksheet XML up to historyXMLMemoryLimit stays in memory; larger parts retain
+// Excelize's disk-backed row iteration. Empty paths return empty data successfully.
+func readMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger, issueHistory bool) (data monthlyHistoryData, err error) {
 	if strings.TrimSpace(path) == "" {
-		return time.Time{}, nil
+		return data, nil
 	}
 	reportName := "sales history"
 	if issueHistory {
@@ -59,16 +66,17 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 		RawCellValue:      true,
 	})
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to open %s report %s: %w", reportName, path, err)
+		return data, fmt.Errorf("failed to open %s report %s: %w", reportName, path, err)
 	}
 	defer func() { _ = workbook.Close() }()
 
 	rows, err := workbook.Rows("Sheet1")
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to read %s sheet: %w", reportName, err)
+		return data, fmt.Errorf("failed to read %s sheet: %w", reportName, err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	data.records = make(map[*inventoryEntry][]salesRecord)
 	var item *inventoryEntry
 	var year int
 	bscWarehouse := false
@@ -81,12 +89,12 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 		// and numeric dollar values without applying display formats.
 		cells, err := rows.Columns()
 		if err != nil {
-			return time.Time{}, fmt.Errorf("failed to read %s row %d: %w", reportName, rowNum, err)
+			return data, fmt.Errorf("failed to read %s row %d: %w", reportName, rowNum, err)
 		}
 		label := strings.TrimSpace(getCell(cells, 0))
 		if rowNum == 1 {
 			if label != "Item Code" || getCell(cells, 1) != "Period 1" || getCell(cells, 12) != "Period 12" {
-				return time.Time{}, fmt.Errorf("%s report has unexpected period headers", reportName)
+				return data, fmt.Errorf("%s report has unexpected period headers", reportName)
 			}
 			continue
 		}
@@ -116,11 +124,11 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 		case strings.HasPrefix(label, "Run Date:"):
 			fields := strings.Fields(strings.TrimPrefix(label, "Run Date:"))
 			if len(fields) == 0 {
-				return time.Time{}, fmt.Errorf("%s run date is empty at row %d", reportName, rowNum)
+				return data, fmt.Errorf("%s run date is empty at row %d", reportName, rowNum)
 			}
 			runDate, err = time.Parse("1/2/2006", fields[0])
 			if err != nil {
-				return time.Time{}, fmt.Errorf("invalid %s run date at row %d: %w", reportName, rowNum, err)
+				return data, fmt.Errorf("invalid %s run date at row %d: %w", reportName, rowNum, err)
 			}
 		case label == "Year:":
 			if !bscWarehouse {
@@ -128,15 +136,15 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 			}
 			year, err = strconv.Atoi(strings.TrimSpace(getCell(cells, 1)))
 			if err != nil {
-				return time.Time{}, fmt.Errorf("invalid %s year at row %d: %w", reportName, rowNum, err)
+				return data, fmt.Errorf("invalid %s year at row %d: %w", reportName, rowNum, err)
 			}
 		case bscWarehouse && ((issueHistory && label == "Quantity Issued:") || (!issueHistory && isSalesHistoryMetric(label))):
 			if year == 0 {
-				return time.Time{}, fmt.Errorf("%s metric %q at row %d has no year", reportName, label, rowNum)
+				return data, fmt.Errorf("%s metric %q at row %d has no year", reportName, label, rowNum)
 			}
 			record, err := parseSalesRecord(cells, year, label)
 			if err != nil {
-				return time.Time{}, fmt.Errorf("invalid %s row %d: %w", reportName, rowNum, err)
+				return data, fmt.Errorf("invalid %s row %d: %w", reportName, rowNum, err)
 			}
 			if issueHistory {
 				// Sage may record returns as negative issues. They cannot offset
@@ -145,22 +153,23 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 					record.Periods[month] = max(record.Periods[month], 0)
 				}
 			}
-			item.SalesRecords = append(item.SalesRecords, record)
+			data.records[item] = append(data.records[item], record)
 		}
 	}
 	if err := rows.Error(); err != nil {
-		return time.Time{}, fmt.Errorf("failed to scan %s sheet: %w", reportName, err)
+		return data, fmt.Errorf("failed to scan %s sheet: %w", reportName, err)
 	}
 	if rowNum == 0 {
-		return time.Time{}, fmt.Errorf("%s report appears empty", reportName)
+		return data, fmt.Errorf("%s report appears empty", reportName)
 	}
 	if runDate.IsZero() {
 		if issueHistory {
-			return time.Time{}, fmt.Errorf("issue history report has no run date")
+			return data, fmt.Errorf("issue history report has no run date")
 		}
-		return time.Time{}, errMissingSalesHistoryRunDate
+		return data, errMissingSalesHistoryRunDate
 	}
-	return runDate, nil
+	data.runDate = runDate
+	return data, nil
 }
 
 // isSalesHistoryMetric reports whether label names one of the five supported per-year metrics.

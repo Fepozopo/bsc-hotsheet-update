@@ -8,9 +8,9 @@ import (
 	"testing/synctest"
 )
 
-// workbookTestGate returns a channel that tests close to release a fake writer.
-// Cleanup releases blocked writers even if an assertion stops the test early.
-func workbookTestGate(t *testing.T) chan struct{} {
+// generationTestGate returns a channel that releases a fake reader or writer.
+// Cleanup releases blocked workers even if an assertion stops the test early.
+func generationTestGate(t *testing.T) chan struct{} {
 	t.Helper()
 	gate := make(chan struct{})
 	t.Cleanup(func() {
@@ -31,7 +31,7 @@ func TestWorkbookConcurrencyAndOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		gates := map[string]chan struct{}{}
 		for _, line := range []string{"A", "B", "C", "D"} {
-			gates[line] = workbookTestGate(t)
+			gates[line] = generationTestGate(t)
 		}
 		started := make(chan string, 4)
 		done := make(chan struct{})
@@ -109,7 +109,7 @@ func TestWorkbookFailureDrainsActiveWriters(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				a, b := workbookTestGate(t), workbookTestGate(t)
+				a, b := generationTestGate(t), generationTestGate(t)
 				started := make(chan string, 3)
 				done := make(chan struct{})
 				var outputs []string

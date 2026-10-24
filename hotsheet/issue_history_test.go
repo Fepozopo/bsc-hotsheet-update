@@ -57,16 +57,18 @@ func writeIssueHistoryFixture(t *testing.T) string {
 	return path
 }
 
-// TestMergeIssueHistory verifies BSC item-only import, month-level clamping,
-// retention of sales and inventory data, and month-range shipment totals.
+// TestMergeIssueHistory verifies parsing and deferred merging retain BSC item
+// quantities, month-level clamping, inventory fields, and shipment totals.
 func TestMergeIssueHistory(t *testing.T) {
 	item := &inventoryEntry{SKU: "SKU-1", YTDSold: 42, YTDIssued: 4, SalesRecords: []salesRecord{
 		{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5}},
 		{Year: 2025, Metric: "Dollars Sold", Periods: [12]float64{20, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50}},
 	}}
-	if err := mergeIssueHistory(writeIssueHistoryFixture(t), map[string]*inventoryEntry{item.SKU: item}, nil); err != nil {
+	data, err := readMonthlyHistory(writeIssueHistoryFixture(t), map[string]*inventoryEntry{item.SKU: item}, nil, true)
+	if err != nil {
 		t.Fatalf("issue history import for SKU-1: %v", err)
 	}
+	data.merge()
 	if len(item.SalesRecords) != 3 || item.SalesRecords[2].Metric != "Quantity Issued" || item.SalesRecords[2].Periods[0] != 3 || item.SalesRecords[2].Periods[1] != 0 || item.SalesRecords[2].Periods[11] != 9 || item.YTDSold != 42 || item.YTDIssued != 4 {
 		t.Fatalf("expected one clamped BSC issue row without changing YTD sales for SKU-1, got %+v", item)
 	}
