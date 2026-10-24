@@ -14,9 +14,9 @@ import (
 // with Dashboard, then All Products, YTD Stock Priority, Data Insights, Best Sellers,
 // and optional Monthly History and MTO. A nil bestSellersRange uses inventory YTD
 // shipments. With history, historyRunDate anchors MTO forecasts, Data Insights
-// projections, and Dashboard comparisons to completed months. Monthly History
-// is streamed last, after operations that would reload its XML into memory;
-// its tab position is reserved before MTO is created. It returns the saved path
+// projections, and Dashboard comparisons to completed months. MTO helper data
+// and Monthly History are streamed after operations that would reload their XML
+// into memory, with tab positions reserved earlier. It returns the saved path
 // or an error.
 func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, outputDir, dateStamp string, hasPO, hasHistory bool, bestSellersRange *BestSellersRange, historyRunDate time.Time, logger *slog.Logger) (string, error) {
 	f := newProductLineWorkbook()
@@ -41,13 +41,15 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 	if err := writeBestSellersSheet(f, entries, bestSellersRange); err != nil {
 		return "", fmt.Errorf("failed to create Best Sellers sheet for %s: %w", productLine, err)
 	}
+	var mtoRows []mtoForecastRow
 	if hasHistory {
 		// Reserve the tab position now; the history writer will reuse this empty
 		// sheet after the helper-sheet visibility changes are complete.
 		if _, err := f.NewSheet(monthlyHistorySheetName); err != nil {
 			return "", fmt.Errorf("failed to create Monthly History sheet for %s: %w", productLine, err)
 		}
-		if err := writeMTOSheet(f, entries, historyRunDate); err != nil {
+		mtoRows = buildMTORows(entries, historyRunDate)
+		if err := writeMTOSheet(f, mtoRows, historyRunDate); err != nil {
 			return "", fmt.Errorf("failed to create MTO sheet for %s: %w", productLine, err)
 		}
 	}
@@ -56,9 +58,12 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 		return "", fmt.Errorf("failed to create Dashboard sheet for %s: %w", productLine, err)
 	}
 
-	// Excelize's SetSheetVisible reads every worksheet. Stream history only
-	// after MTO and Dashboard hide their helper tabs to avoid materializing it.
+	// Excelize's SetSheetVisible reads every worksheet. Stream both large tabs
+	// only after MTO and Dashboard hide their helpers to avoid materializing XML.
 	if hasHistory {
+		if err := writeMTOForecastDataSheet(f, mtoRows, historyRunDate); err != nil {
+			return "", fmt.Errorf("failed to write MTO forecast data for %s: %w", productLine, err)
+		}
 		if err := writeMonthlyHistorySheet(f, entries); err != nil {
 			return "", fmt.Errorf("failed to create Monthly History sheet for %s: %w", productLine, err)
 		}

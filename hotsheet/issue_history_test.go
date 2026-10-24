@@ -125,9 +125,7 @@ func TestMTOShippedDemandSheet(t *testing.T) {
 		{Year: 2025, Metric: "Quantity Issued", Periods: [12]float64{3, -7, 6}},
 	}}
 	asOf := time.Date(2025, time.April, 1, 0, 0, 0, 0, time.UTC)
-	if err := writeMTOSheet(f, []*inventoryEntry{item}, asOf); err != nil {
-		t.Fatalf("write MTO with sold and issued history for SKU-1: %v", err)
-	}
+	writeMTOTestSheets(t, f, []*inventoryEntry{item}, asOf)
 	units, err := f.GetCellValue(mtoSheetName, "F2", excelize.Options{RawCellValue: true})
 	if err != nil {
 		t.Fatalf("MTO F2 for SKU-1: %v", err)

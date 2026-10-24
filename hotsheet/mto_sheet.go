@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	mtoSheetName         = "MTO"
-	mtoScenarioSheetName = "MTO Forecast Data"
-	maxProposedPOUnits   = 2147483647
+	mtoSheetName            = "MTO"
+	mtoScenarioSheetName    = "MTO Forecast Data"
+	mtoScenarioFirstDataRow = 2 // Preserve the helper sheet's unused first row.
+	maxProposedPOUnits      = 2147483647
 )
 
 // mtoHeaders orders the inventory breakdown before availability and MTO results.
@@ -32,8 +33,11 @@ var mtoHeaders = [...]string{
 // same occasion mapping as the inventory tabs. Description precedes Foil.
 // Numeric baseline MTO cells use
 // MTO YTD's light colors.
+// rows must be the ordered output of buildMTORows for asOf. This writes the
+// visible formulas and reserves a hidden helper tab; the caller must stream
+// the same rows with writeMTOForecastDataSheet after all sheet-visibility changes.
 // The returned error identifies the first worksheet operation that fails.
-func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) error {
+func writeMTOSheet(f *excelize.File, rows []mtoForecastRow, asOf time.Time) error {
 	if asOf.IsZero() {
 		return fmt.Errorf("cannot create MTO sheet without a sales history run date")
 	}
@@ -108,10 +112,8 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	mtoStyles := make(map[string]int, 3)
 	const mtoColumnIdx = 6 // Column G, zero-based like standardSheetCellFillColor.
 
-	dataRow := 2
-	start := asOf.AddDate(0, 0, 1)
-	end := monthsAfter(start, mtoHorizonMonths)
-	rows := buildMTORows(entries, asOf)
+	dataRow := mtoScenarioFirstDataRow
+	segmentCount := len(mtoScenarioSegments(asOf))
 	for index, row := range rows {
 		rowNum := index + 2
 		classDesc := applyStandardDisplayClassPrefix(row.item)
@@ -150,8 +152,13 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 		if err := f.SetCellStyle(mtoSheetName, fmt.Sprintf("I%d", rowNum), fmt.Sprintf("I%d", rowNum), numberStyle); err != nil {
 			return fmt.Errorf("failed to format proposed PO MTO row %d: %w", rowNum, err)
 		}
-		if err := writeMTOScenarioFormulas(f, row, rowNum, &dataRow, start, end); err != nil {
+		// Reserve the same contiguous range the late helper-sheet writer uses.
+		// Rows without usable demand must not consume helper rows.
+		if err := writeMTOScenarioFormula(f, row, rowNum, dataRow, dataRow+segmentCount-1); err != nil {
 			return err
+		}
+		if row.hasDemand {
+			dataRow += segmentCount
 		}
 		if row.state == mtoStockout {
 			fill := standardSheetCellFillColor(row.item.Status, mtoColumnIdx, mtoColumnIdx, -1, row.mto, 0, row.mto)
@@ -222,39 +229,13 @@ func writeMTOSheet(f *excelize.File, entries []*inventoryEntry, asOf time.Time) 
 	return nil
 }
 
-// writeMTOScenarioFormulas records the same prorated monthly segments as the Go
-// stockout simulation over start through end and links rowNum's proposed-PO input
-// to its live Excel MTO result in f. dataRow advances past the segments used;
-// missing history remains unforecastable. It returns the first worksheet error.
-func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, dataRow *int, start, end time.Time) error {
+// writeMTOScenarioFormula links rowNum's proposed-PO input to its live Excel MTO
+// result in f. first and last identify this item's reserved helper rows; they
+// are unused when row has no usable demand. It returns a formula-writing error.
+func writeMTOScenarioFormula(f *excelize.File, row mtoForecastRow, rowNum, first, last int) error {
 	quantity := fmt.Sprintf("E%d+H%d", rowNum, rowNum)
 	result := fmt.Sprintf("IF(%s<=0,0,\"Insufficient history\")", quantity)
 	if row.hasDemand {
-		first := *dataRow
-		cumulative, elapsed := 0.0, 0.0
-		for monthStart := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC); monthStart.Before(end); monthStart = monthStart.AddDate(0, 1, 0) {
-			monthEnd := monthStart.AddDate(0, 1, 0)
-			segmentStart, segmentEnd := monthStart, monthEnd
-			if segmentStart.Before(start) {
-				segmentStart = start
-			}
-			if segmentEnd.After(end) {
-				segmentEnd = end
-			}
-			fraction := segmentEnd.Sub(segmentStart).Hours() / monthEnd.Sub(monthStart).Hours()
-			units := row.monthly[int(monthStart.Month())-1]
-			values := [...]interface{}{row.item.SKU, units, cumulative, cumulative + units*fraction, elapsed}
-			for col, value := range values {
-				cell, _ := excelize.CoordinatesToCellName(col+1, *dataRow)
-				if err := f.SetCellValue(mtoScenarioSheetName, cell, value); err != nil {
-					return fmt.Errorf("failed to write MTO forecast data %s: %w", cell, err)
-				}
-			}
-			cumulative += units * fraction
-			elapsed += fraction
-			*dataRow += 1
-		}
-		last := *dataRow - 1
 		// ref returns the helper-sheet range for this item's forecast segments.
 		ref := func(col string) string {
 			return fmt.Sprintf("'%s'!$%s$%d:$%s$%d", mtoScenarioSheetName, col, first, col, last)
@@ -267,6 +248,76 @@ func writeMTOScenarioFormulas(f *excelize.File, row mtoForecastRow, rowNum int, 
 	valid := fmt.Sprintf("OR(H%d=\"\",IFERROR(AND(ISNUMBER(H%d),H%d>=0,H%d=INT(H%d)),FALSE))", rowNum, rowNum, rowNum, rowNum, rowNum)
 	if err := f.SetCellFormula(mtoSheetName, fmt.Sprintf("I%d", rowNum), fmt.Sprintf("IFERROR(IF(%s,%s,\"Invalid PO units\"),\"Invalid PO units\")", valid, result)); err != nil {
 		return fmt.Errorf("failed to set proposed PO MTO formula on row %d: %w", rowNum, err)
+	}
+	return nil
+}
+
+// mtoScenarioSegment identifies a calendar month and the fraction of its demand
+// included in the forecast horizon. All items share these date-only segments.
+type mtoScenarioSegment struct {
+	fraction   float64
+	monthIndex int
+}
+
+// mtoScenarioSegments returns the prorated calendar-month segments from the day
+// after asOf through the 24-month horizon, matching the baseline Go simulation.
+func mtoScenarioSegments(asOf time.Time) []mtoScenarioSegment {
+	start := asOf.AddDate(0, 0, 1)
+	end := monthsAfter(start, mtoHorizonMonths)
+	segments := make([]mtoScenarioSegment, 0, mtoHorizonMonths+1)
+	for monthStart := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC); monthStart.Before(end); monthStart = monthStart.AddDate(0, 1, 0) {
+		monthEnd := monthStart.AddDate(0, 1, 0)
+		segmentStart, segmentEnd := monthStart, monthEnd
+		if segmentStart.Before(start) {
+			segmentStart = start
+		}
+		if segmentEnd.After(end) {
+			segmentEnd = end
+		}
+		segments = append(segments, mtoScenarioSegment{
+			fraction:   segmentEnd.Sub(segmentStart).Hours() / monthEnd.Sub(monthStart).Hours(),
+			monthIndex: int(monthStart.Month()) - 1,
+		})
+	}
+	return segments
+}
+
+// writeMTOForecastDataSheet streams rows' monthly forecast segments into f's
+// reserved hidden helper tab. rows and asOf must match writeMTOSheet's inputs.
+// Call this after all sheet-visibility changes, and save f before reading the
+// helper data or calculating dependent formulas. It returns an error for a
+// missing report date or a failed worksheet write.
+func writeMTOForecastDataSheet(f *excelize.File, rows []mtoForecastRow, asOf time.Time) error {
+	if asOf.IsZero() {
+		return fmt.Errorf("cannot create MTO forecast data without a sales history run date")
+	}
+	// Excelize serializes ascending rows without retaining a worksheet object
+	// graph, spilling large XML buffers to temporary files as needed.
+	stream, err := f.NewStreamWriter(mtoScenarioSheetName)
+	if err != nil {
+		return fmt.Errorf("failed to stream MTO forecast data: %w", err)
+	}
+	segments := mtoScenarioSegments(asOf)
+	dataRow := mtoScenarioFirstDataRow
+	for _, row := range rows {
+		if !row.hasDemand {
+			continue
+		}
+		cumulative, elapsed := 0.0, 0.0
+		for _, segment := range segments {
+			units := row.monthly[segment.monthIndex]
+			values := [...]interface{}{row.item.SKU, units, cumulative, cumulative + units*segment.fraction, elapsed}
+			if err := stream.SetRow(fmt.Sprintf("A%d", dataRow), values[:]); err != nil {
+				return fmt.Errorf("failed to write MTO forecast data row %d: %w", dataRow, err)
+			}
+			cumulative += units * segment.fraction
+			elapsed += segment.fraction
+			dataRow++
+		}
+	}
+	// Flush finalizes the worksheet XML and reports temporary-file write errors.
+	if err := stream.Flush(); err != nil {
+		return fmt.Errorf("failed to flush MTO forecast data: %w", err)
 	}
 	return nil
 }

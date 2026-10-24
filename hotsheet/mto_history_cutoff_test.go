@@ -10,7 +10,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// TestMTOKeyAccountHistoryCutoff verifies the workbook's baseline and proposed-PO
+// TestMTOKeyAccountHistoryCutoff verifies the saved workbook's baseline and proposed-PO
 // forecasts use only February 2026 and later sales and issues for every
 // designated 2021 SKU, while other SKUs and lines retain historical forecasts.
 func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
@@ -84,13 +84,21 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 			item := &inventoryEntry{SKU: tc.sku, ProductLine: tc.productLine, OnHand: 30, SalesRecords: records}
 			f := newProductLineWorkbook()
 			t.Cleanup(func() { _ = f.Close() })
-			if err := writeMTOSheet(f, []*inventoryEntry{item}, asOf); err != nil {
-				t.Fatalf("write MTO for SKU %s, product line %s, as of %s: %v", tc.sku, tc.productLine, asOf, err)
+			writeMTOTestSheets(t, f, []*inventoryEntry{item}, asOf)
+			// Streamed helper data is available for formula evaluation after save.
+			path := filepath.Join(t.TempDir(), "mto.xlsx")
+			if err := f.SaveAs(path); err != nil {
+				t.Fatalf("save MTO for SKU %s: %v", tc.sku, err)
 			}
-			if err := f.SetCellValue("MTO", "H2", 30); err != nil {
+			written, err := excelize.OpenFile(path)
+			if err != nil {
+				t.Fatalf("reopen MTO for SKU %s: %v", tc.sku, err)
+			}
+			t.Cleanup(func() { _ = written.Close() })
+			if err := written.SetCellValue("MTO", "H2", 30); err != nil {
 				t.Fatalf("set proposed PO to 30: %v", err)
 			}
-			if got, err := f.GetCellValue("MTO", "J2", excelize.Options{RawCellValue: true}); err != nil || got != tc.coverage {
+			if got, err := written.GetCellValue("MTO", "J2", excelize.Options{RawCellValue: true}); err != nil || got != tc.coverage {
 				t.Errorf("J2: expected coverage %q months, got %q (error %v)", tc.coverage, got, err)
 			}
 			for _, check := range []struct {
@@ -104,9 +112,9 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 				if check.cell == "I2" {
 					// Excelize evaluates the live proposed-PO formula rather than
 					// reading a cached value, which has not been calculated by Excel.
-					got, err = f.CalcCellValue("MTO", check.cell, excelize.Options{RawCellValue: true})
+					got, err = written.CalcCellValue("MTO", check.cell, excelize.Options{RawCellValue: true})
 				} else {
-					got, err = f.GetCellValue("MTO", check.cell, excelize.Options{RawCellValue: true})
+					got, err = written.GetCellValue("MTO", check.cell, excelize.Options{RawCellValue: true})
 				}
 				actual, parseErr := strconv.ParseFloat(got, 64)
 				if err != nil || parseErr != nil || math.Abs(actual-check.want) > 1e-9 {
@@ -141,9 +149,7 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 			f := newProductLineWorkbook()
 			t.Cleanup(func() { _ = f.Close() })
 			item := &inventoryEntry{SKU: "BD1001FJ", ProductLine: "2021", OnHand: 30, SalesRecords: tc.records}
-			if err := writeMTOSheet(f, []*inventoryEntry{item}, tc.asOf); err != nil {
-				t.Fatalf("write MTO as of %s with history %+v: %v", tc.asOf, tc.records, err)
-			}
+			writeMTOTestSheets(t, f, []*inventoryEntry{item}, tc.asOf)
 			for _, check := range []struct{ cell, want string }{
 				{"F2", ""}, {"G2", "Insufficient history"}, {"J2", tc.coverage},
 			} {
@@ -166,9 +172,7 @@ func TestMTOCutoffPreservesMonthlyHistory(t *testing.T) {
 	}}
 	f := newProductLineWorkbook()
 	t.Cleanup(func() { _ = f.Close() })
-	if err := writeMTOSheet(f, []*inventoryEntry{item}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)); err != nil {
-		t.Fatalf("write MTO for listed 2021 SKU: %v", err)
-	}
+	writeMTOTestSheets(t, f, []*inventoryEntry{item}, time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC))
 	if err := writeMonthlyHistorySheet(f, []*inventoryEntry{item}); err != nil {
 		t.Fatalf("write Monthly History after MTO: %v", err)
 	}

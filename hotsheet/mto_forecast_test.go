@@ -13,6 +13,20 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// writeMTOTestSheets writes visible MTO rows and streams their hidden forecast
+// data into f for entries as of asOf. Tests must save and reopen f before reading
+// helper data or calculating proposed-PO formulas. Failures stop the test.
+func writeMTOTestSheets(t *testing.T, f *excelize.File, entries []*inventoryEntry, asOf time.Time) {
+	t.Helper()
+	rows := buildMTORows(entries, asOf)
+	if err := writeMTOSheet(f, rows, asOf); err != nil {
+		t.Fatalf("write MTO as of %s: %v", asOf, err)
+	}
+	if err := writeMTOForecastDataSheet(f, rows, asOf); err != nil {
+		t.Fatalf("stream MTO forecast data as of %s: %v", asOf, err)
+	}
+}
+
 // TestBuildMTOHistoryProfile verifies that pre-sale and partial months are not
 // counted, while completed zero-sale months contribute to the seasonal profile.
 func TestBuildMTOHistoryProfile(t *testing.T) {
@@ -204,9 +218,7 @@ func TestMTOLimitedHistoryWorkbook(t *testing.T) {
 	}}
 	f := newProductLineWorkbook()
 	defer func() { _ = f.Close() }()
-	if err := writeMTOSheet(f, []*inventoryEntry{item}, asOf); err != nil {
-		t.Fatalf("write MTO for two completed months: %v", err)
-	}
+	writeMTOTestSheets(t, f, []*inventoryEntry{item}, asOf)
 	path := filepath.Join(t.TempDir(), "limited-history.xlsx")
 	if err := f.SaveAs(path); err != nil {
 		t.Fatalf("save MTO for two completed months: %v", err)
@@ -250,9 +262,7 @@ func TestMTOProposedPO(t *testing.T) {
 		}},
 		{SKU: "NEW", Status: "Active", OnHand: 0},
 	}
-	if err := writeMTOSheet(f, entries, asOf); err != nil {
-		t.Fatalf("write MTO workbook: %v", err)
-	}
+	writeMTOTestSheets(t, f, entries, asOf)
 	path := filepath.Join(t.TempDir(), "scenario.xlsx")
 	if err := f.SaveAs(path); err != nil {
 		t.Fatalf("save MTO workbook: %v", err)
@@ -326,12 +336,10 @@ func TestWriteMTOSheet(t *testing.T) {
 		ClassDesc: "Counter Cards", RawClassDesc: "Counter Cards",
 		Description: "Birthday Card", Occasion: "BIRTHDAY", Foil: "Yes", CardSize: "A7",
 	}
-	if err := writeMTOSheet(f, []*inventoryEntry{item,
+	writeMTOTestSheets(t, f, []*inventoryEntry{item,
 		{SKU: "C-WIN", Occasion: "CHRISTMAS", Status: "Active"},
 		{SKU: "S-SPR", Occasion: "EASTER", Status: "Active"},
-		{SKU: "D", Status: "Discontinued"}}, asOf); err != nil {
-		t.Fatalf("cannot write MTO sheet: %v", err)
-	}
+		{SKU: "D", Status: "Discontinued"}}, asOf)
 	path := filepath.Join(t.TempDir(), "mto.xlsx")
 	if err := f.SaveAs(path); err != nil {
 		t.Fatalf("cannot save MTO sheet: %v", err)
