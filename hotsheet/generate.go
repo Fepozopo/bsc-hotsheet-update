@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,6 +40,10 @@ type ProgressCallback func(Progress)
 // without the sales history report it supplements.
 var ErrIssueHistorySalesRequired = errors.New("a sales history report is required when providing issue history")
 
+// ErrProductLineFilenameCollision indicates that distinct product lines would
+// overwrite the same sanitized output filename, ignoring case for portability.
+var ErrProductLineFilenameCollision = errors.New("product lines produce the same output filename")
+
 // Generate orchestrates the hotsheet report pipeline.
 //
 // It loads inventory, merges optional PO and BSC sales and issue history, groups
@@ -45,7 +51,12 @@ var ErrIssueHistorySalesRequired = errors.New("a sales history report is require
 // issueHistoryPath requires salesHistoryPath; empty optional paths omit their data.
 // A nil bestSellersRange uses inventory YTD shipments; a range uses history months.
 // MTO and Data Insights forecasts use the sales report's run date. A non-nil
-// report receives progress milestones. Generate returns created paths or an error.
+// report receives progress milestones synchronously on the calling goroutine.
+// Imports are sequential; at most two independent workbooks are generated at once.
+// Output filenames must be distinct after sanitization, ignoring case. Generate
+// returns successful paths in product-line order. On a workbook error, it stops
+// scheduling new work, waits for active writers, and returns their successful
+// paths with the first observed error.
 func Generate(inventoryPath, poPath, salesHistoryPath, issueHistoryPath, outputDir string, bestSellersRange *BestSellersRange, report ProgressCallback) ([]string, error) {
 	if strings.TrimSpace(issueHistoryPath) != "" && strings.TrimSpace(salesHistoryPath) == "" {
 		return nil, ErrIssueHistorySalesRequired
@@ -103,25 +114,17 @@ func Generate(inventoryPath, poPath, salesHistoryPath, issueHistoryPath, outputD
 	reportGenerationProgress(report, 45, "Grouping product lines...")
 
 	entriesByProductLine := groupEntriesByProductLine(inventoryBySKU, logger)
-	outputs := make([]string, 0, len(entriesByProductLine))
+	productLines := slices.Sorted(maps.Keys(entriesByProductLine))
 	dateStamp := currentDateStamp()
-	totalProductLines := len(entriesByProductLine)
-	if totalProductLines == 0 {
-		reportGenerationProgress(report, 100, "Generation complete.")
-		logger.Info("hotsheet generation completed", "filesCreated", len(outputs), "outputDir", outputDir)
-		return outputs, nil
-	}
-
-	for productLine, entries := range entriesByProductLine {
-		reportGenerationProgress(report, workbookProgress(len(outputs), totalProductLines), fmt.Sprintf("Writing %s hotsheet...", productLine))
+	outputs, err := writeProductLineWorkbooks(productLines, func(productLine string) (string, error) {
+		// Grouping assigns each inventory entry to just one product line. Only
+		// that line's writer may sort its slice or update display-time fields.
+		entries := entriesByProductLine[productLine]
 		sortEntriesForProductLine(entries)
-
-		outPath, err := buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, bestSellersRange, historyRunDate, logger)
-		if err != nil {
-			return outputs, err
-		}
-		outputs = append(outputs, outPath)
-		reportGenerationProgress(report, workbookProgress(len(outputs), totalProductLines), fmt.Sprintf("Created %d of %d hotsheets.", len(outputs), totalProductLines))
+		return buildProductLineWorkbook(productLine, entries, outputDir, dateStamp, hasPO, hasHistory, bestSellersRange, historyRunDate, logger)
+	}, report)
+	if err != nil {
+		return outputs, err
 	}
 
 	reportGenerationProgress(report, 100, "Generation complete.")
