@@ -83,8 +83,11 @@ func buildProductLineWorkbook(productLine string, entries []*inventoryEntry, out
 // newProductLineWorkbook returns a workbook with Dashboard first and active,
 // followed by All Products and YTD Stock Priority. Later writers append report
 // tabs and hidden chart/forecast data without changing the initial tab order.
+// Output archives use pooled level-1 DEFLATE compression for faster saves.
 func newProductLineWorkbook() *excelize.File {
 	f := excelize.NewFile()
+	// Excelize uses this factory when serializing the workbook's ZIP package.
+	f.SetZipWriter(newFastZIPWriter)
 	_ = f.SetSheetName("Sheet1", dashboardSheetName)
 	_, _ = f.NewSheet(allProductsSheetName)
 	_, _ = f.NewSheet(ytdStockPrioritySheetName)
