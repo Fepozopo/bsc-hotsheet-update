@@ -11,7 +11,13 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-const salesHistoryWarehouse = "BSC"
+const (
+	salesHistoryWarehouse = "BSC"
+	// A 64 MiB per-part threshold keeps typical Sage worksheet XML in memory
+	// to reduce temporary-file reads; larger parts still spill to disk.
+	// It applies to worksheet/shared-string parts, not total workbook memory.
+	historyXMLMemoryLimit = 64 << 20
+)
 
 var (
 	errMissingSalesPeriod         = errors.New("missing sales history period")
@@ -35,6 +41,8 @@ func mergeIssueHistory(path string, inventoryBySKU map[string]*inventoryEntry, l
 // mergeMonthlyHistory streams one Sage export, selecting only BSC item/year metrics
 // (not warehouse, item or report totals). It returns its run date or an error;
 // issueHistory selects issued units instead of the five sales-history metrics.
+// Worksheet XML up to historyXMLMemoryLimit bytes stays in memory to avoid
+// temporary-file reads; larger parts retain Excelize's disk-backed row iteration.
 func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry, logger *slog.Logger, issueHistory bool) (time.Time, error) {
 	if strings.TrimSpace(path) == "" {
 		return time.Time{}, nil
@@ -44,8 +52,12 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 		reportName = "issue history"
 	}
 
-	// Excelize's row iterator avoids holding this large, irregular worksheet in memory.
-	workbook, err := excelize.OpenFile(path)
+	// Excelize's row iterator avoids building a worksheet object graph. Raising
+	// its XML spill threshold reduces disk reads without disabling spillover.
+	workbook, err := excelize.OpenFile(path, excelize.Options{
+		UnzipXMLSizeLimit: historyXMLMemoryLimit,
+		RawCellValue:      true,
+	})
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to open %s report %s: %w", reportName, path, err)
 	}
@@ -64,8 +76,10 @@ func mergeMonthlyHistory(path string, inventoryBySKU map[string]*inventoryEntry,
 	rowNum := 0
 	for rows.Next() {
 		rowNum++
-		// Raw values preserve the report's 0–100 percentage scale and numeric dollar values.
-		cells, err := rows.Columns(excelize.Options{RawCellValue: true})
+		// Reuse the workbook's raw-value option rather than allocating options
+		// for each row. This preserves percentages on the report's 0–100 scale
+		// and numeric dollar values without applying display formats.
+		cells, err := rows.Columns()
 		if err != nil {
 			return time.Time{}, fmt.Errorf("failed to read %s row %d: %w", reportName, rowNum, err)
 		}

@@ -15,6 +15,8 @@ import (
 
 // writeSalesHistoryFixture writes a minimal report-style workbook with two warehouses,
 // two years, and item totals to exercise the same boundaries as the Sage export.
+// Currency and percentage display formats ensure imports consume raw numbers.
+// It returns the saved workbook path.
 func writeSalesHistoryFixture(t *testing.T) string {
 	t.Helper()
 	f := excelize.NewFile()
@@ -55,6 +57,21 @@ func writeSalesHistoryFixture(t *testing.T) string {
 			}
 		}
 	}
+	// Excelize normally applies these display formats when reading cells.
+	// The importer must retain 25.5 dollars and the report's 85.5 percent,
+	// rather than attempting to parse "$25.50" or "8550.00%".
+	for _, formatting := range []struct{ cell, format string }{
+		{"B6", `"$"#,##0.00`},
+		{"B7", "0.00%"},
+	} {
+		style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &formatting.format})
+		if err != nil {
+			t.Fatalf("cannot create fixture format %q: %v", formatting.format, err)
+		}
+		if err := f.SetCellStyle("Sheet1", formatting.cell, formatting.cell, style); err != nil {
+			t.Fatalf("cannot format fixture cell %s: %v", formatting.cell, err)
+		}
+	}
 	path := filepath.Join(t.TempDir(), "history.xlsx")
 	if err := f.SaveAs(path); err != nil {
 		t.Fatalf("cannot save sales history fixture: %v", err)
@@ -64,6 +81,7 @@ func writeSalesHistoryFixture(t *testing.T) string {
 
 // TestMergeSalesHistory verifies that only matching BSC rows are attached to an
 // inventory item and its authoritative inventory fields remain unchanged.
+// Formatted currency and percentage cells must retain their raw numeric values.
 func TestMergeSalesHistory(t *testing.T) {
 	item := &inventoryEntry{SKU: "SKU-1", Description: "inventory description", Status: "Rundown", YTDSold: 42}
 	bySKU := map[string]*inventoryEntry{item.SKU: item}
