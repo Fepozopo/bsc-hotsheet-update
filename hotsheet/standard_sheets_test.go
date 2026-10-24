@@ -29,7 +29,7 @@ func TestStandardSheetsCommitted(t *testing.T) {
 				t.Fatalf("cannot write headers for %s: %v", tc.name, err)
 			}
 			item := &inventoryEntry{SKU: "A", Occasion: "EVERYDAY", OnHand: 12, OnPO: 9, OnSO: 3, OnBO: 4}
-			if err := writeStandardSheetRows(f, allProductsSheetName, []*inventoryEntry{item}, tc.hasPO, 6, mtoYtdIdx, mtoPyIdx); err != nil {
+			if err := writeStandardSheetRows(f, allProductsSheetName, []*inventoryEntry{item}, tc.hasPO, 6, mtoYtdIdx, mtoPyIdx, make(map[standardSheetStyleKey]int)); err != nil {
 				t.Fatalf("cannot write rows for %s: %v", tc.name, err)
 			}
 			for cell, expected := range map[string]string{

@@ -14,6 +14,13 @@ const (
 	ytdStockPrioritySheetName = "YTD Stock Priority"
 )
 
+// standardSheetStyleKey identifies the fill and number format of a reusable
+// inventory-cell style. Alignment and borders are shared by every cell.
+type standardSheetStyleKey struct {
+	fillColor string
+	currency  bool
+}
+
 // standardSheetNames lists the inventory tabs in workbook order.
 var standardSheetNames = []string{allProductsSheetName, ytdStockPrioritySheetName}
 
@@ -32,10 +39,12 @@ func currentMonthsThrough(now time.Time) float64 {
 // writeStandardSheets writes all inventory items to All Products and eligible items to
 // YTD Stock Priority, sharing headers, formatting, widths, and filters. The PO flag controls
 // detail columns; an error is returned if either worksheet cannot be written.
+// Cell style IDs are cached across both tabs within f, never across workbooks.
 // YTD Stock Priority excludes rundown and discontinued items and sorts by MTO YTD.
 func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool) error {
 	headers, mtoYtdIdx, mtoPyIdx := buildStandardSheetHeaders(hasPO)
 	monthsThrough := currentMonthsThrough(time.Now())
+	styles := make(map[standardSheetStyleKey]int)
 	priorityEntries := make([]*inventoryEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Status != "Rundown" && entry.Status != "Discontinued" {
@@ -54,7 +63,7 @@ func writeStandardSheets(f *excelize.File, entries []*inventoryEntry, hasPO bool
 		if err := writeStandardSheetHeaders(f, sheetName, headers, hasPO); err != nil {
 			return err
 		}
-		if err := writeStandardSheetRows(f, sheetName, sheetEntries, hasPO, monthsThrough, mtoYtdIdx, mtoPyIdx); err != nil {
+		if err := writeStandardSheetRows(f, sheetName, sheetEntries, hasPO, monthsThrough, mtoYtdIdx, mtoPyIdx, styles); err != nil {
 			return err
 		}
 		if err := applyStandardSheetWidths(f, sheetName, headers); err != nil {
@@ -169,9 +178,11 @@ func writeStandardSheetHeaders(f *excelize.File, sheetName string, headers []str
 // including their mapped Season before Occasion. Sales orders plus back orders are included
 // in availability and YTD pace.
 // The PO flag controls the columns, monthsThrough anchors MTO YTD, and the MTO column indexes
-// select conditional coloring; an error is returned if a cell or style cannot be written.
+// select conditional coloring. styles must be a non-nil cache belonging to f;
+// Excelize registers each fill/number-format combination only on its first use.
+// An error is returned if a cell or style cannot be written.
 // Season-specific MTO PY and class-prefix behavior are preserved.
-func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inventoryEntry, hasPO bool, monthsThrough float64, mtoYtdIdx, mtoPyIdx int) error {
+func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inventoryEntry, hasPO bool, monthsThrough float64, mtoYtdIdx, mtoPyIdx int, styles map[standardSheetStyleKey]int) error {
 	rowIdx := 2
 	for _, e := range entries {
 		sh := mapOccasion(e.Occasion)
@@ -243,17 +254,25 @@ func writeStandardSheetRows(f *excelize.File, sheetName string, entries []*inven
 			}
 
 			fillColor := standardSheetCellFillColor(e.Status, c, mtoYtdIdx, mtoPyIdx, mtoYTD, mtoPY, v)
-			styleDef := &excelize.Style{
-				Alignment: centeredAlignment(),
-				Border:    thinBlackBorder(),
-				Fill:      patternFill(fillColor),
-			}
-			if c == dollarYTDCol || c == dollarPYCol {
-				styleDef.CustomNumFmt = currencyNumFmt()
-			}
-			style, err := f.NewStyle(styleDef)
-			if err != nil {
-				return fmt.Errorf("failed to create %s cell style for %s: %w", sheetName, cell, err)
+			key := standardSheetStyleKey{fillColor: fillColor, currency: c == dollarYTDCol || c == dollarPYCol}
+			style, ok := styles[key]
+			if !ok {
+				// Excelize deduplicates styles, but repeated NewStyle calls still
+				// rebuild and compare definitions. Reuse its workbook-local IDs.
+				styleDef := &excelize.Style{
+					Alignment: centeredAlignment(),
+					Border:    thinBlackBorder(),
+					Fill:      patternFill(fillColor),
+				}
+				if key.currency {
+					styleDef.CustomNumFmt = currencyNumFmt()
+				}
+				var err error
+				style, err = f.NewStyle(styleDef)
+				if err != nil {
+					return fmt.Errorf("failed to create %s cell style for %s: %w", sheetName, cell, err)
+				}
+				styles[key] = style
 			}
 			if err := f.SetCellStyle(sheetName, cell, cell, style); err != nil {
 				return fmt.Errorf("failed to style %s cell %s: %w", sheetName, cell, err)

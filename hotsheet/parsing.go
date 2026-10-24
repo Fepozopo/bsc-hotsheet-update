@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+// Compile constant footer patterns once: inventory parsing checks every SKU.
+var (
+	runDatePattern = regexp.MustCompile(`\b\d{1,2}/\d{1,2}/\d{2,4}\b`)
+	runTimePattern = regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
+)
+
 // colToIndex converts Excel column letters to zero-based index (A->0).
 func colToIndex(col string) int {
 	col = strings.ToUpper(col)
@@ -68,7 +74,9 @@ func getCellAt(rows [][]string, rowNum int, colIdx int) string {
 	return strings.TrimSpace(row[colIdx])
 }
 
-// isRunDate determines whether a cell looks like a run-date (tries to detect explicit dates/times or a "Run Date" label).
+// isRunDate reports whether s contains a run-date label, a slash-separated date,
+// or a time. Shared compiled patterns preserve footer detection without repeated
+// compilation for each inventory SKU.
 func isRunDate(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -80,13 +88,11 @@ func isRunDate(s string) bool {
 		return true
 	}
 	// match common date formats like 04/09/2026 or 4/9/26
-	dateRe := regexp.MustCompile(`\b\d{1,2}/\d{1,2}/\d{2,4}\b`)
-	if dateRe.MatchString(s) {
+	if runDatePattern.MatchString(s) {
 		return true
 	}
 	// match time patterns like 12:34
-	timeRe := regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
-	return timeRe.MatchString(s)
+	return runTimePattern.MatchString(s)
 }
 
 // getRow returns the row at 1-based index vloc (or nil).
