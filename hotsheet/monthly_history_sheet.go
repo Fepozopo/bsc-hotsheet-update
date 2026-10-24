@@ -15,11 +15,43 @@ var monthlyHistoryHeaders = [17]string{
 }
 
 // writeMonthlyHistorySheet adds entries' BSC sales and issued records to f as a
-// product-line tab. Each row is one SKU/year/metric with status last for filtering;
-// it returns an error if the sheet cannot be created or written.
+// product-line tab, reusing a reserved empty tab if one already exists. Rows are
+// streamed in source order to avoid retaining a second in-memory copy of the
+// history. Each row is one SKU/year/metric with status last for filtering.
+// Call this after workbook operations that read all sheets, such as hiding helper
+// tabs, and save f before reading this sheet. The function returns an error if
+// the sheet cannot be created, written, or flushed.
 func writeMonthlyHistorySheet(f *excelize.File, entries []*inventoryEntry) error {
 	if _, err := f.NewSheet(monthlyHistorySheetName); err != nil {
 		return fmt.Errorf("failed to create monthly history sheet: %w", err)
+	}
+
+	// Configure the filter before streaming so Excelize includes this worksheet
+	// metadata on Flush without mixing normal cell writes with streamed rows.
+	if err := f.AutoFilter(monthlyHistorySheetName, "A1:Q1", nil); err != nil {
+		return fmt.Errorf("failed to set monthly history autofilter: %w", err)
+	}
+	// Excelize serializes rows as they arrive and spills large buffers to disk.
+	// Column widths must be set before the first SetRow call.
+	stream, err := f.NewStreamWriter(monthlyHistorySheetName)
+	if err != nil {
+		return fmt.Errorf("failed to stream monthly history sheet: %w", err)
+	}
+	for col, header := range monthlyHistoryHeaders {
+		width := 12.0
+		switch header {
+		case "Item Code":
+			width = 20
+		case "Description":
+			width = 35
+		case "Metric":
+			width = 24
+		case "Status":
+			width = 15
+		}
+		if err := stream.SetColWidth(col+1, col+1, width); err != nil {
+			return fmt.Errorf("failed to set monthly history column %d width: %w", col+1, err)
+		}
 	}
 
 	headerStyle, err := f.NewStyle(&excelize.Style{
@@ -31,14 +63,12 @@ func writeMonthlyHistorySheet(f *excelize.File, entries []*inventoryEntry) error
 	if err != nil {
 		return fmt.Errorf("failed to create monthly history header style: %w", err)
 	}
+	var headers [17]interface{}
 	for col, header := range monthlyHistoryHeaders {
-		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
-		if err := f.SetCellValue(monthlyHistorySheetName, cell, header); err != nil {
-			return fmt.Errorf("failed to write monthly history header %s: %w", cell, err)
-		}
-		if err := f.SetCellStyle(monthlyHistorySheetName, cell, cell, headerStyle); err != nil {
-			return fmt.Errorf("failed to style monthly history header %s: %w", cell, err)
-		}
+		headers[col] = header
+	}
+	if err := stream.SetRow("A1", headers[:], excelize.RowOpts{StyleID: headerStyle}); err != nil {
+		return fmt.Errorf("failed to write monthly history headers: %w", err)
 	}
 
 	// Reuse the standard sheet's status colors; create styles once rather than once
@@ -78,18 +108,6 @@ func writeMonthlyHistorySheet(f *excelize.File, entries []*inventoryEntry) error
 	rowNum := 2
 	for _, item := range entries {
 		for _, record := range item.SalesRecords {
-			values := [17]interface{}{item.SKU, item.Description, record.Year, record.Metric}
-			for period, value := range record.Periods {
-				values[period+4] = value
-			}
-			values[16] = item.Status
-			for col, value := range values {
-				cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
-				if err := f.SetCellValue(monthlyHistorySheetName, cell, value); err != nil {
-					return fmt.Errorf("failed to write monthly history cell %s: %w", cell, err)
-				}
-			}
-
 			statusIndex := 0
 			switch item.Status {
 			case "Rundown":
@@ -97,47 +115,30 @@ func writeMonthlyHistorySheet(f *excelize.File, entries []*inventoryEntry) error
 			case "Discontinued":
 				statusIndex = 2
 			}
-			start := fmt.Sprintf("A%d", rowNum)
-			end := fmt.Sprintf("Q%d", rowNum)
-			if err := f.SetCellStyle(monthlyHistorySheetName, start, end, rowStyles[statusIndex]); err != nil {
-				return fmt.Errorf("failed to style monthly history row %d: %w", rowNum, err)
-			}
-			style := 0
+			style := rowStyles[statusIndex]
 			switch record.Metric {
 			case "Dollars Sold", "Cost of Goods Sold":
 				style = currencyStyles[statusIndex]
 			case "Gross Profit Percent":
 				style = percentStyles[statusIndex]
 			}
-			if style != 0 {
-				if err := f.SetCellStyle(monthlyHistorySheetName, fmt.Sprintf("E%d", rowNum), fmt.Sprintf("P%d", rowNum), style); err != nil {
-					return fmt.Errorf("failed to format monthly history row %d: %w", rowNum, err)
-				}
+			values := [17]interface{}{item.SKU, item.Description, record.Year, record.Metric}
+			// RowOpts applies status shading to the entire row; Cell overrides
+			// preserve currency/percentage display only in the monthly columns.
+			for period, value := range record.Periods {
+				values[period+4] = excelize.Cell{StyleID: style, Value: value}
+			}
+			values[16] = item.Status
+			if err := stream.SetRow(fmt.Sprintf("A%d", rowNum), values[:], excelize.RowOpts{StyleID: rowStyles[statusIndex]}); err != nil {
+				return fmt.Errorf("failed to write monthly history row %d: %w", rowNum, err)
 			}
 			rowNum++
 		}
 	}
 
-	for col, header := range monthlyHistoryHeaders {
-		name, _ := excelize.ColumnNumberToName(col + 1)
-		width := 12.0
-		switch header {
-		case "Item Code":
-			width = 20
-		case "Description":
-			width = 35
-		case "Metric":
-			width = 24
-		case "Status":
-			width = 15
-		}
-		if err := f.SetColWidth(monthlyHistorySheetName, name, name, width); err != nil {
-			return fmt.Errorf("failed to set monthly history column %s width: %w", name, err)
-		}
-	}
-	// Match the season sheets: filter dropdowns on every header, including Status.
-	if err := f.AutoFilter(monthlyHistorySheetName, "A1:Q1", nil); err != nil {
-		return fmt.Errorf("failed to set monthly history autofilter: %w", err)
+	// Flush completes the sheet XML and reports any temporary-file write error.
+	if err := stream.Flush(); err != nil {
+		return fmt.Errorf("failed to flush monthly history sheet: %w", err)
 	}
 	return nil
 }

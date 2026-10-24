@@ -2,6 +2,7 @@ package hotsheet
 
 import (
 	"math"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -155,7 +156,7 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 }
 
 // TestMTOCutoffPreservesMonthlyHistory verifies generating MTO does not remove
-// or overwrite pre-February-2026 sales and issues in Monthly History afterward.
+// or overwrite pre-February-2026 sales and issues in the saved Monthly History.
 func TestMTOCutoffPreservesMonthlyHistory(t *testing.T) {
 	item := &inventoryEntry{SKU: "BD1001FJ", ProductLine: "2021", OnHand: 30, SalesRecords: []salesRecord{
 		{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{90}},
@@ -171,13 +172,24 @@ func TestMTOCutoffPreservesMonthlyHistory(t *testing.T) {
 	if err := writeMonthlyHistorySheet(f, []*inventoryEntry{item}); err != nil {
 		t.Fatalf("write Monthly History after MTO: %v", err)
 	}
+	// Monthly History is streamed; inspect the saved output, not the writer's
+	// in-memory worksheet model, to verify the original records survive.
+	path := filepath.Join(t.TempDir(), "history.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatalf("save Monthly History after MTO: %v", err)
+	}
+	written, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("reopen Monthly History after MTO: %v", err)
+	}
+	t.Cleanup(func() { _ = written.Close() })
 	for _, check := range []struct{ cell, want string }{
 		{"C2", "2025"}, {"D2", "Quantity Sold"}, {"E2", "90"},
 		{"C3", "2025"}, {"D3", "Quantity Issued"}, {"E3", "10"},
 		{"C4", "2026"}, {"D4", "Quantity Sold"}, {"E4", "10"}, {"F4", "20"},
 		{"C5", "2026"}, {"D5", "Quantity Issued"}, {"E5", "5"}, {"F5", "5"},
 	} {
-		if got, err := f.GetCellValue("Monthly History", check.cell); err != nil || got != check.want {
+		if got, err := written.GetCellValue("Monthly History", check.cell); err != nil || got != check.want {
 			t.Errorf("Monthly History %s after MTO cutoff: expected %q, got %q (error %v)", check.cell, check.want, got, err)
 		}
 	}

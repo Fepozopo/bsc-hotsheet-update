@@ -182,6 +182,73 @@ func TestMonthlyHistorySheetOptional(t *testing.T) {
 	}
 }
 
+// TestMonthlyHistorySavedRows verifies streamed history preserves source order,
+// numeric values, and text across records and SKUs, including empty inputs.
+func TestMonthlyHistorySavedRows(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		entries []*inventoryEntry
+		want    [][]string
+	}{
+		{name: "nil entries"},
+		{name: "empty entries", entries: []*inventoryEntry{}},
+		{name: "item without history", entries: []*inventoryEntry{{SKU: "EMPTY"}}},
+		{
+			name: "multiple SKUs and metrics",
+			entries: []*inventoryEntry{
+				{SKU: "0012", Description: "Cards & <gifts>", Status: "Carryover", SalesRecords: []salesRecord{
+					{Year: 2024, Metric: "Dollars Sold", Periods: [12]float64{25.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50}},
+					{Year: 2024, Metric: "Gross Profit Percent", Periods: [12]float64{85.5}},
+					{Year: 2025, Metric: "Quantity Sold", Periods: [12]float64{2}},
+				}},
+				{SKU: "B", Status: "Rundown", SalesRecords: []salesRecord{
+					{Year: 2025, Metric: "Cost of Goods Sold", Periods: [12]float64{-3}},
+				}},
+				{SKU: "C", Status: "Discontinued", SalesRecords: []salesRecord{
+					{Year: 2025, Metric: "Quantity Issued"},
+				}},
+			},
+			want: [][]string{
+				{"0012", "Cards & <gifts>", "2024", "Dollars Sold", "25.5", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "50", "Carryover"},
+				{"0012", "Cards & <gifts>", "2024", "Gross Profit Percent", "85.5", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "Carryover"},
+				{"0012", "Cards & <gifts>", "2025", "Quantity Sold", "2", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "Carryover"},
+				{"B", "", "2025", "Cost of Goods Sold", "-3", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "Rundown"},
+				{"C", "", "2025", "Quantity Issued", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "Discontinued"},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newProductLineWorkbook()
+			t.Cleanup(func() { _ = f.Close() })
+			if err := writeMonthlyHistorySheet(f, tc.entries); err != nil {
+				t.Fatalf("entries %+v: cannot write history: %v", tc.entries, err)
+			}
+			path := filepath.Join(t.TempDir(), "history.xlsx")
+			if err := f.SaveAs(path); err != nil {
+				t.Fatalf("entries %+v: cannot save history: %v", tc.entries, err)
+			}
+			written, err := excelize.OpenFile(path)
+			if err != nil {
+				t.Fatalf("cannot reopen history %s: %v", path, err)
+			}
+			t.Cleanup(func() { _ = written.Close() })
+			rows, err := written.GetRows(monthlyHistorySheetName, excelize.Options{RawCellValue: true})
+			if err != nil {
+				t.Fatalf("cannot read saved history %s: %v", path, err)
+			}
+			if len(rows) != len(tc.want)+1 {
+				t.Fatalf("entries %+v: expected header and %d records, got %v", tc.entries, len(tc.want), rows)
+			}
+			for i, want := range tc.want {
+				if !slices.Equal(rows[i+1], want) {
+					t.Errorf("history row %d: expected %v, got %v", i+2, want, rows[i+1])
+				}
+			}
+		})
+	}
+}
+
 // TestWriteMonthlyHistorySheet verifies the user-visible row layout and Excel
 // autofilter in a saved workbook, including the last Status column.
 func TestWriteMonthlyHistorySheet(t *testing.T) {
