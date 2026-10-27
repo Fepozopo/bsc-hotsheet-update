@@ -313,6 +313,8 @@ func applyStandardDisplayClassPrefix(e *inventoryEntry) string {
 		prefix = "AN - "
 	case strings.HasSuffix(skuUpper, "-BN") || strings.HasSuffix(skuUpper, "BN"):
 		prefix = "BN - "
+	case strings.HasSuffix(skuUpper, "-TX") || strings.HasSuffix(skuUpper, "TX"):
+		prefix = "TX - "
 	case strings.HasSuffix(skuUpper, "BX"):
 		prefix = "BX - "
 	case strings.HasSuffix(skuUpper, "C"):
