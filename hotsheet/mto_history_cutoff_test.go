@@ -95,21 +95,21 @@ func TestMTOKeyAccountHistoryCutoff(t *testing.T) {
 				t.Fatalf("reopen MTO for SKU %s: %v", tc.sku, err)
 			}
 			t.Cleanup(func() { _ = written.Close() })
-			if err := written.SetCellValue("MTO", "H2", 30); err != nil {
+			if err := written.SetCellValue("MTO", "I2", 30); err != nil {
 				t.Fatalf("set proposed PO to 30: %v", err)
 			}
-			if got, err := written.GetCellValue("MTO", "J2", excelize.Options{RawCellValue: true}); err != nil || got != tc.coverage {
-				t.Errorf("J2: expected coverage %q months, got %q (error %v)", tc.coverage, got, err)
+			if got, err := written.GetCellValue("MTO", "L2", excelize.Options{RawCellValue: true}); err != nil || got != tc.coverage {
+				t.Errorf("L2: expected coverage %q months, got %q (error %v)", tc.coverage, got, err)
 			}
 			for _, check := range []struct {
 				cell string
 				want float64
 			}{
-				{"F2", tc.demand}, {"G2", tc.mto}, {"I2", tc.proposedMTO},
+				{"F2", tc.demand}, {"G2", tc.mto}, {"J2", tc.proposedMTO},
 			} {
 				var got string
 				var err error
-				if check.cell == "I2" {
+				if check.cell == "J2" {
 					// Excelize evaluates the live proposed-PO formula rather than
 					// reading a cached value, which has not been calculated by Excel.
 					got, err = written.CalcCellValue("MTO", check.cell, excelize.Options{RawCellValue: true})
@@ -151,7 +151,7 @@ func TestMTOKeyAccountInsufficientHistory(t *testing.T) {
 			item := &inventoryEntry{SKU: "BD1001FJ", ProductLine: "2021", OnHand: 30, SalesRecords: tc.records}
 			writeMTOTestSheets(t, f, []*inventoryEntry{item}, tc.asOf)
 			for _, check := range []struct{ cell, want string }{
-				{"F2", ""}, {"G2", "Insufficient history"}, {"J2", tc.coverage},
+				{"F2", ""}, {"G2", "Insufficient history"}, {"L2", tc.coverage},
 			} {
 				if got, err := f.GetCellValue("MTO", check.cell, excelize.Options{RawCellValue: true}); err != nil || got != check.want {
 					t.Errorf("%s: expected %q, got %q (error %v)", check.cell, check.want, got, err)

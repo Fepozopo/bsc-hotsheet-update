@@ -73,12 +73,12 @@ func TestMTOStreamedScenarios(t *testing.T) {
 				if got, err := written.GetCellValue("MTO", fmt.Sprintf("A%d", check.row)); err != nil || got != check.sku {
 					t.Fatalf("MTO row %d: expected SKU %s, got %q (error %v)", check.row, check.sku, got, err)
 				}
-				if err := written.SetCellValue("MTO", fmt.Sprintf("H%d", check.row), check.proposed); err != nil {
+				if err := written.SetCellValue("MTO", fmt.Sprintf("I%d", check.row), check.proposed); err != nil {
 					t.Fatalf("SKU %s: set proposed PO to %d: %v", check.sku, check.proposed, err)
 				}
 				// Excelize evaluates the saved formula against the streamed helper
 				// values; no cached result or live Excel process is required.
-				got, err := written.CalcCellValue("MTO", fmt.Sprintf("I%d", check.row), excelize.Options{RawCellValue: true})
+				got, err := written.CalcCellValue("MTO", fmt.Sprintf("J%d", check.row), excelize.Options{RawCellValue: true})
 				actual, parseErr := strconv.ParseFloat(got, 64)
 				if want := check.baseline + 1; err != nil || parseErr != nil || math.Abs(actual-want) > 1e-9 {
 					t.Errorf("SKU %s with %d proposed units: expected MTO %v, got %q (calculation error %v, parse error %v)", check.sku, check.proposed, want, got, err, parseErr)

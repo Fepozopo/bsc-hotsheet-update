@@ -136,9 +136,9 @@ func TestMTOShippedDemandSheet(t *testing.T) {
 	if err != nil || math.Abs(demand-60) > 1e-9 {
 		t.Errorf("MTO F2 for SKU-1: expected 60 shipped units, got %q (parse error %v)", units, err)
 	}
-	coverage, err := f.GetCellValue(mtoSheetName, "J2")
+	coverage, err := f.GetCellValue(mtoSheetName, "L2")
 	if err != nil || coverage != "3" {
-		t.Errorf("MTO J2 for SKU-1: expected 3 months, got %q (err %v)", coverage, err)
+		t.Errorf("MTO L2 for SKU-1: expected 3 months, got %q (err %v)", coverage, err)
 	}
 }
 

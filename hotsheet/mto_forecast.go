@@ -1,7 +1,7 @@
 package hotsheet
 
 import (
-	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +12,9 @@ const (
 	mtoHorizonMonths    = 24
 	mtoHistoryYears     = 3
 	mtoMinHistoryMonths = 2
+
+	// Match Excel's day rounding before selecting a stockout calendar date.
+	mtoStockoutDayDecimals = 8
 
 	mtoKeyAccountHistoryStartYear  = 2026
 	mtoKeyAccountHistoryStartMonth = time.February
@@ -28,17 +31,17 @@ const (
 )
 
 // mtoForecastRow contains an active inventory item's BSC shipment forecast and
-// stockout estimate, completed history coverage in months, or an explicit reason
-// why no estimate can be made.
+// stockout date, completed history coverage in months, and forecast state.
+// A zero stockout date means no depletion was estimated within the horizon.
 type mtoForecastRow struct {
 	item      *inventoryEntry
 	available int
 	demand12  float64
 	monthly   [12]float64
-	hasDemand bool
 	mto       float64
-	stockout  string
+	stockout  time.Time
 	coverage  int
+	hasDemand bool
 	state     mtoForecastState
 }
 
@@ -166,11 +169,17 @@ func buildMTOHistoryProfile(records []salesRecord, asOf time.Time) mtoHistoryPro
 
 // forecastMTOWindow projects demand between start and end by prorating each
 // calendar month's seasonal units over the days in that month. It also reports
-// the first month in which available units are exhausted and elapsed months;
-// within-month demand is assumed uniform because daily sales are unavailable.
-func forecastMTOWindow(monthly [12]float64, start, end time.Time, available float64) (demand, monthsTillOut float64, stockout string) {
+// the UTC calendar date when available units are exhausted and elapsed months.
+// Within-month demand is uniform because daily sales are unavailable. Depletion
+// exactly at midnight belongs to the new day; no depletion returns a zero date.
+// Nonpositive availability is already depleted at start.
+func forecastMTOWindow(monthly [12]float64, start, end time.Time, available float64) (demand, monthsTillOut float64, stockout time.Time) {
+	if available <= 0 {
+		stockout = start
+	}
 	remaining := available
 	elapsed := 0.0
+	dayPrecision := math.Pow10(mtoStockoutDayDecimals)
 	for monthStart := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC); monthStart.Before(end); monthStart = monthStart.AddDate(0, 1, 0) {
 		monthEnd := monthStart.AddDate(0, 1, 0)
 		segmentStart, segmentEnd := monthStart, monthEnd
@@ -184,8 +193,12 @@ func forecastMTOWindow(monthly [12]float64, start, end time.Time, available floa
 		units := monthly[int(monthStart.Month())-1]
 		segmentDemand := units * fraction
 		demand += segmentDemand
-		if stockout == "" && units > 0 && remaining <= segmentDemand {
-			stockout = monthStart.Format("Jan 2006")
+		if stockout.IsZero() && units > 0 && remaining <= segmentDemand {
+			// Match the Excel formula's sub-millisecond day rounding so floating
+			// point noise cannot move an exact midnight into the previous day.
+			days := remaining / units * float64(monthEnd.Sub(monthStart)/(24*time.Hour))
+			wholeDays := int(math.Floor(math.Round(days*dayPrecision) / dayPrecision))
+			stockout = segmentStart.AddDate(0, 0, wholeDays)
 			monthsTillOut = elapsed + remaining/units
 		}
 		remaining -= segmentDemand
@@ -242,8 +255,8 @@ func mtoHistoryRecords(item *inventoryEntry) []salesRecord {
 // undated POs in available stock and subtracting committed quantity (sales orders
 // plus back orders). BSC shipped units count as demand; listed product-line 2021
 // SKUs use only February-2026-and-later history. It returns rows with numeric
-// completed-month coverage ordered by earliest stockout, then >24-month and
-// insufficient-history items.
+// completed-month coverage and daily stockout dates ordered by earliest MTO,
+// then >24-month and insufficient-history items.
 func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 	rows := make([]mtoForecastRow, 0, len(entries))
 	// Inventory quantities are a report-date snapshot; project from the next day.
@@ -266,15 +279,13 @@ func buildMTORows(entries []*inventoryEntry, asOf time.Time) []mtoForecastRow {
 		switch {
 		case row.available <= 0:
 			row.state = mtoStockout
-			row.stockout = asOf.Format("Jan 2006")
+			row.stockout = asOf
 		case !profile.usable:
 			row.state = mtoInsufficientHistory
-			row.stockout = "Insufficient history"
 		default:
 			_, row.mto, row.stockout = forecastMTOWindow(profile.monthly, start, end24, float64(row.available))
-			if row.stockout == "" {
+			if row.stockout.IsZero() {
 				row.state = mtoBeyondHorizon
-				row.stockout = fmt.Sprintf("Not within %d months", mtoHorizonMonths)
 			}
 		}
 		rows = append(rows, row)
