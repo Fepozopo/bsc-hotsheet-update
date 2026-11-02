@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	mtoSheetName            = "MTO"
-	mtoScenarioSheetName    = "MTO Forecast Data"
-	mtoScenarioFirstDataRow = 2 // Preserve the helper sheet's unused first row.
-	maxProposedPOUnits      = 2147483647
+	mtoSheetName              = "MTO"
+	mtoScenarioSheetName      = "MTO Forecast Data"
+	mtoScenarioQuantityColumn = "S"
+	mtoScenarioFirstDataRow   = 2 // Preserve the helper sheet's unused first row.
+	maxProposedPOUnits        = 2147483647
 )
 
 // mtoHeaders places a stockout date immediately after each numeric MTO result.
@@ -30,8 +31,9 @@ var mtoHeaders = [...]string{
 // Class descriptions use standard SKU prefixes; Season uses the inventory tabs'
 // occasion mapping. Description precedes Foil; numeric MTO uses light YTD colors.
 // rows must be the ordered output of buildMTORows for asOf. This writes the
-// visible formulas and reserves a hidden helper tab; the caller must stream
-// the same rows with writeMTOForecastDataSheet after all sheet-visibility changes.
+// visible formulas and a hidden numeric scenario-quantity column, and reserves
+// a hidden forecast tab. The caller must stream the same rows into that tab with
+// writeMTOForecastDataSheet after all sheet-visibility changes.
 // The returned error identifies the first worksheet operation that fails.
 func writeMTOSheet(f *excelize.File, rows []mtoForecastRow, asOf time.Time) error {
 	if asOf.IsZero() {
@@ -229,8 +231,16 @@ func writeMTOSheet(f *excelize.File, rows []mtoForecastRow, asOf time.Time) erro
 			return fmt.Errorf("failed to color proposed PO MTO: %w", err)
 		}
 	}
-	// Excelize adds an Excel dropdown to every column header for filtering.
-	if err := f.AutoFilter(mtoSheetName, "A1:R1", nil); err != nil {
+	// Keep the numeric scenario quantity out of the editable report columns.
+	if err := f.SetCellValue(mtoSheetName, mtoScenarioQuantityColumn+"1", "Scenario Available"); err != nil {
+		return fmt.Errorf("failed to label MTO scenario quantity: %w", err)
+	}
+	if err := f.SetColVisible(mtoSheetName, mtoScenarioQuantityColumn, false); err != nil {
+		return fmt.Errorf("failed to hide MTO scenario quantity: %w", err)
+	}
+	// Include the hidden quantity so filtered sorts keep it with its row.
+	// Excelize adds dropdowns to the visible column headers for filtering.
+	if err := f.AutoFilter(mtoSheetName, "A1:"+mtoScenarioQuantityColumn+"1", nil); err != nil {
 		return fmt.Errorf("failed to set MTO autofilter: %w", err)
 	}
 	if err := f.SetSheetVisible(mtoScenarioSheetName, false); err != nil {
@@ -246,11 +256,19 @@ func writeMTOSheet(f *excelize.File, rows []mtoForecastRow, asOf time.Time) erro
 }
 
 // writeMTOScenarioFormula links rowNum's proposed-PO input to its live Excel MTO
-// and stockout date in f. asOf is the report date used for already depleted stock.
-// first and last identify this item's reserved helper rows; they are unused when
-// row has no usable demand. It returns the first formula-writing error.
+// and stockout date in f. Blank inputs add zero units; other inputs must be
+// nonnegative whole numbers. asOf is the report date for already depleted stock.
+// It writes a hidden numeric quantity shared by both result formulas. first and
+// last identify this item's reserved forecast rows; they are unused when row has
+// no usable demand. It returns the first formula-writing error.
 func writeMTOScenarioFormula(f *excelize.File, row mtoForecastRow, asOf time.Time, rowNum, first, last int) error {
-	quantity := fmt.Sprintf("E%d+I%d", rowNum, rowNum)
+	// SUM ignores empty-string and unset cells, so blank proposed units add
+	// nothing. Normalize once in a hidden cell: repeated nested conversions in
+	// the lookup expressions are not evaluated reliably by Excelize.
+	quantity := fmt.Sprintf("%s%d", mtoScenarioQuantityColumn, rowNum)
+	if err := f.SetCellFormula(mtoSheetName, quantity, fmt.Sprintf("SUM(E%d,I%d)", rowNum, rowNum)); err != nil {
+		return fmt.Errorf("failed to set scenario quantity row %d: %w", rowNum, err)
+	}
 	reportDate := fmt.Sprintf("DATE(%d,%d,%d)", asOf.Year(), asOf.Month(), asOf.Day())
 	result := fmt.Sprintf("IF(%s<=0,0,\"Insufficient history\")", quantity)
 	dateResult := fmt.Sprintf("IF(%s<=0,%s,\"Insufficient history\")", quantity, reportDate)
@@ -271,7 +289,7 @@ func writeMTOScenarioFormula(f *excelize.File, row mtoForecastRow, asOf time.Tim
 		dateResult = fmt.Sprintf("IF(%s<=0,%s,IF(%s>'%s'!D%d,\"Not within %d months\",IFERROR(INDEX(%s,%s)+INT(ROUND((%s)*INDEX(%s,%s),%d)),\"Not within %d months\")))",
 			quantity, reportDate, quantity, mtoScenarioSheetName, last, mtoHorizonMonths, ref("F"), index, fraction, ref("G"), index, mtoStockoutDayDecimals, mtoHorizonMonths)
 	}
-	valid := fmt.Sprintf("OR(I%d=\"\",IFERROR(AND(ISNUMBER(I%d),I%d>=0,I%d=INT(I%d)),FALSE))", rowNum, rowNum, rowNum, rowNum, rowNum)
+	valid := fmt.Sprintf("OR(LEN(I%d)=0,IFERROR(AND(ISNUMBER(I%d),I%d>=0,I%d=INT(I%d)),FALSE))", rowNum, rowNum, rowNum, rowNum, rowNum)
 	for _, formula := range []struct{ column, result string }{
 		{"J", result}, {"K", dateResult},
 	} {

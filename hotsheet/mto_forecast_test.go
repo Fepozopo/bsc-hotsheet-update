@@ -247,8 +247,9 @@ func TestMTOLimitedHistoryWorkbook(t *testing.T) {
 	}
 }
 
-// TestMTOProposedPO verifies saved what-if formulas preserve the baseline and
-// extend MTO to the next seasonal peak rather than averaging across months.
+// TestMTOProposedPO verifies saved what-if formulas preserve the baseline for
+// blank, zero, and cleared inputs, reject invalid quantities, and extend MTO to
+// the next seasonal peak rather than averaging across months.
 func TestMTOProposedPO(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
 	var prior, current [12]float64
@@ -282,10 +283,15 @@ func TestMTOProposedPO(t *testing.T) {
 		mtoWant       float64
 	}{
 		{"blank matches baseline", "", "", 6 + 5.0/30 + (60-1.0/3)/120},
+		{"zero matches baseline", "", 0, 6 + 5.0/30 + (60-1.0/3)/120},
 		{"next spring", "", 70, 18 + 5.0/30 + (130-120-2.0/3)/120},
+		{"cleared cell matches baseline", "", nil, 6 + 5.0/30 + (60-1.0/3)/120},
 		{"past horizon", ">24", 500, 0},
+		{"cleared text matches baseline", "", "", 6 + 5.0/30 + (60-1.0/3)/120},
 		{"invalid negative", "Invalid PO units", -1, 0},
 		{"invalid fractional", "Invalid PO units", 1.5, 0},
+		{"invalid numeric text", "Invalid PO units", "70", 0},
+		{"invalid boolean", "Invalid PO units", true, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := written.SetCellValue(mtoSheetName, "I3", tc.input); err != nil {
@@ -324,7 +330,7 @@ func TestMTOProposedPO(t *testing.T) {
 
 // TestWriteMTOSheet checks inventory columns, numeric coverage with units in the
 // header, separate stockout date columns, Description before Foil, occasion-mapped seasons,
-// filtering, and prompt-free PO validation in the saved workbook without
+// filtering, a hidden scenario quantity, and prompt-free PO validation without
 // asserting cosmetic styles or colors.
 func TestWriteMTOSheet(t *testing.T) {
 	asOf := time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC)
@@ -349,7 +355,7 @@ func TestWriteMTOSheet(t *testing.T) {
 	}
 	defer func() { _ = written.Close() }()
 	want := map[string]string{
-		"A1": "SKU", "B1": "On Hand", "C1": "On PO", "D1": "Committed", "E1": "Available", "F1": "Forecast Demand", "G1": "MTO", "H1": "Stockout Date", "I1": "Proposed PO Units", "J1": "MTO with Proposed PO", "K1": "Projected Stockout Date", "L1": "History Coverage (months)", "M1": "Class Description", "N1": "Season", "O1": "Occasion", "P1": "Description", "Q1": "Foil", "R1": "Card Size", "S1": "",
+		"A1": "SKU", "B1": "On Hand", "C1": "On PO", "D1": "Committed", "E1": "Available", "F1": "Forecast Demand", "G1": "MTO", "H1": "Stockout Date", "I1": "Proposed PO Units", "J1": "MTO with Proposed PO", "K1": "Projected Stockout Date", "L1": "History Coverage (months)", "M1": "Class Description", "N1": "Season", "O1": "Occasion", "P1": "Description", "Q1": "Foil", "R1": "Card Size", "S1": "Scenario Available",
 		"A2": "A-WM", "B2": "7", "C2": "11", "D2": "18", "E2": "0", "G2": "0", "I2": "", "L2": "0", "M2": "WM - Counter Cards", "N2": "Everyday", "O2": "BIRTHDAY", "P2": "Birthday Card", "Q2": "Yes", "R2": "A7",
 		"A3": "C-WIN", "N3": "Winter", "O3": "CHRISTMAS",
 		"A4": "S-SPR", "N4": "Spring", "O4": "EASTER",
@@ -359,6 +365,10 @@ func TestWriteMTOSheet(t *testing.T) {
 		if err != nil || actual != expected {
 			t.Errorf("cell %s: expected %q, got %q (error %v)", cell, expected, actual, err)
 		}
+	}
+	// Scenario helpers must not appear as additional editable report inputs.
+	if visible, err := written.GetColVisible(mtoSheetName, "S"); err != nil || visible {
+		t.Errorf("scenario quantity column S: expected hidden, got visible=%v (error %v)", visible, err)
 	}
 	if got, err := written.GetCellValue(mtoSheetName, "L2"); err != nil || got != "0" {
 		t.Errorf("no history, L2: expected display %q, got %q (error %v)", "0", got, err)
@@ -377,7 +387,8 @@ func TestWriteMTOSheet(t *testing.T) {
 	if validation.Sqref != "I2:I4" || validation.ShowInputMessage || validation.Prompt != nil || validation.PromptTitle != nil || !validation.ShowErrorMessage || !validation.AllowBlank || validation.Type != "whole" || validation.Operator != "between" || validation.Formula1 != "0" || validation.Formula2 != "2147483647" {
 		t.Errorf("expected prompt-free I2:I4 nonnegative whole-number validation with error feedback and blanks allowed, got %+v", validation)
 	}
-	// Verify Excel stores the filter range through the final Card Size column.
+	// Include the hidden quantity in the filter range so it moves with its row
+	// when the user sorts the report in Excel.
 	archive, err := zip.OpenReader(path)
 	if err != nil {
 		t.Fatalf("cannot inspect MTO workbook: %v", err)
@@ -397,11 +408,11 @@ func TestWriteMTOSheet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cannot read worksheet %s: %v", member.Name, err)
 		}
-		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$R$1"`) {
+		if strings.Contains(string(contents), `<autoFilter ref="$A$1:$S$1"`) {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected A1:R1 autofilter in saved MTO sheet")
+		t.Fatal("expected A1:S1 autofilter including the hidden quantity in saved MTO sheet")
 	}
 }

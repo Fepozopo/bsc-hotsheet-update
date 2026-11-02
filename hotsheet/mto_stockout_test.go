@@ -12,6 +12,7 @@ import (
 // TestMTOStockoutDates verifies saved baseline dates and live proposed-PO dates
 // against independently specified calendar dates, including partial months,
 // leap days, midnight boundaries, seasonal gaps, and non-date forecast states.
+// Blank, zero, and cleared proposed-PO inputs must reproduce the baseline.
 func TestMTOStockoutDates(t *testing.T) {
 	regular := [12]float64{31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}
 	for _, tc := range []struct {
@@ -30,6 +31,10 @@ func TestMTOStockoutDates(t *testing.T) {
 		{
 			name: "blank PO matches baseline", asOf: "2026-12-31", monthly: regular,
 			available: 10, proposed: "", baseline: "2027-01-11", projected: "2027-01-11",
+		},
+		{
+			name: "zero PO matches baseline", asOf: "2026-12-31", monthly: regular,
+			available: 10, proposed: 0, baseline: "2027-01-11", projected: "2027-01-11",
 		},
 		{
 			name: "within-day depletion", asOf: "2026-12-31",
@@ -126,6 +131,12 @@ func TestMTOStockoutDates(t *testing.T) {
 				t.Fatalf("set proposed units %v: %v", tc.proposed, err)
 			}
 			assertMTOStockoutDate(t, written, "K2", tc.projected, true)
+			// A nil value clears the cell rather than storing empty text, matching
+			// Excel's Delete action after a user enters a proposed quantity.
+			if err := written.SetCellValue("MTO", "I2", nil); err != nil {
+				t.Fatalf("clear proposed units %v: %v", tc.proposed, err)
+			}
+			assertMTOStockoutDate(t, written, "K2", tc.baseline, true)
 			// A what-if change must never alter the baseline depletion date.
 			assertMTOStockoutDate(t, written, "H2", tc.baseline, false)
 		})
